@@ -21,10 +21,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { modifyInstanceFormSchema, type ModifyInstanceFormValues, modifyInstanceConfigApiSchema } from '@/zod-schemas/nodepass';
 import type { Instance, ModifyInstanceConfigRequest } from '@/types/nodepass';
-import { Pencil } from 'lucide-react';
+import { Pencil, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
-import type { NamedApiConfig } from '@/hooks/use-api-key'; // Import NamedApiConfig
+import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
 
 interface ModifyInstanceDialogProps {
   instance: Instance | null;
@@ -34,15 +34,15 @@ interface ModifyInstanceDialogProps {
   apiRoot: string | null;
   apiToken: string | null;
   apiName: string | null;
-  activeApiConfig: NamedApiConfig | null; // Pass the full active config
+  activeApiConfig: NamedApiConfig | null;
 }
 
 interface ParsedNodePassUrl {
   instanceType: 'server' | 'client' | null;
   tunnelAddress: string | null;
   targetAddress: string | null;
-  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | null;
-  tlsMode: 'master' | '0' | '1' | '2' | null;
+  logLevel: MasterLogLevel;
+  tlsMode: MasterTlsMode | null; 
   certPath: string | null;
   keyPath: string | null;
 }
@@ -88,7 +88,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       const params = new URLSearchParams(queryPart);
       const log = params.get('log');
       if (log && ['debug', 'info', 'warn', 'error', 'fatal'].includes(log)) {
-        result.logLevel = log as 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+        result.logLevel = log as MasterLogLevel;
       } else {
         result.logLevel = 'master'; 
       }
@@ -96,7 +96,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       if (result.instanceType === 'server') {
         const tls = params.get('tls');
         if (tls && ['0', '1', '2'].includes(tls)) {
-          result.tlsMode = tls as '0' | '1' | '2';
+          result.tlsMode = tls as MasterTlsMode;
         } else {
            result.tlsMode = 'master'; 
         }
@@ -137,6 +137,13 @@ function buildUrl(values: ModifyInstanceFormValues): string {
   const queryString = queryParams.toString();
   return queryString ? `${url}?${queryString}` : url;
 }
+
+const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode, string> = {
+  'master': '主控配置',
+  '0': '0: 无TLS',
+  '1': '1: 自签名',
+  '2': '2: 自定义',
+};
 
 
 export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: ModifyInstanceDialogProps) {
@@ -186,7 +193,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     onSuccess: (updatedInstance) => {
       toast({
         title: '实例已修改',
-        description: `实例 ${updatedInstance.id} 配置已更新。`,
+        description: `实例 ${updatedInstance.id.substring(0,8)}... 配置已更新。`,
       });
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       onOpenChange(false);
@@ -194,7 +201,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     onError: (error: any) => {
       toast({
         title: '修改实例配置出错',
-        description: error.message || '未知错误。',
+        description: error.message || '修改实例配置时发生未知错误。',
         variant: 'destructive',
       });
     },
@@ -208,17 +215,12 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
   }
   
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
-    ? activeApiConfig.masterDefaultLogLevel
-    : '未指定';
-  const masterTlsModeDisplayMap = {
-    '0': '0: 无TLS',
-    '1': '1: 自签名',
-    '2': '2: 自定义',
-    'master': '未指定',
-  };
-  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode
-    ? masterTlsModeDisplayMap[activeApiConfig.masterDefaultTlsMode]
-    : '未指定';
+    ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
+    : '主控配置';
+
+  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
+    ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]
+    : '主控配置';
 
   if (!instance) return null;
 
@@ -322,7 +324,9 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                      <SelectItem value="master" className="font-sans">
+                        默认 ({masterLogLevelDisplay})
+                      </SelectItem>
                       <SelectItem value="debug" className="font-sans">Debug</SelectItem>
                       <SelectItem value="info" className="font-sans">Info</SelectItem>
                       <SelectItem value="warn" className="font-sans">Warn</SelectItem>
@@ -331,7 +335,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                     </SelectContent>
                   </Select>
                   <FormDescription className="font-sans text-xs">
-                    选择“默认”将继承主控设置 (当前主控参考默认: {masterLogLevelDisplay})。
+                    选择“默认”将继承主控实际启动时应用的设置。
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -353,14 +357,16 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                          <SelectItem value="master" className="font-sans">
+                            默认 ({masterTlsModeDisplay})
+                          </SelectItem>
                           <SelectItem value="0" className="font-sans">0: 无TLS (明文)</SelectItem>
                           <SelectItem value="1" className="font-sans">1: 自签名证书</SelectItem>
                           <SelectItem value="2" className="font-sans">2: 自定义证书</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormDescription className="font-sans text-xs">
-                        选择“默认”将继承主控设置 (当前主控参考默认TLS: {masterTlsModeDisplay})。
+                        选择“默认”将继承主控实际启动时应用的设置。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -417,7 +423,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
             </Button>
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={modifyInstanceMutation.isPending || !apiId || !apiRoot || !apiToken}>
-            {modifyInstanceMutation.isPending ? '保存中...' : '保存更改'}
+            {modifyInstanceMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                '保存更改'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

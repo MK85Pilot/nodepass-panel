@@ -24,7 +24,7 @@ import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
-import type { NamedApiConfig } from '@/hooks/use-api-key'; // Import NamedApiConfig
+import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
 
 type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
@@ -35,7 +35,7 @@ interface CreateInstanceDialogProps {
   apiRoot: string | null;
   apiToken: string | null;
   apiName: string | null;
-  activeApiConfig: NamedApiConfig | null; // Pass the full active config
+  activeApiConfig: NamedApiConfig | null;
 }
 
 function parseTunnelAddr(urlString: string): string | null {
@@ -64,6 +64,13 @@ function parseTunnelAddr(urlString: string): string | null {
     return endOfTunnelAddr !== -1 ? restOfString.substring(0, endOfTunnelAddr) : restOfString;
   }
 }
+
+const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode, string> = {
+  'master': '主控配置',
+  '0': '0: 无TLS',
+  '1': '1: 自签名',
+  '2': '2: 自定义',
+};
 
 
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: CreateInstanceDialogProps) {
@@ -143,7 +150,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     onSuccess: () => {
       toast({
         title: '实例已创建',
-        description: '新实例已创建。',
+        description: '新实例已成功创建。',
       });
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] }); 
       form.reset();
@@ -152,7 +159,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     onError: (error: any) => {
       toast({
         title: '创建实例出错',
-        description: error.message || '未知错误。',
+        description: error.message || '创建实例时发生未知错误。',
         variant: 'destructive',
       });
     },
@@ -185,17 +192,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   }
   
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
-    ? activeApiConfig.masterDefaultLogLevel
-    : '未指定';
-  const masterTlsModeDisplayMap = {
-    '0': '0: 无TLS',
-    '1': '1: 自签名',
-    '2': '2: 自定义',
-    'master': '未指定',
-  };
-  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode
-    ? masterTlsModeDisplayMap[activeApiConfig.masterDefaultTlsMode]
-    : '未指定';
+    ? activeApiConfig.masterDefaultLogLevel.toUpperCase()
+    : '主控配置';
+
+  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master'
+    ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]
+    : '主控配置';
 
 
   return (
@@ -227,8 +229,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="server">服务端</SelectItem>
-                      <SelectItem value="client">客户端</SelectItem>
+                      <SelectItem value="server" className="font-sans">服务端</SelectItem>
+                      <SelectItem value="client" className="font-sans">客户端</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -334,7 +336,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                      <SelectItem value="master" className="font-sans">
+                        默认 ({masterLogLevelDisplay})
+                      </SelectItem>
                       <SelectItem value="debug" className="font-sans">Debug</SelectItem>
                       <SelectItem value="info" className="font-sans">Info</SelectItem>
                       <SelectItem value="warn" className="font-sans">Warn</SelectItem>
@@ -343,7 +347,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                     </SelectContent>
                   </Select>
                   <FormDescription className="font-sans text-xs">
-                    选择“默认”将继承主控设置 (当前主控参考默认: {masterLogLevelDisplay})。
+                    选择“默认”将继承主控实际启动时应用的设置。
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -365,14 +369,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
-                          <SelectItem value="0" className="font-sans">0: 无 TLS (明文)</SelectItem>
+                          <SelectItem value="master" className="font-sans">
+                            默认 ({masterTlsModeDisplay})
+                          </SelectItem>
+                          <SelectItem value="0" className="font-sans">0: 无TLS (明文)</SelectItem>
                           <SelectItem value="1" className="font-sans">1: 自签名证书</SelectItem>
                           <SelectItem value="2" className="font-sans">2: 自定义证书</SelectItem>
                         </SelectContent>
                       </Select>
                        <FormDescription className="font-sans text-xs">
-                        选择“默认”将继承主控设置 (当前主控参考默认TLS: {masterTlsModeDisplay})。
+                        选择“默认”将继承主控实际启动时应用的设置。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -429,7 +435,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             </Button>
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={createInstanceMutation.isPending || !apiId}>
-            {createInstanceMutation.isPending ? '创建中...' : '创建实例'}
+            {createInstanceMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                创建中...
+              </>
+            ) : (
+              '创建实例'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
