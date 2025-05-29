@@ -6,7 +6,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
 import { CreateInstanceDialog } from '@/components/nodepass/CreateInstanceDialog';
 import { InstanceList } from '@/components/nodepass/InstanceList';
-import { ConnectionsManager } from '@/components/nodepass/ConnectionsManager'; // Import the new manager
+import { EventLog } from '@/components/nodepass/EventLog'; // Re-import EventLog
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,8 @@ export default function HomePage() {
     setIsApiConfigDialogOpenForSetup(true);
   };
 
+  const currentApiId = activeApiConfig?.id || null;
+  const currentApiName = activeApiConfig?.name || null;
   const currentApiRoot = activeApiConfig ? getApiRootUrl(activeApiConfig.id) : null;
   const currentToken = activeApiConfig ? getToken(activeApiConfig.id) : null;
 
@@ -81,13 +83,12 @@ export default function HomePage() {
             </div>
             <InstanceList
               key={activeApiConfig.id} 
-              apiId={activeApiConfig.id}
-              apiName={activeApiConfig.name}
+              apiId={currentApiId}
+              apiName={currentApiName}
               apiRoot={currentApiRoot}
               apiToken={currentToken}
               activeApiConfig={activeApiConfig}
             />
-            {/* EventLog section replaced */}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
@@ -112,16 +113,22 @@ export default function HomePage() {
           </div>
         )}
 
-      {/* This card now holds the ConnectionsManager */}
+      {/* This card now holds the EventLog */}
       <Card className="shadow-lg mt-8">
         <CardHeader>
-          <CardTitle className="font-title">主控连接管理</CardTitle>
+          <CardTitle className="font-title">实时事件日志</CardTitle>
           <CardDescription className="font-sans">
-            查看、添加、编辑或切换您的主控连接。
+            来自当前主控的实时事件流。
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ConnectionsManager />
+          <EventLog
+            key={currentApiId || 'no-api'} // Add key to ensure re-render on API change
+            apiId={currentApiId}
+            apiName={currentApiName}
+            apiRoot={currentApiRoot}
+            apiToken={currentToken}
+          />
         </CardContent>
       </Card>
 
@@ -135,15 +142,12 @@ export default function HomePage() {
       <CreateInstanceDialog
         open={isCreateInstanceDialogOpen}
         onOpenChange={setIsCreateInstanceDialogOpen}
-        apiId={activeApiConfig?.id || null}
+        apiId={currentApiId}
         apiRoot={currentApiRoot}
         apiToken={currentToken}
-        apiName={activeApiConfig?.name || null}
+        apiName={currentApiName}
         activeApiConfig={activeApiConfig}
       />
     </AppLayout>
   );
 }
-
-
-    
