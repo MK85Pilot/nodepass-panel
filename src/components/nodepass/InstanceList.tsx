@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound, ClipboardCopy } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -39,7 +39,7 @@ interface InstanceListProps {
   apiName: string | null;
   apiRoot: string | null;
   apiToken: string | null;
-  activeApiConfig: NamedApiConfig | null; 
+  activeApiConfig: NamedApiConfig | null;
 }
 
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig }: InstanceListProps) {
@@ -52,7 +52,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
-    queryKey: ['instances', apiId], 
+    queryKey: ['instances', apiId],
     queryFn: () => {
       if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取实例。");
       return nodePassApi.getInstances(apiRoot, apiToken);
@@ -187,7 +187,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               {isLoadingInstances ? renderSkeletons() :
                 filteredInstances && filteredInstances.length > 0 ? (
                 filteredInstances.map((instance) => (
-                  <TableRow key={instance.id} className="text-foreground/90 hover:text-foreground">
+                  <TableRow
+                    key={instance.id}
+                    className="text-foreground/90 hover:text-foreground"
+                    onDoubleClick={() => setSelectedInstanceForDetails(instance)}
+                  >
                     <TableCell className="font-medium truncate max-w-xs font-mono text-xs">{instance.id}</TableCell>
                      <TableCell>
                       {instance.id === '********' ? (
@@ -215,14 +219,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                         <InstanceStatusBadge status={instance.status} />
                       )}
                     </TableCell>
-                    <TableCell 
+                    <TableCell
                       className="truncate max-w-sm text-xs font-mono"
                     >
-                        <span 
+                        <span
                           className="cursor-pointer hover:text-primary transition-colors duration-150"
                           title={`点击复制: ${instance.url}`}
                           onClick={(e) => {
-                            e.stopPropagation(); 
+                            e.stopPropagation();
                             handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
                           }}
                         >
@@ -299,8 +303,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         instance={selectedInstanceForDetails}
         open={!!selectedInstanceForDetails}
         onOpenChange={(open) => !open && setSelectedInstanceForDetails(null)}
-        apiRoot={apiRoot} // Pass apiRoot
-        apiToken={apiToken} // Pass apiToken
+        apiRoot={apiRoot}
+        apiToken={apiToken}
       />
       <DeleteInstanceDialog
         instance={selectedInstanceForDelete}
@@ -324,5 +328,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
-    
