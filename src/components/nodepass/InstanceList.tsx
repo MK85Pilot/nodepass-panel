@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound, ClipboardCopy } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -127,6 +127,31 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
     ));
   };
 
+  const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
+    if (!navigator.clipboard) {
+      toast({
+        title: '复制失败',
+        description: '您的浏览器不支持剪贴板操作。',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      toast({
+        title: '复制成功',
+        description: `${entity} 已复制到剪贴板。`,
+      });
+    } catch (err) {
+      toast({
+        title: '复制失败',
+        description: `无法将 ${entity} 复制到剪贴板。`,
+        variant: 'destructive',
+      });
+      console.error('Failed to copy: ', err);
+    }
+  };
+
 
   return (
     <Card className="shadow-lg mt-6">
@@ -205,7 +230,20 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                       )}
                     </TableCell>
                     <TableCell className="truncate max-w-sm text-xs font-mono">
-                      {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+                      <div className="flex items-center justify-between">
+                        <span className="truncate" title={instance.url}>
+                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 ml-2 flex-shrink-0"
+                          onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
+                          aria-label={`复制 ${instance.id === '********' ? 'API 密钥' : 'URL'}`}
+                        >
+                          <ClipboardCopy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
@@ -245,7 +283,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                     {isLoadingInstances
                       ? "加载中..."
                       : !apiId
-                        ? "请选择或添加一个主控。"
+                        ? "请先选择或添加一个主控。"
                         : searchTerm && (!filteredInstances || filteredInstances.length === 0)
                           ? "无匹配搜索结果的实例。"
                           : instances && instances.length === 0

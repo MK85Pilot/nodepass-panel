@@ -9,11 +9,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button'; // Added for Eye button
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ClipboardCopy } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -33,12 +34,38 @@ function formatBytes(bytes: number, decimals = 2) {
 
 export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceDetailsModalProps) {
   const [showApiKey, setShowApiKey] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
       setShowApiKey(false); // Reset visibility when modal opens or instance changes
     }
   }, [open, instance]);
+
+  const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
+    if (!navigator.clipboard) {
+      toast({
+        title: '复制失败',
+        description: '您的浏览器不支持剪贴板操作。',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      toast({
+        title: '复制成功',
+        description: `${entity} 已复制到剪贴板。`,
+      });
+    } catch (err) {
+      toast({
+        title: '复制失败',
+        description: `无法将 ${entity} 复制到剪贴板。`,
+        variant: 'destructive',
+      });
+      console.error('Failed to copy: ', err);
+    }
+  };
 
   if (!instance) return null;
 
@@ -76,22 +103,35 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
     },
     { 
       label: isApiKeyInstance ? "API 密钥" : "URL", 
-      value: isApiKeyInstance ? (
-        <div className="flex items-center space-x-2">
-          <span className="font-mono text-xs break-all">
-            {showApiKey ? instance.url : '••••••••••••••••••••••••••••••••'}
+      value: (
+        <div className="flex items-center justify-between w-full">
+          <span className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''}`}>
+            {isApiKeyInstance ? (showApiKey ? instance.url : '••••••••••••••••••••••••••••••••') : instance.url}
           </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => setShowApiKey(!showApiKey)}
-            aria-label={showApiKey ? "隐藏密钥" : "显示密钥"}
-          >
-            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
+          <div className="flex items-center flex-shrink-0 ml-2">
+            {isApiKeyInstance && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setShowApiKey(!showApiKey)}
+                aria-label={showApiKey ? "隐藏密钥" : "显示密钥"}
+              >
+                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
+              aria-label={`复制 ${isApiKeyInstance ? 'API 密钥' : 'URL'}`}
+            >
+              <ClipboardCopy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-      ) : <span className="break-all text-xs font-mono">{instance.url}</span>, 
+      ), 
       fullWidth: true 
     },
     { label: "TCP 接收", value: <span className="font-mono text-xs">{formatBytes(instance.tcprx)}</span>, icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
@@ -109,14 +149,14 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
             实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 详情。
           </DialogDescription>
         </DialogHeader>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-3">
           {detailItems.map((item, index) => (
             <div key={index} className={`flex ${item.fullWidth ? 'flex-col' : 'items-center justify-between'} py-2 border-b last:border-b-0`}>
               <div className="flex items-center">
                 {item.icon && <span className="mr-2">{item.icon}</span>}
                 <span className="text-sm font-medium text-muted-foreground font-sans">{item.label}:</span>
               </div>
-              <div className={`text-sm ${item.fullWidth ? 'mt-1' : ''}`}>{item.value}</div>
+              <div className={`text-sm ${item.fullWidth ? 'mt-1 w-full' : ''}`}>{item.value}</div>
             </div>
           ))}
         </div>

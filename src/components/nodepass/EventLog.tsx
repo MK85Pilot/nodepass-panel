@@ -14,10 +14,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Rss, ChevronRight, ChevronDown, ServerIcon, SmartphoneIcon, Filter, XCircle, AlertTriangle, CheckCircle, Loader2, KeyRound } from 'lucide-react';
+import { Rss, ChevronRight, ChevronDown, ServerIcon, SmartphoneIcon, Filter, XCircle, AlertTriangle, CheckCircle, Loader2, KeyRound, ClipboardCopy } from 'lucide-react';
 import type { Instance, InstanceEvent } from '@/types/nodepass';
 import { getEventsUrl } from '@/lib/api';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
+import { useToast } from '@/hooks/use-toast';
 
 const ALL_EVENT_TYPES: InstanceEvent['type'][] = ['initial', 'create', 'update', 'delete', 'log', 'shutdown', 'error'];
 const ALL_LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'];
@@ -55,11 +56,14 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [uiConnectionStatus, setUiConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error' | 'idle'>('idle');
+  const { toast } = useToast();
+
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef<number>(0);
-  const hasLoggedInitialConnectionRef = useRef<boolean>(false);
+  const hasLoggedInitialConnectionRef = useRef<boolean>(false); // For "Connecting..." log
+  const hasLoggedSuccessfulConnectionRef = useRef<boolean>(false); // For "Connected." log
   const currentApiIdRef = useRef<string | null>(null);
 
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<InstanceEvent['type']>>(new Set());
@@ -68,21 +72,20 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
   const addEventToLog = useCallback((newEvent: InstanceEvent) => {
     setEvents((prevEvents) => {
       let filteredPrevEvents = prevEvents;
-      // If the new event is a status message, filter out old status messages
       if (typeof newEvent.data === 'string' && STATUS_MESSAGE_KEYWORDS.some(kw => (newEvent.data as string).includes(kw))) {
         filteredPrevEvents = prevEvents.filter(e => {
-          if (typeof e.data !== 'string') return true; // Keep non-string data
+          if (typeof e.data !== 'string') return true; 
           return !STATUS_MESSAGE_KEYWORDS.some(kw => (e.data as string).includes(kw));
         });
       }
-      return [newEvent, ...filteredPrevEvents.slice(0, 199)]; // Keep a max of 200 events
+      return [newEvent, ...filteredPrevEvents.slice(0, 199)]; 
     });
   }, []);
 
-
   const processSseMessageData = useCallback((messageBlock: string) => {
-    let eventTypeFromServer = 'message'; // Default if no 'event:' line
+    let eventTypeFromServer = 'message'; 
     let eventDataLine = '';
+    let idLine: string | undefined;
 
     const lines = messageBlock.split('\n');
     for (const line of lines) {
@@ -90,6 +93,8 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         eventTypeFromServer = line.substring('event:'.length).trim();
       } else if (line.startsWith('data:')) {
         eventDataLine = line.substring('data:'.length).trim();
+      } else if (line.startsWith('id:')) {
+        idLine = line.substring('id:'.length).trim();
       }
     }
 
@@ -168,7 +173,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
     }
   }, [addEventToLog]);
 
-  const connectWithFetch = useCallback(async (isInitialAttemptForThisApi: boolean) => {
+  const connectWithFetch = useCallback(async () => {
     if (!apiId || !apiRoot || !apiToken || !apiName) {
       setUiConnectionStatus('idle');
       addEventToLog({ type: 'log', data: `主控配置无效，事件流禁用。`, timestamp: new Date().toISOString(), level: 'WARN' });
@@ -183,8 +188,9 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
     
     const eventsUrl = getEventsUrl(apiRoot);
     
-    if (isInitialAttemptForThisApi && !hasLoggedInitialConnectionRef.current) {
-        setEvents(prev => [{ type: 'log', data: `正在初始化事件流 (fetch) 到 ${eventsUrl} (携带 X-API-Key)...`, timestamp: new Date().toISOString() }, ...prev.filter(e => typeof e.data !== 'string' || (!e.data.startsWith('正在初始化') && !e.data.includes('错误') && !e.data.includes('已连接') && !e.data.includes('已禁用')))]);
+    if (!hasLoggedInitialConnectionRef.current) {
+        addEventToLog({ type: 'log', data: `正在初始化事件流 (fetch) 到 ${eventsUrl} (携带 X-API-Key)...`, timestamp: new Date().toISOString() });
+        hasLoggedInitialConnectionRef.current = true;
     }
     setIsConnecting(true); 
     setIsConnected(false);
@@ -222,9 +228,9 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       setUiConnectionStatus('connected');
       retryCountRef.current = 0; 
 
-      if (!hasLoggedInitialConnectionRef.current) {
+      if (!hasLoggedSuccessfulConnectionRef.current) {
         addEventToLog({ type: 'log', data: `事件流 (fetch) 已连接。等待事件... (目标: ${eventsUrl})`, timestamp: new Date().toISOString() });
-        hasLoggedInitialConnectionRef.current = true;
+        hasLoggedSuccessfulConnectionRef.current = true;
       }
 
       const reader = response.body.getReader();
@@ -253,15 +259,14 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         // Expected if component unmounts or API changes
       } else {
         const errorMessage = error.message || "未知错误";
-        let detailedErrorMessage = errorMessage;
+        let detailedErrorMessage = `错误: ${errorMessage}.`;
         if (errorMessage.toLowerCase().includes('failed to fetch')) {
-          detailedErrorMessage = `网络错误或CORS策略问题。请检查目标服务器 (${eventsUrl}) 的CORS配置及网络连通性。错误: ${errorMessage}`;
+            detailedErrorMessage = `网络错误或CORS策略问题。请检查目标服务器 (${eventsUrl}) 的CORS配置及网络连通性。错误: ${errorMessage}`;
         }
-        console.error(`EventLog connectWithFetch error: ${detailedErrorMessage}`, error);
+        console.error(`EventLog connectWithFetch error: ${detailedErrorMessage}`, error); // Log the original error too
         if (!signal.aborted) scheduleReconnect(detailedErrorMessage);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiId, apiRoot, apiToken, apiName, processSseMessageData, addEventToLog]);
 
 
@@ -287,12 +292,15 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
 
     if (retryCountRef.current > 1) { 
       addEventToLog({ type: 'log', data: `${uiErrorMessage} ${RECONNECT_DELAY_MS / 1000}秒后尝试第 ${retryCountRef.current} 次重连...`, timestamp: new Date().toISOString(), level: 'ERROR' });
+    } else if (retryCountRef.current === 1) {
+       // First retry is silent to the UI log, but we log the error to console already.
     }
+
 
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     reconnectTimeoutRef.current = setTimeout(() => {
       if (!abortControllerRef.current?.signal.aborted) {
-         connectWithFetch(false); 
+         connectWithFetch(); 
       }
     }, RECONNECT_DELAY_MS);
 
@@ -312,14 +320,13 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         setEvents([]);
         setIsConnected(false);
         setIsConnecting(true);
-        // setUiConnectionStatus('connecting'); // Already set in connectWithFetch
         retryCountRef.current = 0;
-        hasLoggedInitialConnectionRef.current = false;
+        hasLoggedInitialConnectionRef.current = false; // Reset for the new API
+        hasLoggedSuccessfulConnectionRef.current = false; // Reset for the new API
         currentApiIdRef.current = apiId;
-        connectWithFetch(true); // Pass true for initial attempt for this API
+        connectWithFetch(); 
       } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current && uiConnectionStatus !== 'connected' && uiConnectionStatus !== 'connecting') {
-         // If not connected, not currently attempting, and no reconnect scheduled, try to connect.
-        connectWithFetch(false); // Not necessarily the initial attempt for *this* API ID if it was just a drop
+        connectWithFetch(); 
       }
     } else { 
       setEvents([]);
@@ -335,6 +342,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       }
       currentApiIdRef.current = null;
       hasLoggedInitialConnectionRef.current = false;
+      hasLoggedSuccessfulConnectionRef.current = false;
     }
 
     return () => {
@@ -350,18 +358,17 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         reconnectTimeoutRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiId, apiRoot, apiToken, apiName, connectWithFetch]); // connectWithFetch is stable due to useCallback
+  }, [apiId, apiRoot, apiToken, apiName, connectWithFetch, isConnected, isConnecting, uiConnectionStatus]);
 
 
   const getBadgeTextAndVariant = (type: InstanceEvent['type']): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'accent' } => {
     switch (type) {
-      case 'initial': return { text: '初始状态', variant: 'default' };
-      case 'create': return { text: '已创建', variant: 'default' };
-      case 'update': return { text: '已更新', variant: 'secondary' };
-      case 'delete': return { text: '已删除', variant: 'destructive' };
+      case 'initial': return { text: '初始', variant: 'default' };
+      case 'create': return { text: '创建', variant: 'default' };
+      case 'update': return { text: '更新', variant: 'secondary' };
+      case 'delete': return { text: '删除', variant: 'destructive' };
       case 'log': return { text: '日志', variant: 'outline' };
-      case 'shutdown': return { text: '服务关闭', variant: 'destructive'};
+      case 'shutdown': return { text: '关闭', variant: 'destructive'};
       case 'error': return { text: '错误', variant: 'destructive'};
       default: return { text: String(type).toUpperCase(), variant: 'outline'};
     }
@@ -392,7 +399,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         break;
       case 'disconnected':
       case 'error':
-        statusText = retryCountRef.current > 1 ? "连接已断开" : "尝试连接...";
+        statusText = retryCountRef.current > 1 ? "连接已断开" : (hasLoggedInitialConnectionRef.current ? "尝试连接..." : "等待连接...");
         StatusIcon = AlertTriangle;
         statusColorClass = "text-red-500";
         break;
@@ -421,6 +428,32 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
     setSelectedEventTypes(new Set());
     setSelectedLogLevels(new Set());
   };
+
+  const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
+    if (!navigator.clipboard) {
+      toast({
+        title: '复制失败',
+        description: '您的浏览器不支持剪贴板操作。',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      toast({
+        title: '复制成功',
+        description: `${entity} 已复制到剪贴板。`,
+      });
+    } catch (err) {
+      toast({
+        title: '复制失败',
+        description: `无法将 ${entity} 复制到剪贴板。`,
+        variant: 'destructive',
+      });
+      console.error('Failed to copy: ', err);
+    }
+  };
+
 
   return (
     <Card className="shadow-lg mt-6">
@@ -571,10 +604,24 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                         ) : (
                             <InstanceStatusBadge status={instance.status} />
                         )}
-                        <span className="font-medium text-sm">URL:</span>
-                        <span className="font-mono truncate text-xs" title={instance.url}>
-                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : (instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url)}
-                        </span>
+                        <div className="flex items-center">
+                          <span className="font-medium text-sm mr-1">URL:</span>
+                          <span className="font-mono truncate text-xs" title={instance.url}>
+                            {instance.id === '********' ? 'API 密钥 (已隐藏)' : (instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 ml-1 flex-shrink-0"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent accordion toggle
+                                handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+                            }}
+                            aria-label={`复制 ${instance.id === '********' ? 'API 密钥' : 'URL'}`}
+                           >
+                            <ClipboardCopy className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                        <p className="font-mono text-xs text-foreground/90 break-all whitespace-pre-wrap leading-relaxed">
@@ -588,15 +635,19 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                 </div>
                 {isExpanded && canExpand && (
                   <div className="mt-2 ml-8 pl-4 border-l-2 border-muted/50 py-2 bg-background/30 rounded-r-md">
-                    {instance ? (
+                    {instance && typeof event.data === 'object' && event.data !== null ? ( // Check if event.data is the instance itself
                       <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
-                        {JSON.stringify(instance, null, 2)}
+                        {JSON.stringify(event.data, null, 2)}
                       </pre>
                     ) : typeof event.data === 'string' ? (
                       <p className="font-mono break-all whitespace-pre-wrap text-foreground/90 leading-relaxed text-xs">
                         {event.data}
                       </p>
-                    ) : (
+                    ) : instance ? ( // Fallback to instanceDetails if event.data was not the instance object directly
+                       <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
+                        {JSON.stringify(instance, null, 2)}
+                      </pre>
+                    ): (
                        <p className="text-xs text-muted-foreground italic font-sans">无更多详情。</p>
                     )}
                   </div>
