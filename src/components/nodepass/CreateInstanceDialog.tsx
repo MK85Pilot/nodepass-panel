@@ -74,8 +74,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       instanceType: 'server',
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'info',
-      tlsMode: '0', 
+      logLevel: 'master',
+      tlsMode: 'master', 
       certPath: '',
       keyPath: '',
     },
@@ -90,13 +90,25 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         instanceType: 'server',
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'info',
-        tlsMode: '0',
+        logLevel: 'master',
+        tlsMode: 'master',
         certPath: '',
         keyPath: '',
       });
     }
   }, [open, form]);
+  
+  useEffect(() => {
+    if (instanceType === "client") {
+        form.setValue("tlsMode", undefined); 
+        form.setValue("certPath", '');
+        form.setValue("keyPath", '');
+    } else if (instanceType === "server") {
+        if (form.getValues("tlsMode") === undefined) {
+            form.setValue("tlsMode", "master");
+        }
+    }
+  }, [instanceType, form]);
 
   const { data: serverInstances, isLoading: isLoadingServerInstances } = useQuery<Instance[], Error, {id: string, display: string, tunnelAddr: string}[]>({
     queryKey: ['instances', apiId, 'serversForTunnelSelection'],
@@ -145,16 +157,24 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   });
 
   function buildUrl(values: CreateInstanceFormValues): string {
-    let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}?log=${values.logLevel}`;
+    let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
+    const queryParams = new URLSearchParams();
+  
+    if (values.logLevel !== "master") {
+      queryParams.append('log', values.logLevel);
+    }
+  
     if (values.instanceType === 'server') {
-      if (values.tlsMode) {
-        url += `&tls=${values.tlsMode}`;
+      if (values.tlsMode && values.tlsMode !== "master") {
+        queryParams.append('tls', values.tlsMode);
         if (values.tlsMode === '2') {
-          url += `&crt=${values.certPath || '/path/to/your/cert.pem'}&key=${values.keyPath || '/path/to/your/key.pem'}`;
+          if (values.certPath && values.certPath.trim() !== '') queryParams.append('crt', values.certPath.trim());
+          if (values.keyPath && values.keyPath.trim() !== '') queryParams.append('key', values.keyPath.trim());
         }
       }
     }
-    return url;
+    const queryString = queryParams.toString();
+    return queryString ? `${url}?${queryString}` : url;
   }
 
   function onSubmit(values: CreateInstanceFormValues) {
@@ -166,11 +186,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center text-xl font-title">
+          <DialogTitle className="flex items-center font-title">
             <PlusCircle className="mr-2 h-6 w-6 text-primary" />
             创建新实例
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="font-sans">
             提供实例详情进行配置 (主控: {apiName || 'N/A'})。
           </DialogDescription>
         </DialogHeader>
@@ -184,16 +204,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>实例类型</FormLabel>
                   <Select onValueChange={(value) => {
                       field.onChange(value);
-                      if (value === "client") {
-                          form.setValue("tlsMode", undefined);
-                          form.setValue("certPath", undefined);
-                          form.setValue("keyPath", undefined);
-                      } else {
-                          form.setValue("tlsMode", "0"); 
-                      }
                   }} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="text-sm">
                         <SelectValue placeholder="选择实例类型" />
                       </SelectTrigger>
                     </FormControl>
@@ -215,11 +228,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>隧道地址</FormLabel>
                   <FormControl>
                     <Input 
+                      className="text-sm"
                       placeholder={instanceType === "server" ? "服务端监听控制通道地址, 例: 0.0.0.0:10101" : "连接的 NodePass 服务端隧道地址, 例: your.server.com:10101"} 
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
+                  <FormDescription className="font-sans">
                     {instanceType === "server"
                       ? "服务端模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
                       : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
@@ -241,7 +255,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   disabled={isLoadingServerInstances || !serverInstances || serverInstances.length === 0}
                 >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="text-sm">
                       <SelectValue placeholder={
                         isLoadingServerInstances ? "加载服务端中..." : 
                         (!serverInstances || serverInstances.length === 0) ? "无可用服务端" : "选择服务端隧道"
@@ -262,7 +276,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </SelectContent>
                 </Select>
                 {serverInstances && serverInstances.length === 0 && !isLoadingServerInstances && (
-                    <FormDescription>当前主控无可用服务端实例。</FormDescription>
+                    <FormDescription className="font-sans">当前主控无可用服务端实例。</FormDescription>
                 )}
               </FormItem>
             )}
@@ -276,11 +290,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>目标地址</FormLabel>
                   <FormControl>
                     <Input 
+                      className="text-sm"
                       placeholder={instanceType === "server" ? "服务端监听流量转发地址, 例: 0.0.0.0:8080" : "本地流量转发地址, 例: 127.0.0.1:8000"} 
                       {...field} 
                     />
                   </FormControl>
-                   <FormDescription>
+                   <FormDescription className="font-sans">
                     {instanceType === "server"
                       ? "服务端模式: 监听隧道流量的地址 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 接收流量的本地转发地址 (例 '127.0.0.1:8000')。"}
@@ -298,11 +313,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>日志级别</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="text-sm">
                         <SelectValue placeholder="选择日志级别" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="master">默认 (主控配置)</SelectItem>
                       <SelectItem value="debug">Debug</SelectItem>
                       <SelectItem value="info">Info</SelectItem>
                       <SelectItem value="warn">Warn</SelectItem>
@@ -323,13 +339,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>TLS 模式 (服务端)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value || "master"}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="text-sm">
                             <SelectValue placeholder="选择 TLS 模式" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="master">默认 (主控配置)</SelectItem>
                           <SelectItem value="0">0: 无 TLS (明文)</SelectItem>
                           <SelectItem value="1">1: 自签名证书</SelectItem>
                           <SelectItem value="2">2: 自定义证书</SelectItem>
@@ -349,8 +366,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                           <FormLabel>证书路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input 
+                              className="text-sm"
                               placeholder="例: /path/to/cert.pem" 
                               {...field} 
+                              value={field.value || ""}
                             />
                           </FormControl>
                           <FormMessage />
@@ -365,8 +384,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                           <FormLabel>密钥路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input 
+                              className="text-sm"
                               placeholder="例: /path/to/key.pem" 
                               {...field} 
+                              value={field.value || ""}
                             />
                           </FormControl>
                           <FormMessage />
@@ -381,7 +402,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         </Form>
         <DialogFooter className="pt-4">
           <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={createInstanceMutation.isPending}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={createInstanceMutation.isPending}>
               取消
             </Button>
           </DialogClose>

@@ -8,10 +8,10 @@ export const createInstanceFormSchema = z.object({
   }),
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
   targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port 或 [ipv6]:port)"),
-  logLevel: z.enum(["debug", "info", "warn", "error", "fatal"], {
+  logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.optional(z.enum(["0", "1", "2"])),
+  tlsMode: z.optional(z.enum(["master", "0", "1", "2"])),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).refine(data => {
@@ -20,7 +20,7 @@ export const createInstanceFormSchema = z.object({
   }
   return true;
 }, {
-  message: "服务器实例必须选择TLS模式。",
+  message: "服务端实例必须选择TLS模式。",
   path: ["tlsMode"],
 }).refine(data => {
   if (data.instanceType === "server" && data.tlsMode === "2" && (!data.certPath || data.certPath.trim() === "")) {
@@ -40,17 +40,17 @@ export const createInstanceFormSchema = z.object({
   path: ["keyPath"],
 });
 
-// Schema for the detailed modify instance form - directly defined to avoid extend issues
+// Schema for the detailed modify instance form
 export const modifyInstanceFormSchema = z.object({
   instanceType: z.enum(["server", "client"], {
     required_error: "实例类型是必需的。",
   }),
   tunnelAddress: z.string().min(1, "隧道地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "隧道地址格式无效 (例: host:port 或 [ipv6]:port)"),
   targetAddress: z.string().min(1, "目标地址是必需的。").regex(/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/, "目标地址格式无效 (例: host:port 或 [ipv6]:port)"),
-  logLevel: z.enum(["debug", "info", "warn", "error", "fatal"], {
+  logLevel: z.enum(["master", "debug", "info", "warn", "error", "fatal"], {
     required_error: "日志级别是必需的。",
   }),
-  tlsMode: z.optional(z.enum(["0", "1", "2"])),
+  tlsMode: z.optional(z.enum(["master", "0", "1", "2"])),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
 }).refine(data => {
@@ -59,7 +59,7 @@ export const modifyInstanceFormSchema = z.object({
   }
   return true;
 }, {
-  message: "服务器实例必须选择TLS模式。",
+  message: "服务端实例必须选择TLS模式。",
   path: ["tlsMode"],
 }).refine(data => {
   if (data.instanceType === "server" && data.tlsMode === "2" && (!data.certPath || data.certPath.trim() === "")) {

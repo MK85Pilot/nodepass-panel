@@ -39,8 +39,8 @@ interface ParsedNodePassUrl {
   instanceType: 'server' | 'client' | null;
   tunnelAddress: string | null;
   targetAddress: string | null;
-  logLevel: 'debug' | 'info' | 'warn' | 'error' | 'fatal' | null;
-  tlsMode: '0' | '1' | '2' | null;
+  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | null;
+  tlsMode: 'master' | '0' | '1' | '2' | null;
   certPath: string | null;
   keyPath: string | null;
 }
@@ -48,10 +48,10 @@ interface ParsedNodePassUrl {
 function parseNodePassUrl(url: string): ParsedNodePassUrl {
   const result: ParsedNodePassUrl = {
     instanceType: null,
-    tunnelAddress: '', // Default to empty string for form fields
+    tunnelAddress: '',
     targetAddress: '',
-    logLevel: 'info', // Default log level
-    tlsMode: null,
+    logLevel: 'master',
+    tlsMode: null, // Will be 'master' for server if not specified
     certPath: '',
     keyPath: '',
   };
@@ -64,10 +64,12 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       result.instanceType = schemeMatch[1] as 'server' | 'client';
     } else {
       console.warn("无法从 URL 解析实例类型:", url);
-      return result;
+      // Attempt to guess type if scheme is missing but format is recognizable
+      if (url.includes("?tls=") || url.includes("&tls=")) result.instanceType = "server";
+      else result.instanceType = "client"; // Best guess
     }
 
-    const restOfUrl = url.substring(schemeMatch[0].length);
+    const restOfUrl = schemeMatch ? url.substring(schemeMatch[0].length) : url;
     const parts = restOfUrl.split('?');
     const pathPart = parts[0];
     const queryPart = parts[1];
@@ -77,7 +79,6 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       result.tunnelAddress = addresses[0] || '';
     }
     if (addresses.length > 1) {
-      // Assuming target_addr doesn't contain further slashes that are part of the address itself
       result.targetAddress = addresses.slice(1).join('/') || '';
     }
 
@@ -88,7 +89,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       if (log && ['debug', 'info', 'warn', 'error', 'fatal'].includes(log)) {
         result.logLevel = log as 'debug' | 'info' | 'warn' | 'error' | 'fatal';
       } else {
-        result.logLevel = 'info'; // Default if not present or invalid
+        result.logLevel = 'master'; 
       }
 
       if (result.instanceType === 'server') {
@@ -96,7 +97,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
         if (tls && ['0', '1', '2'].includes(tls)) {
           result.tlsMode = tls as '0' | '1' | '2';
         } else {
-           result.tlsMode = '0'; // Default TLS mode for server if not specified
+           result.tlsMode = 'master'; 
         }
         if (result.tlsMode === '2') {
           result.certPath = params.get('crt') || '';
@@ -105,9 +106,9 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       }
     } else {
       // Defaults if no query part
-      result.logLevel = 'info';
+      result.logLevel = 'master';
       if (result.instanceType === 'server') {
-        result.tlsMode = '0';
+        result.tlsMode = 'master';
       }
     }
   } catch (e) {
@@ -117,14 +118,24 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
 }
 
 function buildUrl(values: ModifyInstanceFormValues): string {
-  let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}?log=${values.logLevel}`;
-  if (values.instanceType === 'server' && values.tlsMode) {
-    url += `&tls=${values.tlsMode}`;
-    if (values.tlsMode === '2') {
-      url += `&crt=${values.certPath || ''}&key=${values.keyPath || ''}`;
+  let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
+  const queryParams = new URLSearchParams();
+
+  if (values.logLevel !== "master") {
+    queryParams.append('log', values.logLevel);
+  }
+
+  if (values.instanceType === 'server') {
+    if (values.tlsMode && values.tlsMode !== "master") {
+      queryParams.append('tls', values.tlsMode);
+      if (values.tlsMode === '2') {
+        if (values.certPath && values.certPath.trim() !== '') queryParams.append('crt', values.certPath.trim());
+        if (values.keyPath && values.keyPath.trim() !== '') queryParams.append('key', values.keyPath.trim());
+      }
     }
   }
-  return url;
+  const queryString = queryParams.toString();
+  return queryString ? `${url}?${queryString}` : url;
 }
 
 
@@ -134,12 +145,12 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
 
   const form = useForm<ModifyInstanceFormValues>({
     resolver: zodResolver(modifyInstanceFormSchema),
-    defaultValues: {
-      instanceType: 'server', // This will be overwritten by parsed URL
+    defaultValues: { // These will be overwritten by parsed URL
+      instanceType: 'server', 
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'info',
-      tlsMode: '0',
+      logLevel: 'master',
+      tlsMode: 'master',
       certPath: '',
       keyPath: '',
     },
@@ -153,11 +164,11 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     if (instance && open) {
       const parsedUrl = parseNodePassUrl(instance.url);
       form.reset({
-        instanceType: parsedUrl.instanceType || instance.type, // Fallback to instance.type if parsing fails
+        instanceType: parsedUrl.instanceType || instance.type,
         tunnelAddress: parsedUrl.tunnelAddress || '',
         targetAddress: parsedUrl.targetAddress || '',
-        logLevel: parsedUrl.logLevel || 'info',
-        tlsMode: parsedUrl.tlsMode || (parsedUrl.instanceType === 'server' ? '0' : undefined),
+        logLevel: parsedUrl.logLevel || 'master',
+        tlsMode: parsedUrl.instanceType === 'server' ? (parsedUrl.tlsMode || 'master') : undefined,
         certPath: parsedUrl.certPath || '',
         keyPath: parsedUrl.keyPath || '',
       });
@@ -202,11 +213,11 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center text-xl font-title">
+          <DialogTitle className="flex items-center font-title">
             <Pencil className="mr-2 h-6 w-6 text-primary" />
             修改实例配置
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="font-sans">
             编辑实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 的配置 (主控: {apiName || 'N/A'})。
           </DialogDescription>
         </DialogHeader>
@@ -233,7 +244,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       <SelectItem value="client">客户端</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription>实例的类型创建后不可更改。</FormDescription>
+                  <FormDescription className="font-sans">实例的类型创建后不可更改。</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -252,7 +263,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       {...field}
                     />
                   </FormControl>
-                   <FormDescription>
+                   <FormDescription className="font-sans">
                     {instanceType === "server"
                       ? "服务端模式: 监听控制连接 (例 '0.0.0.0:10101')。"
                       : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
@@ -275,7 +286,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
+                  <FormDescription className="font-sans">
                     {instanceType === "server"
                       ? "服务端模式: 监听隧道流量 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 本地接收流量转发地址 (例 '127.0.0.1:8000')。"}
@@ -298,6 +309,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="master">默认 (主控配置)</SelectItem>
                       <SelectItem value="debug">Debug</SelectItem>
                       <SelectItem value="info">Info</SelectItem>
                       <SelectItem value="warn">Warn</SelectItem>
@@ -318,13 +330,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>TLS 模式 (服务端)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "0"}>
+                      <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
                           <SelectTrigger className="text-sm">
                             <SelectValue placeholder="选择TLS模式" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="master">默认 (主控配置)</SelectItem>
                           <SelectItem value="0">0: 无TLS (明文)</SelectItem>
                           <SelectItem value="1">1: 自签名证书</SelectItem>
                           <SelectItem value="2">2: 自定义证书</SelectItem>
