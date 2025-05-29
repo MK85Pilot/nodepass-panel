@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound, Maximize2 } from 'lucide-react';
 import { InstanceStatusBadge } from '@/components/nodepass/InstanceStatusBadge';
 import { InstanceDetailsModal } from '@/components/nodepass/InstanceDetailsModal';
 import { Badge } from '@/components/ui/badge';
@@ -257,7 +257,6 @@ const TopologyPage: NextPage = () => {
           const apiRootVal = getApiRootUrl(config.id);
           const tokenVal = getToken(config.id);
           if (!apiRootVal || !tokenVal) {
-            // This case should ideally not happen if config validation is done upon saving
             console.warn(`拓扑页: 主控配置 "${config.name}" (ID: ${config.id}) 无效 (API Root 或 Token 为空)。跳过。`);
             return [];
           }
@@ -325,7 +324,6 @@ const TopologyPage: NextPage = () => {
     const serverRect = serverEl.getBoundingClientRect();
     const canvasRect = canvasRef.current.getBoundingClientRect();
   
-    // Relative positions within the canvas
     const serverX = serverNode.position.x;
     const serverY = serverNode.position.y;
   
@@ -337,29 +335,13 @@ const TopologyPage: NextPage = () => {
       const clientX = client.position.x;
       const clientY = client.position.y;
   
-      // Calculate centers relative to canvas for angle calculation
-      const serverCenterX = serverX + NODE_WIDTH / 2;
-      const serverCenterY = serverY + NODE_HEIGHT_SERVER / 2;
-      const clientCenterX = clientX + NODE_WIDTH / 2;
-      const clientCenterY = clientY + NODE_HEIGHT_CLIENT / 2;
-  
-      // Determine dynamic anchor points
-      let sx_anchor = serverCenterX, sy_anchor = serverCenterY;
-      let cx_anchor = clientCenterX, cy_anchor = clientCenterY;
-  
-      const dx = clientCenterX - serverCenterX;
-      const dy = clientCenterY - serverCenterY;
-  
-      // Simplified logic: connect from server's right to client's left for this "fishbone" style
-      sx_anchor = serverX + NODE_WIDTH; // Right edge of server
-      sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; // Middle of server
+      let sx_anchor = serverX + NODE_WIDTH; 
+      let sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; 
       
-      cx_anchor = clientX; // Left edge of client
-      cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; // Middle of client
+      let cx_anchor = clientX; 
+      let cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; 
 
 
-      // Quadratic Bézier curve for a gentle curve
-      // Control point is offset horizontally to create the curve
       const controlX = (sx_anchor + cx_anchor) / 2 + (Math.abs(sx_anchor - cx_anchor) * 0.2 * (sx_anchor < cx_anchor ? 1 : -1) ) ;
       const controlY = (sy_anchor + cy_anchor) / 2 ;
   
@@ -384,33 +366,45 @@ const TopologyPage: NextPage = () => {
   }, [viewMode, selectedServerForGraph, clientsForSelectedServer, calculateLines, draggingNodeInfo, allServerInstances, allClientInstances]);
 
 
-  const handleViewServerTopology = (server: ServerNode) => {
-    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id);
-    
-    const initialServerY = 100; 
+  const setInitialGraphLayout = (server: ServerNode, clients: ClientNode[]) => {
+    const initialServerY = 100;
     const serverNodeHeight = NODE_HEIGHT_SERVER;
 
-    // Position clients to the right and stacked vertically relative to the server
-    const positionedClients = relevantClients.map((client, index) => ({
+    const positionedClients = clients.map((client, index) => ({
       ...client,
       position: {
-        x: 50 + GRAPH_CLIENT_OFFSET_X, // Fixed X offset from server
-        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) 
-           - (relevantClients.length > 1 ? (((relevantClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0) // Center stack vertically
-           + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2), // Align client stack center with server center
+        x: 50 + GRAPH_CLIENT_OFFSET_X,
+        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))
+           - (clients.length > 1 ? (((clients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0)
+           + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2),
       }
     }));
-    
-    // Adjust server's Y position to be in the middle of its client stack
-    const serverY = positionedClients.length > 0 
-      ? positionedClients[0].position.y + ( (positionedClients.length -1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))/2 + (NODE_HEIGHT_CLIENT / 2) - (serverNodeHeight / 2)
+
+    const serverY = positionedClients.length > 0
+      ? positionedClients[0].position.y + ((positionedClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2 + (NODE_HEIGHT_CLIENT / 2) - (serverNodeHeight / 2)
       : initialServerY;
 
-
-    setSelectedServerForGraph({...server, position: { x: 50, y: serverY }}); // Server on the left
+    setSelectedServerForGraph({...server, position: { x: 50, y: serverY }});
     setClientsForSelectedServer(positionedClients);
+  };
+
+  const handleViewServerTopology = (server: ServerNode) => {
+    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id);
+    setInitialGraphLayout(server, relevantClients);
     setViewMode('graph');
   };
+  
+  const resetSelectedServerLayout = () => {
+    if (!selectedServerForGraph) return;
+    // Find the original server data from allServerInstances to ensure we use the non-modified version
+    const originalServerNode = allServerInstances.find(s => s.id === selectedServerForGraph.id);
+    if (!originalServerNode) return;
+
+    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === originalServerNode.id);
+    setInitialGraphLayout(originalServerNode, relevantClients);
+    // Lines will recalculate due to useEffect dependencies
+  };
+
 
   const handleBackToTable = () => {
     setViewMode('table');
@@ -556,7 +550,7 @@ const TopologyPage: NextPage = () => {
         key={`${node.type}-${node.id}`}
         ref={el => nodeRefs.current.set(`${node.type}-${node.id}`, el)}
         className={cn(
-          "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-lg flex flex-col border-2", // p-2 for tighter padding
+          "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-lg flex flex-col border-2",
           bgColor,
         )}
         style={{
@@ -572,7 +566,7 @@ const TopologyPage: NextPage = () => {
       >
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 mb-1 flex-shrink-0 cursor-pointer"> {/* mb-1 for tighter spacing */}
+            <div className="flex items-center gap-1.5 mb-1 flex-shrink-0 cursor-pointer">
               <Move className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-grab flex-shrink-0" />
               <Icon className={`h-4 w-4 ${isServer ? 'text-primary' : 'text-accent'} flex-shrink-0`} />
               <h3 className="font-semibold text-xs truncate font-title" title={node.apiName}>
@@ -593,6 +587,12 @@ const TopologyPage: NextPage = () => {
           </div>
           {isServer && (node as ServerNode).serverListeningAddress && (
             <p className="truncate font-mono" title={(node as ServerNode).serverListeningAddress!}>监听: {(node as ServerNode).serverListeningAddress}</p>
+          )}
+           {isServer && (node as ServerNode).serverForwardsToAddress && (
+            <p className="truncate font-mono" title={(node as ServerNode).serverForwardsToAddress!}>转发至: {(node as ServerNode).serverForwardsToAddress}</p>
+          )}
+          {isClient && (node as ClientNode).clientConnectsToServerAddress && (
+            <p className="truncate font-mono" title={(node as ClientNode).clientConnectsToServerAddress!}>连接至: {(node as ClientNode).clientConnectsToServerAddress}</p>
           )}
           {isClient && (node as ClientNode).localTargetAddress && (
              <p className="truncate text-green-600 dark:text-green-400 font-mono" title={(node as ClientNode).localTargetAddress!}>
@@ -652,7 +652,13 @@ const TopologyPage: NextPage = () => {
                   返回服务端列表
                 </Button>
               )}
-               <Button variant="outline" onClick={() => viewMode === 'graph' && calculateLines()} disabled={isLoadingData || viewMode !== 'graph'} size="sm" className="font-sans">
+               <Button 
+                variant="outline" 
+                onClick={resetSelectedServerLayout} 
+                disabled={isLoadingData || viewMode !== 'graph' || !selectedServerForGraph} 
+                size="sm" 
+                className="font-sans"
+               >
                 <Maximize2 className="mr-2 h-4 w-4" />
                 重置布局
               </Button>
