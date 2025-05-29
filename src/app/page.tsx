@@ -6,10 +6,11 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
 import { CreateInstanceDialog } from '@/components/nodepass/CreateInstanceDialog';
 import { InstanceList } from '@/components/nodepass/InstanceList';
-// import { EventLog } from '@/components/nodepass/EventLog'; // 移除了 EventLog 的导入
+import { ConnectionsManager } from '@/components/nodepass/ConnectionsManager'; // Import the new manager
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -86,12 +87,7 @@ export default function HomePage() {
               apiToken={currentToken}
               activeApiConfig={activeApiConfig}
             />
-            {/* <EventLog
-              apiId={activeApiConfig.id}
-              apiName={activeApiConfig.name}
-              apiRoot={currentApiRoot}
-              apiToken={currentToken}
-            /> */} {/* 移除了 EventLog 组件的渲染 */}
+            {/* EventLog section replaced */}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
@@ -115,6 +111,20 @@ export default function HomePage() {
             )}
           </div>
         )}
+
+      {/* This card now holds the ConnectionsManager */}
+      <Card className="shadow-lg mt-8">
+        <CardHeader>
+          <CardTitle className="font-title">主控连接管理</CardTitle>
+          <CardDescription className="font-sans">
+            查看、添加、编辑或切换您的主控连接。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ConnectionsManager />
+        </CardContent>
+      </Card>
+
       <ApiConfigDialog
         open={isApiConfigDialogOpenForSetup}
         onOpenChange={setIsApiConfigDialogOpenForSetup}
@@ -134,3 +144,6 @@ export default function HomePage() {
     </AppLayout>
   );
 }
+
+
+    
