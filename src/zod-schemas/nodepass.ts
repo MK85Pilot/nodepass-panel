@@ -14,6 +14,7 @@ export const createInstanceFormSchema = z.object({
   tlsMode: z.optional(z.enum(["master", "0", "1", "2"])),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
+  autoCreateServer: z.optional(z.boolean()), // New field
 }).refine(data => {
   if (data.instanceType === "server" && !data.tlsMode) {
     return false;
@@ -39,6 +40,9 @@ export const createInstanceFormSchema = z.object({
   message: "TLS模式 '2' 需要密钥路径。",
   path: ["keyPath"],
 });
+
+// Type for the create form values
+export type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
 // Schema for the detailed modify instance form
 export const modifyInstanceFormSchema = z.object({

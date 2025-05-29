@@ -16,17 +16,16 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { createInstanceFormSchema, createInstanceApiSchema } from '@/zod-schemas/nodepass';
+import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
-
-type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -40,8 +39,8 @@ interface CreateInstanceDialogProps {
 
 function parseTunnelAddr(urlString: string): string | null {
   try {
-    const url = new URL(urlString); 
-    return url.host; 
+    const url = new URL(urlString);
+    return url.host;
   } catch (e) {
     const schemeSeparator = "://";
     const schemeIndex = urlString.indexOf(schemeSeparator);
@@ -73,6 +72,28 @@ const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode, string> = {
 };
 
 
+function buildUrl(values: CreateInstanceFormValues): string {
+  let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
+  const queryParams = new URLSearchParams();
+
+  if (values.logLevel !== "master") {
+    queryParams.append('log', values.logLevel);
+  }
+
+  if (values.instanceType === 'server') {
+    if (values.tlsMode && values.tlsMode !== "master") {
+      queryParams.append('tls', values.tlsMode);
+      if (values.tlsMode === '2') {
+        if (values.certPath && values.certPath.trim() !== '') queryParams.append('crt', values.certPath.trim());
+        if (values.keyPath && values.keyPath.trim() !== '') queryParams.append('key', values.keyPath.trim());
+      }
+    }
+  }
+  const queryString = queryParams.toString();
+  return queryString ? `${url}?${queryString}` : url;
+}
+
+
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -84,9 +105,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       tunnelAddress: '',
       targetAddress: '',
       logLevel: 'master',
-      tlsMode: 'master', 
+      tlsMode: 'master',
       certPath: '',
       keyPath: '',
+      autoCreateServer: false,
     },
   });
 
@@ -103,6 +125,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
+        autoCreateServer: false,
       });
     }
   }, [open, form]);
@@ -116,6 +139,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (form.getValues("tlsMode") === undefined) {
             form.setValue("tlsMode", "master");
         }
+        form.setValue("autoCreateServer", false); // Cannot auto-create server if type is server
     }
   }, [instanceType, form]);
 
@@ -147,48 +171,84 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       const validatedApiData = createInstanceApiSchema.parse(data);
       return nodePassApi.createInstance(validatedApiData, apiRoot, apiToken);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       toast({
         title: '实例已创建',
-        description: '新实例已成功创建。',
+        description: `实例 (URL: ${variables.url.substring(0,30)}...) 已成功创建。`,
       });
-      queryClient.invalidateQueries({ queryKey: ['instances', apiId] }); 
-      form.reset();
-      onOpenChange(false);
+      queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
+      // Do not close dialog here if part of a sequence
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
       toast({
         title: '创建实例出错',
-        description: error.message || '创建实例时发生未知错误。',
+        description: `创建实例 (URL: ${variables.url.substring(0,30)}...) 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
+      throw error; // Re-throw to be caught by mutateAsync if used
     },
   });
 
-  function buildUrl(values: CreateInstanceFormValues): string {
-    let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
-    const queryParams = new URLSearchParams();
-  
-    if (values.logLevel !== "master") {
-      queryParams.append('log', values.logLevel);
+  async function onSubmit(values: CreateInstanceFormValues) {
+    if (!apiId || !apiRoot || !apiToken) {
+        toast({ title: "操作失败", description: "未选择活动主控或主控配置无效。", variant: "destructive"});
+        return;
     }
-  
-    if (values.instanceType === 'server') {
-      if (values.tlsMode && values.tlsMode !== "master") {
-        queryParams.append('tls', values.tlsMode);
-        if (values.tlsMode === '2') {
-          if (values.certPath && values.certPath.trim() !== '') queryParams.append('crt', values.certPath.trim());
-          if (values.keyPath && values.keyPath.trim() !== '') queryParams.append('key', values.keyPath.trim());
-        }
+
+    if (values.instanceType === 'client' && values.autoCreateServer) {
+      const clientTunnelParts = values.tunnelAddress.split(':');
+      const clientTargetParts = values.targetAddress.split(':');
+
+      const clientTunnelPort = clientTunnelParts.pop();
+      const clientTargetPort = clientTargetParts.pop();
+
+      if (!clientTunnelPort || !clientTargetPort) {
+        toast({ title: '错误', description: '无法从客户端地址解析端口以自动创建服务端。', variant: 'destructive' });
+        form.control.setError("tunnelAddress", {type: "manual", message: "端口解析失败"});
+        form.control.setError("targetAddress", {type: "manual", message: "端口解析失败"});
+        return;
+      }
+
+      const serverConfigForAutoCreate: CreateInstanceFormValues = {
+        instanceType: 'server',
+        tunnelAddress: `0.0.0.0:${clientTunnelPort}`,
+        targetAddress: `0.0.0.0:${clientTargetPort}`, // Server listens for tunneled traffic on this port
+        logLevel: values.logLevel,
+        tlsMode: '1', // Default to self-signed for auto-created server
+        certPath: '',
+        keyPath: '',
+      };
+      const serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
+
+      try {
+        await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
+        // Success toast for server is handled by mutation's onSuccess
+        
+        // Now create client
+        const clientUrlToCreate = buildUrl(values);
+        await createInstanceMutation.mutateAsync({ url: clientUrlToCreate });
+        // Success toast for client is handled by mutation's onSuccess
+        
+        form.reset();
+        onOpenChange(false); // Close dialog only after both succeed
+
+      } catch (error: any) {
+        // Error toast is handled by mutation's onError
+        // No need to re-toast here unless for specific sequence failure message
+        console.error("自动创建序列中发生错误:", error);
+      }
+    } else {
+      // Original logic: create single instance
+      const constructedUrl = buildUrl(values);
+      try {
+        await createInstanceMutation.mutateAsync({ url: constructedUrl });
+        form.reset();
+        onOpenChange(false); // Close dialog on success
+      } catch (error) {
+        // Error toast is handled by mutation's onError
+         console.error("创建单个实例时发生错误:", error);
       }
     }
-    const queryString = queryParams.toString();
-    return queryString ? `${url}?${queryString}` : url;
-  }
-
-  function onSubmit(values: CreateInstanceFormValues) {
-    const constructedUrl = buildUrl(values);
-    createInstanceMutation.mutate({ url: constructedUrl });
   }
   
   const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
@@ -336,7 +396,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="master" className="font-sans">
+                       <SelectItem value="master" className="font-sans">
                         默认 ({masterLogLevelDisplay})
                       </SelectItem>
                       <SelectItem value="debug" className="font-sans">Debug</SelectItem>
@@ -348,6 +408,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </Select>
                   <FormDescription className="font-sans text-xs">
                     选择“默认”将继承主控实际启动时应用的设置。
+                    {activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master' && ` (当前主控默认为: ${activeApiConfig.masterDefaultLogLevel.toUpperCase()})`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -379,6 +440,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </Select>
                        <FormDescription className="font-sans text-xs">
                         选择“默认”将继承主控实际启动时应用的设置。
+                        {activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master' && ` (当前主控默认为: ${MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]})`}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -426,6 +488,33 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                 )}
               </>
             )}
+
+            {instanceType === 'client' && (
+              <FormField
+                control={form.control}
+                name="autoCreateServer"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="font-sans cursor-pointer">
+                        自动创建匹配的服务端
+                      </FormLabel>
+                      <FormDescription className="font-sans text-xs">
+                        如果勾选，将在创建此客户端实例前，尝试自动创建一个匹配的服务端实例。
+                        自动创建的服务端将使用与客户端相同的日志级别，并默认启用TLS模式 '1' (自签名证书)。
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
+
           </form>
         </Form>
         <DialogFooter className="pt-4 font-sans">
