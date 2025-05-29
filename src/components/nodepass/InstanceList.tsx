@@ -39,7 +39,7 @@ interface InstanceListProps {
   apiName: string | null;
   apiRoot: string | null;
   apiToken: string | null;
-  activeApiConfig: NamedApiConfig | null; // Pass the full active config
+  activeApiConfig: NamedApiConfig | null; 
 }
 
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig }: InstanceListProps) {
@@ -107,25 +107,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
     if (!navigator.clipboard) {
-      toast({
-        title: '复制失败',
-        description: '您的浏览器不支持剪贴板操作。',
-        variant: 'destructive',
-      });
+      toast({ title: '复制失败', description: '浏览器不支持剪贴板。', variant: 'destructive' });
       return;
     }
     try {
       await navigator.clipboard.writeText(textToCopy);
-      toast({
-        title: '复制成功',
-        description: `${entity} 已复制到剪贴板。`,
-      });
+      toast({ title: '复制成功', description: `${entity} 已复制到剪贴板。` });
     } catch (err) {
-      toast({
-        title: '复制失败',
-        description: `无法将 ${entity} 复制到剪贴板。`,
-        variant: 'destructive',
-      });
+      toast({ title: '复制失败', description: `无法复制 ${entity}。`, variant: 'destructive' });
       console.error('复制失败: ', err);
     }
   };
@@ -310,6 +299,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         instance={selectedInstanceForDetails}
         open={!!selectedInstanceForDetails}
         onOpenChange={(open) => !open && setSelectedInstanceForDetails(null)}
+        apiRoot={apiRoot} // Pass apiRoot
+        apiToken={apiToken} // Pass apiToken
       />
       <DeleteInstanceDialog
         instance={selectedInstanceForDelete}
@@ -333,3 +324,5 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
+    

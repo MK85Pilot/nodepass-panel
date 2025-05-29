@@ -4,11 +4,11 @@
 import type { NextPage } from 'next';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useApiConfig } from '@/hooks/use-api-key';
+import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { nodePassApi } from '@/lib/api';
 import type { Instance } from '@/types/nodepass';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react';
 import { InstanceStatusBadge } from '@/components/nodepass/InstanceStatusBadge';
 import { InstanceDetailsModal } from '@/components/nodepass/InstanceDetailsModal';
 import { Badge } from '@/components/ui/badge';
@@ -151,7 +151,7 @@ const GRAPH_CLIENT_SPACING_Y = 20;
 
 
 const TopologyPage: NextPage = () => {
-  const { apiConfigsList, isLoading: isLoadingApiConfigGlobal, getApiRootUrl, getToken } = useApiConfig();
+  const { apiConfigsList, isLoading: isLoadingApiConfigGlobal, getApiRootUrl, getToken, getApiConfigById } = useApiConfig();
   const { toast } = useToast();
 
   const [allServerInstances, setAllServerInstances] = useState<ServerNode[]>([]);
@@ -175,6 +175,7 @@ const TopologyPage: NextPage = () => {
 
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
+  const [apiConfigForModal, setApiConfigForModal] = useState<NamedApiConfig | null>(null);
 
 
   const processAllInstanceData = useCallback((fetchedInstances: InstanceWithApiDetails[]) => {
@@ -193,7 +194,7 @@ const TopologyPage: NextPage = () => {
           status: inst.status,
           apiId: inst.apiId,
           apiName: inst.apiName,
-          position: { x: 50, y: 50 + sNodes.length * (NODE_HEIGHT_SERVER + GRAPH_CLIENT_SPACING_Y) }, 
+          position: { x: 50, y: 50 + sNodes.length * (NODE_HEIGHT_SERVER + GRAPH_CLIENT_SPACING_Y + 20) }, // Increased spacing for servers
           serverListeningAddress: parseTunnelAddr(inst.url),
           serverForwardsToAddress: parseTargetAddr(inst.url),
           originalInstance: inst,
@@ -206,7 +207,7 @@ const TopologyPage: NextPage = () => {
           status: inst.status,
           apiId: inst.apiId,
           apiName: inst.apiName,
-          position: { x: 50 + GRAPH_CLIENT_OFFSET_X, y: 50 }, 
+          position: { x: 50 + GRAPH_CLIENT_OFFSET_X, y: 50 }, // Initial client position, will be refined
           clientConnectsToServerAddress: parseTunnelAddr(inst.url),
           localTargetAddress: parseTargetAddr(inst.url),
           connectedToServerId: null, 
@@ -256,7 +257,8 @@ const TopologyPage: NextPage = () => {
           const apiRootVal = getApiRootUrl(config.id);
           const tokenVal = getToken(config.id);
           if (!apiRootVal || !tokenVal) {
-            console.warn(`拓扑页: 主控配置 "${config.name}" (ID: ${config.id}) 无效。跳过。`);
+            // This case should ideally not happen if config validation is done upon saving
+            console.warn(`拓扑页: 主控配置 "${config.name}" (ID: ${config.id}) 无效 (API Root 或 Token 为空)。跳过。`);
             return [];
           }
           try {
@@ -279,7 +281,7 @@ const TopologyPage: NextPage = () => {
         if (result.status === 'fulfilled' && result.value) {
           combinedInstances.push(...result.value);
         } else if (result.status === 'rejected') {
-           console.warn(`拓扑页: API请求失败: ${result.reason?.message || result.reason}`);
+           console.warn(`拓扑页: API请求失败 (已处理): ${result.reason?.message || String(result.reason)}`);
         }
       });
       return combinedInstances.filter(inst => inst.id !== '********'); 
@@ -309,35 +311,60 @@ const TopologyPage: NextPage = () => {
       setLines([]);
       return;
     }
-
+  
     const serverNode = selectedServerForGraph;
     const connectedClients = clientsForSelectedServer;
     const newLines: ConnectionLine[] = [];
-
+  
     const serverEl = nodeRefs.current.get(`server-${serverNode.id}`);
     if (!serverEl) {
       setLines([]);
       return;
     }
-    
-    const serverX_out = serverNode.position.x + NODE_WIDTH;
-    const serverY_out = serverNode.position.y + NODE_HEIGHT_SERVER / 2;
-
-
+  
+    const serverRect = serverEl.getBoundingClientRect();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+  
+    // Relative positions within the canvas
+    const serverX = serverNode.position.x;
+    const serverY = serverNode.position.y;
+  
     connectedClients.forEach(client => {
       const clientEl = nodeRefs.current.get(`client-${client.id}`);
       if (!clientEl) return;
+  
+      const clientRect = clientEl.getBoundingClientRect();
+      const clientX = client.position.x;
+      const clientY = client.position.y;
+  
+      // Calculate centers relative to canvas for angle calculation
+      const serverCenterX = serverX + NODE_WIDTH / 2;
+      const serverCenterY = serverY + NODE_HEIGHT_SERVER / 2;
+      const clientCenterX = clientX + NODE_WIDTH / 2;
+      const clientCenterY = clientY + NODE_HEIGHT_CLIENT / 2;
+  
+      // Determine dynamic anchor points
+      let sx_anchor = serverCenterX, sy_anchor = serverCenterY;
+      let cx_anchor = clientCenterX, cy_anchor = clientCenterY;
+  
+      const dx = clientCenterX - serverCenterX;
+      const dy = clientCenterY - serverCenterY;
+  
+      // Simplified logic: connect from server's right to client's left for this "fishbone" style
+      sx_anchor = serverX + NODE_WIDTH; // Right edge of server
+      sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; // Middle of server
       
-      const clientX_in = client.position.x;
-      const clientY_in = client.position.y + NODE_HEIGHT_CLIENT / 2;
-      
-      const controlPointX1 = serverX_out + 50; 
-      const controlPointY1 = serverY_out;
-      const controlPointX2 = clientX_in - 50; 
-      const controlPointY2 = clientY_in;
+      cx_anchor = clientX; // Left edge of client
+      cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; // Middle of client
 
-      const path = `M ${serverX_out} ${serverY_out} C ${controlPointX1} ${controlPointY1}, ${controlPointX2} ${controlPointY2}, ${clientX_in} ${clientY_in}`;
-      
+
+      // Quadratic Bézier curve for a gentle curve
+      // Control point is offset horizontally to create the curve
+      const controlX = (sx_anchor + cx_anchor) / 2 + (Math.abs(sx_anchor - cx_anchor) * 0.2 * (sx_anchor < cx_anchor ? 1 : -1) ) ;
+      const controlY = (sy_anchor + cy_anchor) / 2 ;
+  
+      const path = `M ${sx_anchor} ${sy_anchor} Q ${controlX} ${controlY}, ${cx_anchor} ${cy_anchor}`;
+  
       newLines.push({
         id: `line-${serverNode.id}-${client.id}`,
         pathData: path,
@@ -363,20 +390,24 @@ const TopologyPage: NextPage = () => {
     const initialServerY = 100; 
     const serverNodeHeight = NODE_HEIGHT_SERVER;
 
+    // Position clients to the right and stacked vertically relative to the server
     const positionedClients = relevantClients.map((client, index) => ({
       ...client,
       position: {
-        x: 50 + GRAPH_CLIENT_OFFSET_X, 
-        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) - (relevantClients.length > 1 ? (((relevantClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0) + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2),
+        x: 50 + GRAPH_CLIENT_OFFSET_X, // Fixed X offset from server
+        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) 
+           - (relevantClients.length > 1 ? (((relevantClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0) // Center stack vertically
+           + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2), // Align client stack center with server center
       }
     }));
     
+    // Adjust server's Y position to be in the middle of its client stack
     const serverY = positionedClients.length > 0 
       ? positionedClients[0].position.y + ( (positionedClients.length -1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))/2 + (NODE_HEIGHT_CLIENT / 2) - (serverNodeHeight / 2)
       : initialServerY;
 
 
-    setSelectedServerForGraph({...server, position: { x: 50, y: serverY }});
+    setSelectedServerForGraph({...server, position: { x: 50, y: serverY }}); // Server on the left
     setClientsForSelectedServer(positionedClients);
     setViewMode('graph');
   };
@@ -466,12 +497,14 @@ const TopologyPage: NextPage = () => {
     }
   }, [draggingNodeInfo, handleMouseMove, handleMouseUp]);
 
-  const openInstanceDetailsModal = (instance: Instance) => {
+  const openInstanceDetailsModal = (instanceNode: DraggableNode) => {
     if (didDragRef.current) { 
         didDragRef.current = false; 
         return;
     }
-    setSelectedInstanceForDetails(instance);
+    setSelectedInstanceForDetails(instanceNode.originalInstance);
+    const config = getApiConfigById(instanceNode.apiId);
+    setApiConfigForModal(config);
     setIsDetailsModalOpen(true);
   };
 
@@ -479,7 +512,7 @@ const TopologyPage: NextPage = () => {
     if (!navigator.clipboard) {
       toast({
         title: '复制失败',
-        description: '您的浏览器不支持剪贴板操作。',
+        description: '浏览器不支持剪贴板。',
         variant: 'destructive',
       });
       return;
@@ -523,7 +556,7 @@ const TopologyPage: NextPage = () => {
         key={`${node.type}-${node.id}`}
         ref={el => nodeRefs.current.set(`${node.type}-${node.id}`, el)}
         className={cn(
-          "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-md flex flex-col border-2",
+          "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-lg flex flex-col border-2", // p-2 for tighter padding
           bgColor,
         )}
         style={{
@@ -535,11 +568,11 @@ const TopologyPage: NextPage = () => {
           userSelect: 'none', 
         }}
         onMouseDown={(e) => handleMouseDown(e, node.id, node.type)}
-        onClick={() => openInstanceDetailsModal(node.originalInstance)}
+        onClick={() => openInstanceDetailsModal(node)}
       >
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 mb-1 flex-shrink-0 cursor-pointer">
+            <div className="flex items-center gap-1.5 mb-1 flex-shrink-0 cursor-pointer"> {/* mb-1 for tighter spacing */}
               <Move className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-grab flex-shrink-0" />
               <Icon className={`h-4 w-4 ${isServer ? 'text-primary' : 'text-accent'} flex-shrink-0`} />
               <h3 className="font-semibold text-xs truncate font-title" title={node.apiName}>
@@ -620,8 +653,8 @@ const TopologyPage: NextPage = () => {
                 </Button>
               )}
                <Button variant="outline" onClick={() => viewMode === 'graph' && calculateLines()} disabled={isLoadingData || viewMode !== 'graph'} size="sm" className="font-sans">
-                <Network className="mr-2 h-4 w-4" />
-                布局
+                <Maximize2 className="mr-2 h-4 w-4" />
+                重置布局
               </Button>
               {lastRefreshed && <span className="text-xs text-muted-foreground font-sans">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
               <Button variant="outline" onClick={handleRefresh} disabled={isLoadingData} size="sm" className="font-sans">
@@ -666,18 +699,18 @@ const TopologyPage: NextPage = () => {
                               {item.apiName}
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent>
+                          <TooltipContent side="top" className="max-w-xs break-all text-xs font-sans">
                             <p className="font-sans">{item.apiName} (ID: {item.apiId})</p>
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>
                       <TableCell 
                         className="font-mono text-xs"
-                        title={`点击复制: ${item.id}`}
                        >
                         <span
                           className="cursor-pointer hover:text-primary transition-colors duration-150"
                           onClick={() => handleCopyToClipboard(item.id, '实例 ID')}
+                          title={`点击复制: ${item.id}`}
                         >
                           {item.id.substring(0,12)}...
                         </span>
@@ -748,8 +781,11 @@ const TopologyPage: NextPage = () => {
               setIsDetailsModalOpen(open);
               if (!open) {
                 setSelectedInstanceForDetails(null); 
+                setApiConfigForModal(null);
               }
             }}
+            apiRoot={apiConfigForModal ? getApiRootUrl(apiConfigForModal.id) : null}
+            apiToken={apiConfigForModal ? getToken(apiConfigForModal.id) : null}
           />
 
           <div className="mt-8 p-4 bg-muted/30 rounded-lg text-xs text-muted-foreground shadow-sm font-sans">
@@ -771,3 +807,5 @@ const TopologyPage: NextPage = () => {
 };
 
 export default TopologyPage;
+
+    
