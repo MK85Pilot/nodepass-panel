@@ -13,9 +13,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-// Checkbox removed as ignoreSslErrors is removed
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info } from 'lucide-react'; // AlertTriangle removed
+import { KeyRound, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react'; 
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
 import type { AppLogEntry } from './EventLog';
 
@@ -36,7 +35,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [showToken, setShowToken] = useState(false);
   const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
   const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
-  // ignoreSslErrorsInput state removed
 
   useEffect(() => {
     if (open) {
@@ -46,7 +44,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setPrefixPathInput(currentConfig?.prefixPath || '');
       setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
       setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
-      // setIgnoreSslErrorsInput removed
       setShowToken(false);
     } else {
       // Reset on close
@@ -56,7 +53,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setPrefixPathInput('');
       setMasterLogLevelInput('master');
       setMasterTlsModeInput('master');
-      // setIgnoreSslErrorsInput removed
       setShowToken(false);
     }
   }, [open, currentConfig]);
@@ -69,17 +65,13 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
-        prefixPath: prefixPathInput.trim() || null, // Store null if empty
+        prefixPath: prefixPathInput.trim() || null,
         masterDefaultLogLevel: masterLogLevelInput,
         masterDefaultTlsMode: masterTlsModeInput,
-        // ignoreSslErrors removed from save object
       });
       onOpenChange(false);
     }
   };
-
-  const displayApiUrl = apiUrlInput || "http://[::1]:3000";
-  const displayPrefixPath = prefixPathInput ? `/${prefixPathInput.replace(/^\/+|\/+$/g, '')}` : "/api";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,8 +83,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               {isEditing ? '编辑主控' : '添加新主控'}
             </DialogTitle>
             <DialogDescription className="font-sans">
-              配置新的主控连接。输入名称、API 地址、令牌及可选的 API 前缀路径。信息将保存在浏览器本地。
-              端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
+              为此 NodePass 主控配置连接。信息将保存在浏览器本地。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
@@ -198,9 +189,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 </SelectContent>
               </Select>
             </div>
-            
-            {/* Removed ignoreSslErrors checkbox */}
-
           </div>
           <DialogFooter className="font-sans">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
