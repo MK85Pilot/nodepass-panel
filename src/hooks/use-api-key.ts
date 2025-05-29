@@ -21,6 +21,7 @@ export interface NamedApiConfig extends ApiConfig {
   name: string;
   masterDefaultLogLevel?: MasterLogLevel;
   masterDefaultTlsMode?: MasterTlsMode;
+  // ignoreSslErrors removed
 }
 
 export function useApiConfig() {
@@ -34,11 +35,14 @@ export function useApiConfig() {
       if (storedConfigsList) {
         const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
         // Ensure new optional fields have default values if missing from old storage
-        const migratedConfigs = parsedConfigs.map(config => ({
-          ...config,
-          masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
-          masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
-        }));
+        const migratedConfigs = parsedConfigs.map(config => {
+          const { ignoreSslErrors, ...restConfig } = config as any; // explicitly remove ignoreSslErrors
+          return {
+            ...restConfig,
+            masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+            masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+          };
+        });
         setApiConfigsList(migratedConfigs);
       }
       const storedActiveConfigId = localStorage.getItem(ACTIVE_API_CONFIG_ID_STORAGE_KEY);
@@ -76,8 +80,9 @@ export function useApiConfig() {
 
   const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const newId = config.id || uuidv4();
-    const newConfigWithIdAndDefaults = {
-      ...config,
+    const { ignoreSslErrors, ...restConfig } = config as any; // remove ignoreSslErrors if present
+    const newConfigWithIdAndDefaults: NamedApiConfig = {
+      ...restConfig,
       id: newId,
       masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
       masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
@@ -117,8 +122,9 @@ export function useApiConfig() {
     if (!activeConfigId) return null;
     const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
     if (config) {
+      const { ignoreSslErrors, ...restConfig } = config as any;
       return {
-        ...config,
+        ...restConfig,
         masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
         masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
       };
@@ -129,8 +135,9 @@ export function useApiConfig() {
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
     const config = apiConfigsList.find(c => c.id === id) || null;
     if (config) {
+      const { ignoreSslErrors, ...restConfig } = config as any;
       return {
-        ...config,
+        ...restConfig,
         masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
         masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
       };
@@ -145,6 +152,8 @@ export function useApiConfig() {
     let base = apiUrl.replace(/\/+$/, ''); 
     if (prefixPath && prefixPath.trim() !== '') {
       base += `/${prefixPath.replace(/^\/+|\/+$/g, '').trim()}`; 
+    } else {
+      base += '/api'; // Default to /api if prefixPath is empty or null
     }
     return base;
   }, [getApiConfigById]);

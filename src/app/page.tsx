@@ -27,8 +27,10 @@ export default function HomePage() {
   } = useApiConfig();
   const { toast } = useToast();
 
+  // State for initial setup dialog if no configs exist - will no longer auto-open
   const [isApiConfigDialogOpenForSetup, setIsApiConfigDialogOpenForSetup] = useState(false);
   const [editingApiConfigForSetup, setEditingApiConfigForSetup] = useState<NamedApiConfig | null>(null);
+  
   const [isCreateInstanceDialogOpen, setIsCreateInstanceDialogOpen] = useState(false);
 
   const [pageLogs, setPageLogs] = useState<AppLogEntry[]>([]);
@@ -38,19 +40,15 @@ export default function HomePage() {
     setPageLogs(prevLogs => [
       { timestamp: new Date().toISOString(), message, type },
       ...prevLogs
-    ].slice(0, 100)); // Keep last 100 logs
+    ].slice(0, 100)); 
   };
 
-  useEffect(() => {
-    if (!isLoadingApiConfig && apiConfigsList.length === 0 && !activeApiConfig) {
-      setEditingApiConfigForSetup(null);
-      setIsApiConfigDialogOpenForSetup(true);
-    }
-  }, [apiConfigsList, isLoadingApiConfig, activeApiConfig]);
+  // Removed useEffect that auto-opened ApiConfigDialog on load if no configs
+  // Users will now be guided by on-page text or header menu
 
   useEffect(() => {
     if (activeApiConfig && prevApiIdRef.current !== activeApiConfig.id) {
-      if (prevApiIdRef.current !== null) { // Avoid logging on initial load
+      if (prevApiIdRef.current !== null) { 
         addPageLog(`活动主控已切换至: "${activeApiConfig.name}"`, 'INFO');
       }
       prevApiIdRef.current = activeApiConfig.id;
@@ -74,7 +72,7 @@ export default function HomePage() {
   };
 
   const handleOpenApiConfigDialogForSetup = () => {
-    setEditingApiConfigForSetup(null);
+    setEditingApiConfigForSetup(null); // Ensure it opens for creating a new one
     setIsApiConfigDialogOpenForSetup(true);
   };
 
@@ -116,34 +114,44 @@ export default function HomePage() {
             />
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-8rem-var(--event-log-card-height,20rem))]"> {/* Adjusted height to account for log card */}
+          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-8rem-var(--event-log-card-height,20rem))]">
             <h2 className="text-2xl font-semibold mb-4 font-title">
               {apiConfigsList.length > 0 ? '未选择主控' : '需要主控连接'}
             </h2>
             <p className="text-muted-foreground mb-6 font-sans">
               {apiConfigsList.length > 0
-                ? '请选择或添加一个主控连接。'
-                : '请先添加主控连接以开始使用。'}
+                ? '请从头部菜单选择或添加一个主控连接。'
+                : '请先通过头部菜单添加主控连接以开始使用。'}
             </p>
             {apiConfigsList.length === 0 && (
               <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
-                添加主控连接
+                添加首个主控连接
               </Button>
             )}
              {apiConfigsList.length > 0 && !activeApiConfig && (
               <p className="text-sm text-muted-foreground mt-4 font-sans">
-                点击右上角设置图标管理主控连接。
+                点击右上角设置图标管理或选择主控连接。
               </p>
             )}
           </div>
         )}
 
-      {/* This card now holds the Application Action Log */}
       <div className="mt-8" style={{ '--event-log-card-height': '20rem' } as React.CSSProperties}>
-        <EventLog logs={pageLogs} />
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="font-title">应用事件日志</CardTitle>
+            <CardDescription className="font-sans mt-1">
+              记录应用内的关键操作和状态变更。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EventLog logs={pageLogs} />
+          </CardContent>
+        </Card>
       </div>
       
 
+      {/* Dialog for adding first config if user clicks the button when list is empty */}
       <ApiConfigDialog
         open={isApiConfigDialogOpenForSetup}
         onOpenChange={setIsApiConfigDialogOpenForSetup}

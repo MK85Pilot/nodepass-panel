@@ -13,12 +13,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+// Checkbox removed as ignoreSslErrors is removed
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
+import { KeyRound, Eye, EyeOff, Info } from 'lucide-react'; // AlertTriangle removed
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
 import type { AppLogEntry } from './EventLog';
-// Removed import for FormDescription as it's no longer used
 
 interface ApiConfigDialogProps {
   open: boolean;
@@ -26,7 +25,7 @@ interface ApiConfigDialogProps {
   onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void; 
   currentConfig?: NamedApiConfig | null;
   isEditing?: boolean;
-  onLog?: (message: string, type: AppLogEntry['type']) => void; // Optional logging
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
 export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isEditing = false, onLog }: ApiConfigDialogProps) {
@@ -37,8 +36,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [showToken, setShowToken] = useState(false);
   const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
   const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
-  const [ignoreSslErrorsInput, setIgnoreSslErrorsInput] = useState(false);
-
+  // ignoreSslErrorsInput state removed
 
   useEffect(() => {
     if (open) {
@@ -48,16 +46,17 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setPrefixPathInput(currentConfig?.prefixPath || '');
       setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
       setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
-      setIgnoreSslErrorsInput(currentConfig?.ignoreSslErrors || false);
+      // setIgnoreSslErrorsInput removed
       setShowToken(false);
     } else {
+      // Reset on close
       setNameInput('');
       setApiUrlInput('http://localhost:3000');
       setTokenInput('');
       setPrefixPathInput('');
       setMasterLogLevelInput('master');
       setMasterTlsModeInput('master');
-      setIgnoreSslErrorsInput(false);
+      // setIgnoreSslErrorsInput removed
       setShowToken(false);
     }
   }, [open, currentConfig]);
@@ -70,10 +69,10 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
-        prefixPath: prefixPathInput.trim() || null,
+        prefixPath: prefixPathInput.trim() || null, // Store null if empty
         masterDefaultLogLevel: masterLogLevelInput,
         masterDefaultTlsMode: masterTlsModeInput,
-        ignoreSslErrors: ignoreSslErrorsInput,
+        // ignoreSslErrors removed from save object
       });
       onOpenChange(false);
     }
@@ -81,7 +80,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
 
   const displayApiUrl = apiUrlInput || "http://[::1]:3000";
   const displayPrefixPath = prefixPathInput ? `/${prefixPathInput.replace(/^\/+|\/+$/g, '')}` : "/api";
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -93,8 +91,8 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               {isEditing ? '编辑主控' : '添加新主控'}
             </DialogTitle>
             <DialogDescription className="font-sans">
-              输入 NodePass 主控名称、URL、令牌和可选API前缀。API 端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
-              <br/>下方可选字段用于记录此主控的默认启动配置，仅作参考。
+              配置新的主控连接。输入名称、API 地址、令牌及可选的 API 前缀路径。信息将保存在浏览器本地。
+              端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
@@ -110,7 +108,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="api-url" className="font-sans">主控地址</Label>
+              <Label htmlFor="api-url" className="font-sans">主控 API 地址</Label>
               <Input
                 id="api-url"
                 value={apiUrlInput}
@@ -150,7 +148,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 id="prefix-path"
                 value={prefixPathInput}
                 onChange={(e) => setPrefixPathInput(e.target.value)}
-                placeholder="例: api (若主控为 http://host/api/v1)"
+                placeholder="例: api (若为 /api/v1/*)"
                 className="font-sans"
               />
                <p className="text-xs text-muted-foreground font-sans">
@@ -159,11 +157,14 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
             </div>
 
             <div className="my-3 border-t border-border"></div>
+            <p className="text-sm text-muted-foreground font-sans pb-2">
+              以下可选字段用于记录此主控的默认启动配置，供创建实例时参考。
+            </p>
 
             <div className="space-y-1">
               <Label htmlFor="master-log-level" className="font-sans flex items-center">
                 <Info size={14} className="mr-1.5 text-muted-foreground" />
-                主控默认日志级别 (可选参考)
+                主控默认日志级别 (参考)
               </Label>
               <Select value={masterLogLevelInput} onValueChange={(value) => setMasterLogLevelInput(value as MasterLogLevel)}>
                 <SelectTrigger className="font-sans text-sm">
@@ -183,7 +184,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
             <div className="space-y-1">
               <Label htmlFor="master-tls-mode" className="font-sans flex items-center">
                  <Info size={14} className="mr-1.5 text-muted-foreground" />
-                主控默认TLS模式 (可选参考)
+                主控默认TLS模式 (参考)
               </Label>
               <Select value={masterTlsModeInput} onValueChange={(value) => setMasterTlsModeInput(value as MasterTlsMode)}>
                 <SelectTrigger className="font-sans text-sm">
@@ -198,25 +199,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               </Select>
             </div>
             
-            <div className="items-top flex space-x-2 pt-2">
-              <Checkbox
-                id="ignore-ssl-errors"
-                checked={ignoreSslErrorsInput}
-                onCheckedChange={(checked) => setIgnoreSslErrorsInput(Boolean(checked))}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="ignore-ssl-errors"
-                  className="font-sans flex items-center cursor-pointer"
-                >
-                   <AlertTriangle size={14} className="mr-1.5 text-amber-500" />
-                  尝试忽略SSL错误 (不推荐)
-                </Label>
-                <p className="text-xs text-muted-foreground font-sans">
-                  此选项不能绕过浏览器安全限制。如果SSL证书无效，连接仍可能失败。仅建议用于受信任的开发服务器及自签名证书场景。
-                </p>
-              </div>
-            </div>
+            {/* Removed ignoreSslErrors checkbox */}
 
           </div>
           <DialogFooter className="font-sans">

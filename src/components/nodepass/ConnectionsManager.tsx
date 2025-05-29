@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
-import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download } from 'lucide-react'; // AlertTriangle removed
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import type { AppLogEntry } from './EventLog';
 
@@ -77,7 +77,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
       description: `已连接到 “${config?.name}”。`,
     });
     onLog?.(`活动主控已切换至: "${config?.name}"`, 'INFO');
-    // router.push('/'); // Navigation handled by header or HomePage now
+    window.location.href = '/'; // Force reload to ensure all components pick up new active config
   };
 
   const handleDeleteConfirm = () => {
@@ -146,7 +146,6 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
             if (existingConfig) {
               skippedCount++;
             } else {
-              // Ensure all fields of NamedApiConfig are present, providing defaults if necessary
               const configToAdd: Omit<NamedApiConfig, 'id'> & { id?: string } = {
                 id: importedConfig.id,
                 name: importedConfig.name,
@@ -155,7 +154,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                 prefixPath: importedConfig.prefixPath === undefined ? null : importedConfig.prefixPath,
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
-                ignoreSslErrors: importedConfig.ignoreSslErrors || false,
+                // ignoreSslErrors removed
               };
               addOrUpdateApiConfig(configToAdd);
               importedCount++;
@@ -195,7 +194,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
     }
     reader.readAsText(file);
     if (event.target) {
-      event.target.value = ''; // Reset file input
+      event.target.value = ''; 
     }
   };
 
@@ -237,7 +236,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
       {apiConfigsList.length === 0 ? (
         <Card className="text-center py-10 shadow-lg card-hover-shadow">
           <CardHeader>
-            <CardTitle className="font-title">无已存主控</CardTitle>
+            <CardTitle className="font-title">无主控连接</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground font-sans">未添加任何主控连接。</p>
@@ -251,9 +250,9 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
               <TableRow>
                 <TableHead className="w-[60px] text-center font-sans">状态</TableHead>
                 <TableHead className="font-sans">主控名称</TableHead>
-                <TableHead className="font-sans">主控接口地址</TableHead>
-                <TableHead className="font-sans">API前缀</TableHead>
-                <TableHead className="font-sans text-center">忽略SSL</TableHead>
+                <TableHead className="font-sans">主控 API 地址</TableHead>
+                <TableHead className="font-sans">API 前缀</TableHead>
+                {/* Removed "忽略SSL" column */}
                 <TableHead className="text-right w-[250px] font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -267,14 +266,8 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                   </TableCell>
                   <TableCell className="font-medium break-all font-sans">{config.name}</TableCell>
                   <TableCell className="text-xs break-all font-mono">{config.apiUrl}</TableCell>
-                  <TableCell className="text-xs break-all font-mono">{config.prefixPath || '无'}</TableCell>
-                  <TableCell className="text-center">
-                    {config.ignoreSslErrors ? (
-                      <AlertTriangle className="h-4 w-4 text-amber-500 inline-block" title="是"/>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">否</span>
-                    )}
-                  </TableCell>
+                  <TableCell className="text-xs break-all font-mono">{config.prefixPath || '无 (默认/api)'}</TableCell>
+                  {/* Removed TableCell for ignoreSslErrors */}
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-2">
                       <Button
