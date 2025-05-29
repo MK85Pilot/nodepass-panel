@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 interface HeaderProps {
   onManageApiConfigs: (configToEdit?: NamedApiConfig | null) => void;
@@ -31,12 +32,13 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
   const { setTheme, theme } = useTheme();
   const { apiConfigsList, activeApiConfig, setActiveApiConfigId, deleteApiConfig } = useApiConfig();
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleSwitchApiConfig = (id: string) => {
     const newActiveConf = apiConfigsList.find(c => c.id === id);
     setActiveApiConfigId(id);
      toast({
-      title: '活动连接已切换',
+      title: '活动主控已切换',
       description: `已连接到 “${newActiveConf?.name}”。`,
     });
     window.location.href = '/';
@@ -46,14 +48,14 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
     if (activeApiConfig?.id === configId) {
       toast({
         title: '操作失败',
-        description: '不能删除当前活动的 API 连接。请先切换到其他连接。',
+        description: '不能删除当前活动的主控。请先切换到其他主控。',
         variant: 'destructive',
       });
       return;
     }
     deleteApiConfig(configId);
     toast({
-      title: '连接已删除',
+      title: '主控已删除',
       description: `“${configName}”已被删除。`,
       variant: 'destructive',
     });
@@ -94,16 +96,16 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>API 连接</DropdownMenuLabel>
+              <DropdownMenuLabel>主控连接</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => onManageApiConfigs(null)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
-                <span>添加新连接</span>
+                <span>添加新主控</span>
               </DropdownMenuItem>
 
               <Link href="/connections" passHref legacyBehavior>
                 <DropdownMenuItem>
                   <ListTree className="mr-2 h-4 w-4" />
-                  <span>管理所有连接</span>
+                  <span>管理所有主控</span>
                 </DropdownMenuItem>
               </Link>
 
@@ -111,7 +113,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                      <Check className="mr-2 h-4 w-4 text-primary" />
-                    <span>切换活动连接</span>
+                    <span>切换活动主控</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
@@ -150,7 +152,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onClearActiveConfig} className="text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10">
                       <LogOut className="mr-2 h-4 w-4" />
-                      <span>断开当前连接</span>
+                      <span>断开当前主控</span>
                   </DropdownMenuItem>
                  </>
               )}

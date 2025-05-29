@@ -57,7 +57,7 @@ export default function ConnectionsPage() {
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
     toast({
-      title: configToSave.id ? '连接已更新' : '连接已添加',
+      title: configToSave.id ? '主控已更新' : '主控已添加',
       description: `“${savedConfig.name}”已保存。`,
     });
   };
@@ -66,7 +66,7 @@ export default function ConnectionsPage() {
     const config = apiConfigsList.find(c => c.id === id);
     setActiveApiConfigId(id);
     toast({
-      title: '活动连接已切换',
+      title: '活动主控已切换',
       description: `已连接到 “${config?.name}”。`,
     });
     router.push('/');
@@ -76,7 +76,7 @@ export default function ConnectionsPage() {
     if (deletingConfig) {
       deleteApiConfig(deletingConfig.id);
       toast({
-        title: '连接已删除',
+        title: '主控已删除',
         description: `“${deletingConfig.name}”已被删除。`,
         variant: 'destructive',
       });
@@ -88,7 +88,7 @@ export default function ConnectionsPage() {
     if (apiConfigsList.length === 0) {
       toast({
         title: '无配置可导出',
-        description: '请先添加 API 连接。',
+        description: '请先添加主控连接。',
         variant: 'destructive',
       });
       return;
@@ -102,7 +102,7 @@ export default function ConnectionsPage() {
     link.click();
     toast({
       title: '配置已导出',
-      description: 'API 连接配置已成功下载。',
+      description: '主控连接配置已成功下载。',
     });
   };
 
@@ -185,7 +185,7 @@ export default function ConnectionsPage() {
       <AppLayout>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg">加载API连接...</p>
+          <p className="ml-4 text-lg">加载主控连接...</p>
         </div>
       </AppLayout>
     );
@@ -194,7 +194,7 @@ export default function ConnectionsPage() {
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <h1 className="text-2xl font-bold">API 连接管理</h1>
+        <h1 className="text-2xl font-bold font-title">主控连接管理</h1>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="lg">
             <Upload className="mr-2 h-5 w-5" />
@@ -213,7 +213,7 @@ export default function ConnectionsPage() {
           </Button>
           <Button onClick={() => handleOpenApiConfigDialog(null)} size="lg">
             <PlusCircle className="mr-2 h-5 w-5" />
-            添加新连接
+            添加新主控
           </Button>
         </div>
       </div>
@@ -221,11 +221,11 @@ export default function ConnectionsPage() {
       {apiConfigsList.length === 0 ? (
         <Card className="text-center py-10 shadow-lg card-hover-shadow">
           <CardHeader>
-            <CardTitle>无已存连接</CardTitle>
+            <CardTitle className="font-title">无已存主控</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">未添加任何API连接。</p>
-            <p className="text-muted-foreground">点击“添加新连接”或“导入配置”开始。</p>
+            <p className="text-muted-foreground">未添加任何主控连接。</p>
+            <p className="text-muted-foreground">点击“添加新主控”或“导入配置”开始。</p>
           </CardContent>
         </Card>
       ) : (
@@ -234,8 +234,8 @@ export default function ConnectionsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[80px] text-center">状态</TableHead>
-                <TableHead>连接名称</TableHead>
-                <TableHead>API 接口地址</TableHead>
+                <TableHead>主控名称</TableHead>
+                <TableHead>主控接口地址</TableHead>
                 <TableHead className="w-[150px]">前缀路径</TableHead>
                 <TableHead className="text-right w-[280px]">操作</TableHead>
               </TableRow>
@@ -249,15 +249,15 @@ export default function ConnectionsPage() {
                     )}
                   </TableCell>
                   <TableCell className="font-medium break-all">{config.name}</TableCell>
-                  <TableCell className="text-xs break-all">{config.apiUrl}</TableCell>
-                  <TableCell className="text-xs break-all">{config.prefixPath || '无'}</TableCell>
+                  <TableCell className="text-xs break-all font-mono">{config.apiUrl}</TableCell>
+                  <TableCell className="text-xs break-all font-mono">{config.prefixPath || '无'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleOpenApiConfigDialog(config)}
-                        aria-label={`编辑连接 ${config.name}`}
+                        aria-label={`编辑主控 ${config.name}`}
                       >
                         <Edit3 className="mr-1 h-4 w-4" />
                         编辑
@@ -268,7 +268,7 @@ export default function ConnectionsPage() {
                             variant="destructive"
                             size="sm"
                             onClick={() => setDeletingConfig(config)}
-                            aria-label={`删除连接 ${config.name}`}
+                            aria-label={`删除主控 ${config.name}`}
                             disabled={activeApiConfig?.id === config.id}
                           >
                             <Trash2 className="mr-1 h-4 w-4" />
@@ -278,9 +278,9 @@ export default function ConnectionsPage() {
                         {deletingConfig && deletingConfig.id === config.id && (
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogTitle className="font-title">确认删除</AlertDialogTitle>
                               <AlertDialogDescription>
-                                确定删除连接 “{deletingConfig.name}”？此操作无法撤销。
+                                确定删除主控 “{deletingConfig.name}”？此操作无法撤销。
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -300,7 +300,7 @@ export default function ConnectionsPage() {
                         size="sm"
                         onClick={() => handleSetActive(config.id)}
                         disabled={activeApiConfig?.id === config.id}
-                        aria-label={`激活连接 ${config.name}`}
+                        aria-label={`激活主控 ${config.name}`}
                       >
                         <Power className="mr-1 h-4 w-4" />
                         {activeApiConfig?.id === config.id ? '当前活动' : '设为活动'}

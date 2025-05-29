@@ -1,19 +1,28 @@
 
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Montserrat, Roboto, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Toaster } from '@/components/ui/toaster';
 import QueryProvider from '@/components/layout/QueryProvider';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const montserrat = Montserrat({
   subsets: ['latin'],
+  variable: '--font-title',
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const roboto = Roboto({
   subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -28,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}>
+      <body className={`${montserrat.variable} ${roboto.variable} ${jetbrainsMono.variable} antialiased font-sans`}>
         <QueryProvider>
           <ThemeProvider
             attribute="class"

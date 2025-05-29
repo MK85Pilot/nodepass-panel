@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, Server, Smartphone, Fingerprint, Cable } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable } from 'lucide-react';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -38,28 +38,28 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
     { 
       label: "类型", 
       value: (
-        <Badge variant={instance.type === 'server' ? 'default' : 'accent'} className="capitalize whitespace-nowrap">
-          {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
-          {instance.type === 'server' ? '服务器' : '客户端'}
+        <Badge variant={instance.type === 'server' ? 'default' : 'accent'} className="capitalize whitespace-nowrap text-xs">
+          {instance.type === 'server' ? <ServerIcon className="h-3 w-3 mr-1" /> : <SmartphoneIcon className="h-3 w-3 mr-1" />}
+          {instance.type === 'server' ? '服务端' : '客户端'}
         </Badge>
       ), 
-      icon: instance.type === 'server' ? <Server className="h-4 w-4 text-muted-foreground" /> : <Smartphone className="h-4 w-4 text-muted-foreground" /> 
+      icon: instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" /> 
     },
     { label: "状态", value: <InstanceStatusBadge status={instance.status} />, icon: <Cable className="h-4 w-4 text-muted-foreground" /> },
-    { label: "URL", value: <span className="break-all text-sm">{instance.url}</span>, fullWidth: true },
-    { label: "TCP 接收", value: formatBytes(instance.tcprx), icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
-    { label: "TCP 发送", value: formatBytes(instance.tcptx), icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
-    { label: "UDP 接收", value: formatBytes(instance.udprx), icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
-    { label: "UDP 发送", value: formatBytes(instance.udptx), icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
+    { label: "URL", value: <span className="break-all text-xs font-mono">{instance.url}</span>, fullWidth: true },
+    { label: "TCP 接收", value: <span className="font-mono text-xs">{formatBytes(instance.tcprx)}</span>, icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
+    { label: "TCP 发送", value: <span className="font-mono text-xs">{formatBytes(instance.tcptx)}</span>, icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
+    { label: "UDP 接收", value: <span className="font-mono text-xs">{formatBytes(instance.udprx)}</span>, icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
+    { label: "UDP 发送", value: <span className="font-mono text-xs">{formatBytes(instance.udptx)}</span>, icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
   ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">实例详情</DialogTitle>
+          <DialogTitle className="text-xl font-title">实例详情</DialogTitle>
           <DialogDescription>
-            实例 <span className="font-semibold">{instance.id}</span> 详情。
+            实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 详情。
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 space-y-4">

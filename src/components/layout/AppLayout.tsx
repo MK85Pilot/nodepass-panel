@@ -29,7 +29,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
     toast({
-      title: configToSave.id ? '连接已更新' : '连接已添加',
+      title: configToSave.id ? '主控已更新' : '主控已添加',
       description: `“${savedConfig.name}”已保存并激活。`,
     });
   };
@@ -43,7 +43,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     clearActiveApiConfig();
     toast({
       title: '已断开连接',
-      description: 'API 连接已断开。',
+      description: '主控连接已断开。',
     });
   };
 

@@ -101,7 +101,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const { data: serverInstances, isLoading: isLoadingServerInstances } = useQuery<Instance[], Error, {id: string, display: string, tunnelAddr: string}[]>({
     queryKey: ['instances', apiId, 'serversForTunnelSelection'],
     queryFn: async () => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("API configuration is incomplete for fetching server instances.");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取服务端实例。");
       const instances = await nodePassApi.getInstances(apiRoot, apiToken);
       return instances.filter(inst => inst.type === 'server');
     },
@@ -122,7 +122,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const createInstanceMutation = useMutation({
     mutationFn: (data: CreateInstanceRequest) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("没有活动的或有效的 API 配置用于创建实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("没有活动的或有效的主控配置用于创建实例。");
       const validatedApiData = createInstanceApiSchema.parse(data);
       return nodePassApi.createInstance(validatedApiData, apiRoot, apiToken);
     },
@@ -166,12 +166,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center text-xl">
+          <DialogTitle className="flex items-center text-xl font-title">
             <PlusCircle className="mr-2 h-6 w-6 text-primary" />
             创建新实例
           </DialogTitle>
           <DialogDescription>
-            提供实例详情进行配置 (API: {apiName || 'N/A'})。
+            提供实例详情进行配置 (主控: {apiName || 'N/A'})。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -198,7 +198,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="server">服务器</SelectItem>
+                      <SelectItem value="server">服务端</SelectItem>
                       <SelectItem value="client">客户端</SelectItem>
                     </SelectContent>
                   </Select>
@@ -215,14 +215,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>隧道地址</FormLabel>
                   <FormControl>
                     <Input 
-                      placeholder={instanceType === "server" ? "服务器监听控制通道地址, 例: 0.0.0.0:10101" : "连接的 NodePass 服务器隧道地址, 例: your.server.com:10101"} 
+                      placeholder={instanceType === "server" ? "服务端监听控制通道地址, 例: 0.0.0.0:10101" : "连接的 NodePass 服务端隧道地址, 例: your.server.com:10101"} 
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
                     {instanceType === "server"
-                      ? "服务器模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
-                      : "客户端模式: NodePass 服务器隧道地址 (例 'server.example.com:10101')。"}
+                      ? "服务端模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
+                      : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -231,7 +231,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             {instanceType === 'client' && (
               <FormItem>
-                <FormLabel>或从现有服务器选择</FormLabel>
+                <FormLabel>或从现有服务端选择</FormLabel>
                 <Select 
                   onValueChange={(value) => {
                     if (value) {
@@ -243,8 +243,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder={
-                        isLoadingServerInstances ? "加载服务器中..." : 
-                        (!serverInstances || serverInstances.length === 0) ? "无可用服务器" : "选择服务器隧道"
+                        isLoadingServerInstances ? "加载服务端中..." : 
+                        (!serverInstances || serverInstances.length === 0) ? "无可用服务端" : "选择服务端隧道"
                       } />
                     </SelectTrigger>
                   </FormControl>
@@ -262,7 +262,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </SelectContent>
                 </Select>
                 {serverInstances && serverInstances.length === 0 && !isLoadingServerInstances && (
-                    <FormDescription>当前 API 无可用服务器实例。</FormDescription>
+                    <FormDescription>当前主控无可用服务端实例。</FormDescription>
                 )}
               </FormItem>
             )}
@@ -276,13 +276,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   <FormLabel>目标地址</FormLabel>
                   <FormControl>
                     <Input 
-                      placeholder={instanceType === "server" ? "服务器监听流量转发地址, 例: 0.0.0.0:8080" : "本地流量转发地址, 例: 127.0.0.1:8000"} 
+                      placeholder={instanceType === "server" ? "服务端监听流量转发地址, 例: 0.0.0.0:8080" : "本地流量转发地址, 例: 127.0.0.1:8000"} 
                       {...field} 
                     />
                   </FormControl>
                    <FormDescription>
                     {instanceType === "server"
-                      ? "服务器模式: 监听隧道流量的地址 (例 '0.0.0.0:8080')。"
+                      ? "服务端模式: 监听隧道流量的地址 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 接收流量的本地转发地址 (例 '127.0.0.1:8000')。"}
                   </FormDescription>
                   <FormMessage />
@@ -322,7 +322,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>TLS 模式 (服务器)</FormLabel>
+                      <FormLabel>TLS 模式 (服务端)</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>

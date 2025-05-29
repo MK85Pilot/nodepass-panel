@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, Server, Smartphone, Search, Pencil } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -42,7 +42,6 @@ interface InstanceListProps {
 }
 
 export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceListProps) {
-  // console.log(`InstanceList rendering with API ID: ${apiId}, API Name: ${apiName}`); // Diagnostic log
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -54,7 +53,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
     queryKey: ['instances', apiId],
     queryFn: () => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("API 配置不完整，无法获取实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取实例。");
       return nodePassApi.getInstances(apiRoot, apiToken);
     },
     enabled: !!apiId && !!apiRoot && !!apiToken,
@@ -64,7 +63,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
 
   const updateInstanceMutation = useMutation({
     mutationFn: ({ instanceId, action }: { instanceId: string, action: UpdateInstanceRequest['action']}) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("API 配置不完整，无法更新实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法更新实例。");
       return nodePassApi.updateInstance(instanceId, { action }, apiRoot, apiToken);
     },
     onSuccess: (data) => {
@@ -85,7 +84,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
 
   const deleteInstanceMutation = useMutation({
     mutationFn: (instanceId: string) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("API 配置不完整，无法删除实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法删除实例。");
       return nodePassApi.deleteInstance(instanceId, apiRoot, apiToken);
     },
     onSuccess: (_, instanceId) => {
@@ -133,7 +132,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
     <Card className="shadow-lg mt-6">
       <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <div>
-          <CardTitle className="text-xl">实例概览 (API: {apiName || 'N/A'})</CardTitle>
+          <CardTitle className="font-title">实例概览 (主控: {apiName || 'N/A'})</CardTitle>
           <CardDescription>管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="relative mt-4 sm:mt-0 w-full sm:w-64">
@@ -150,7 +149,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
       <CardContent>
         {!apiId && (
           <div className="text-center py-10 text-muted-foreground">
-            请先选择活动 API 连接。
+            请先选择活动主控连接。
           </div>
         )}
         {apiId && instancesError && (
@@ -177,25 +176,25 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
               {isLoadingInstances ? renderSkeletons() :
                 filteredInstances && filteredInstances.length > 0 ? (
                 filteredInstances.map((instance) => (
-                  <TableRow key={instance.id}>
-                    <TableCell className="font-medium truncate max-w-xs">{instance.id}</TableCell>
+                  <TableRow key={instance.id} className="text-foreground/90 hover:text-foreground">
+                    <TableCell className="font-medium truncate max-w-xs font-mono text-xs">{instance.id}</TableCell>
                     <TableCell>
                       <Badge
                         variant={instance.type === 'server' ? 'default' : 'accent'}
-                        className="items-center whitespace-nowrap text-xs"
+                        className="items-center whitespace-nowrap text-xs font-sans"
                       >
-                        {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
-                        {instance.type === 'server' ? '服务器' : '客户端'}
+                        {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                        {instance.type === 'server' ? '服务端' : '客户端'}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <InstanceStatusBadge status={instance.status} />
                     </TableCell>
                     <TableCell className="truncate max-w-sm text-xs font-mono">{instance.url}</TableCell>
-                    <TableCell className="text-center text-xs whitespace-nowrap">
+                    <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
                     </TableCell>
-                    <TableCell className="text-center text-xs whitespace-nowrap">
+                    <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.udprx)} / {formatBytes(instance.udptx)}
                     </TableCell>
                     <TableCell className="text-right">
@@ -224,11 +223,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                     {isLoadingInstances
                       ? "加载中..."
                       : !apiId
-                        ? "请选择或添加一个API连接。"
+                        ? "请选择或添加一个主控连接。"
                         : searchTerm && (!filteredInstances || filteredInstances.length === 0)
                           ? "无匹配搜索结果的实例。"
                           : instances && instances.length === 0
-                            ? "当前API连接下无实例。"
+                            ? "当前主控连接下无实例。"
                             : "加载中或无实例。"
                     }
                   </TableCell>

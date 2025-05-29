@@ -43,7 +43,7 @@ export default function HomePage() {
     setEditingApiConfigForSetup(null);
     setIsApiConfigDialogOpenForSetup(false);
     toast({
-      title: configToSave.id ? '连接已更新' : '连接已添加',
+      title: configToSave.id ? '主控已更新' : '主控已添加',
       description: `“${savedConfig.name}”已保存并激活。`,
     });
   };
@@ -60,9 +60,9 @@ export default function HomePage() {
   if (isLoadingApiConfig) {
     return (
       <AppLayout>
-        <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-10rem-4rem)]">
+        <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg">加载 API 配置...</p>
+          <p className="ml-4 text-lg">加载主控配置...</p>
         </div>
       </AppLayout>
     );
@@ -79,7 +79,7 @@ export default function HomePage() {
               </Button>
             </div>
             <InstanceList
-              key={activeApiConfig.id}
+              key={activeApiConfig.id} 
               apiId={activeApiConfig.id}
               apiName={activeApiConfig.name}
               apiRoot={currentApiRoot}
@@ -93,23 +93,23 @@ export default function HomePage() {
             />
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-10rem-4rem)]"> {/* Adjusted height for centering */}
+          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]"> {/* Adjusted height for centering */}
             <h2 className="text-2xl font-semibold mb-4">
-              {apiConfigsList.length > 0 ? '未选择 API 连接' : '需要 API 连接'}
+              {apiConfigsList.length > 0 ? '未选择主控连接' : '需要主控连接'}
             </h2>
             <p className="text-muted-foreground mb-6">
               {apiConfigsList.length > 0
-                ? '请选择或添加 API 连接。'
-                : '请先添加 API 连接。'}
+                ? '请选择或添加主控连接。'
+                : '请先添加主控连接。'}
             </p>
             {apiConfigsList.length === 0 && (
               <Button onClick={handleOpenApiConfigDialogForSetup} size="lg">
-                添加 API 连接
+                添加主控连接
               </Button>
             )}
              {apiConfigsList.length > 0 && !activeApiConfig && (
               <p className="text-sm text-muted-foreground mt-4">
-                点击右上角设置图标管理 API 连接。
+                点击右上角设置图标管理主控连接。
               </p>
             )}
           </div>

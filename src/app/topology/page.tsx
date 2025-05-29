@@ -238,15 +238,16 @@ const TopologyPage: NextPage = () => {
           const apiRootVal = getApiRootUrl(config.id);
           const tokenVal = getToken(config.id);
           if (!apiRootVal || !tokenVal) {
-            console.warn(`TopologyPage: API config "${config.name}" (ID: ${config.id}) is invalid. Skipping.`);
+            console.warn(`TopologyPage: 主控配置 "${config.name}" (ID: ${config.id}) 无效。跳过。`);
             return [];
           }
           try {
+            // console.log(`TopologyPage: Fetching instances for API: ${config.name} (ID: ${config.id}) from ${apiRootVal}`);
             const data = await nodePassApi.getInstances(apiRootVal, tokenVal);
             return data.map(inst => ({ ...inst, apiId: config.id, apiName: config.name }));
           } catch (error) {
-            console.error(`TopologyPage: Failed to load instances from API "${config.name}" (ID: ${config.id}). Error:`, error instanceof Error ? error.message : String(error));
-            return Promise.reject(new Error(`Failed to fetch from ${config.name}: ${error instanceof Error ? error.message : String(error)}`));
+            console.error(`TopologyPage: 从主控 "${config.name}" (ID: ${config.id}) 加载实例失败。错误:`, error instanceof Error ? error.message : String(error));
+            return Promise.reject(new Error(`从 ${config.name} 获取失败: ${error instanceof Error ? error.message : String(error)}`));
           }
         })
       );
@@ -447,7 +448,7 @@ const TopologyPage: NextPage = () => {
     const isServer = node.type === 'server';
     const Icon = isServer ? ServerIcon : SmartphoneIcon;
     const bgColor = isServer ? 'bg-primary/10 border-primary/30' : 'bg-accent/10 border-accent/30';
-    const title = isServer ? '服务器实例' : '客户端实例';
+    const title = isServer ? '服务端实例' : '客户端实例';
     const nodeHeight = isServer ? NODE_HEIGHT_SERVER : NODE_HEIGHT_CLIENT;
 
     return (
@@ -480,13 +481,13 @@ const TopologyPage: NextPage = () => {
             <div className="flex items-center gap-2 mb-1 flex-shrink-0 cursor-pointer">
               <Move className="h-4 w-4 text-muted-foreground hover:text-primary cursor-grab flex-shrink-0" />
               <Icon className={`h-5 w-5 ${isServer ? 'text-primary' : 'text-accent'} flex-shrink-0`} />
-              <h3 className="font-semibold text-sm truncate" title={node.apiName}>
+              <h3 className="font-semibold text-sm truncate font-title" title={node.apiName}>
                 {node.apiName}
               </h3>
             </div>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs break-all text-xs">
-            <p>来源 API: {node.apiName} (ID: {node.apiId})</p>
+            <p>来源主控: {node.apiName} (ID: {node.apiId})</p>
             <p>{title} ID: {node.id}</p>
             <p>URL: {node.url}</p>
           </TooltipContent>
@@ -494,15 +495,15 @@ const TopologyPage: NextPage = () => {
         <div className="text-xs space-y-0.5 text-muted-foreground overflow-y-auto flex-grow">
           <div className="flex items-center">
             <InstanceStatusBadge status={node.status} />
-            <span className="ml-1.5 text-xs">(ID: {node.id.substring(0, 8)}...)</span>
+            <span className="ml-1.5 text-xs font-mono">(ID: {node.id.substring(0, 8)}...)</span>
           </div>
           {isServer && (node as ServerNode).serverListeningAddress && (
-            <p className="truncate" title={(node as ServerNode).serverListeningAddress!}>监听: <span className="font-mono">{(node as ServerNode).serverListeningAddress}</span></p>
+            <p className="truncate font-mono" title={(node as ServerNode).serverListeningAddress!}>监听: {(node as ServerNode).serverListeningAddress}</p>
           )}
           {!isServer && (node as ClientNode).localTargetAddress && (
-             <p className="truncate text-green-600 dark:text-green-400" title={(node as ClientNode).localTargetAddress!}>
+             <p className="truncate text-green-600 dark:text-green-400 font-mono" title={(node as ClientNode).localTargetAddress!}>
               <Link2 className="inline-block h-3 w-3 mr-1"/>
-              落地: <span className="font-mono">{(node as ClientNode).localTargetAddress}</span>
+              落地: {(node as ClientNode).localTargetAddress}
             </p>
           )}
         </div>
@@ -512,15 +513,15 @@ const TopologyPage: NextPage = () => {
 
 
   if (isLoadingApiConfigGlobal) {
-    return <AppLayout><div className="text-center py-10 flex flex-col items-center justify-center h-[calc(100vh-10rem-4rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="mt-3">加载API配置...</p></div></AppLayout>;
+    return <AppLayout><div className="text-center py-10 flex flex-col items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="mt-3">加载主控配置...</p></div></AppLayout>;
   }
 
   if (fetchErrorGlobal && !isLoadingData) {
      return (
       <AppLayout>
         <Card className="max-w-md mx-auto mt-10 shadow-lg">
-          <CardHeader><CardTitle className="text-destructive flex items-center justify-center"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
-          <CardContent><p>加载拓扑数据失败: {fetchErrorGlobal.message}</p><Button onClick={() => router.push('/connections')} className="mt-6">管理API连接</Button></CardContent>
+          <CardHeader><CardTitle className="text-destructive flex items-center justify-center font-title"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
+          <CardContent><p>加载拓扑数据失败: {fetchErrorGlobal.message}</p><Button onClick={() => router.push('/connections')} className="mt-6">管理主控连接</Button></CardContent>
         </Card>
       </AppLayout>
     );
@@ -529,7 +530,7 @@ const TopologyPage: NextPage = () => {
   if (isLoadingData && !isLoadingApiConfigGlobal) {
     return (
       <AppLayout>
-        <div className="flex-grow flex justify-center items-center py-10 h-[calc(100vh-10rem-4rem)]">
+        <div className="flex-grow flex justify-center items-center py-10 h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-16 w-16 animate-spin text-primary" />
           <p className="ml-4 text-xl">加载拓扑数据...</p>
         </div>
@@ -543,12 +544,12 @@ const TopologyPage: NextPage = () => {
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold">实例连接拓扑</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑</h1>
             <div className='flex items-center gap-2'>
               {viewMode === 'graph' && (
                 <Button variant="outline" onClick={handleBackToTable} size="sm">
                   <List className="mr-2 h-4 w-4" />
-                  返回服务器列表
+                  返回服务端列表
                 </Button>
               )}
               {lastRefreshed && <span className="text-xs text-muted-foreground">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
@@ -561,8 +562,8 @@ const TopologyPage: NextPage = () => {
 
           {!isLoadingData && allServerInstances.length === 0 && viewMode === 'table' && (
              <Card className="text-center py-10 shadow-lg flex-grow flex flex-col justify-center items-center bg-card">
-              <CardHeader><CardTitle>无数据显示</CardTitle></CardHeader>
-              <CardContent><p className="text-muted-foreground">{apiConfigsList.length > 0 ? "未找到任何服务器实例。" : "请先配置API连接。"}</p></CardContent>
+              <CardHeader><CardTitle className="font-title">无数据显示</CardTitle></CardHeader>
+              <CardContent><p className="text-muted-foreground">{apiConfigsList.length > 0 ? "未找到任何服务端实例。" : "请先配置主控连接。"}</p></CardContent>
             </Card>
           )}
 
@@ -571,8 +572,8 @@ const TopologyPage: NextPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>API名称</TableHead>
-                    <TableHead>服务器ID</TableHead>
+                    <TableHead>主控名称</TableHead>
+                    <TableHead>服务端ID</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead>URL</TableHead>
                     <TableHead>监听地址</TableHead>
@@ -633,7 +634,7 @@ const TopologyPage: NextPage = () => {
 
               {clientsForSelectedServer.length === 0 && (
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-muted-foreground p-4 bg-background/80 rounded-md shadow">
-                    此服务器实例当前没有连接的客户端。
+                    此服务端实例当前没有连接的客户端。
                 </div>
               )}
             </div>
@@ -653,12 +654,12 @@ const TopologyPage: NextPage = () => {
           <div className="mt-8 p-4 bg-muted/30 rounded-lg text-xs text-muted-foreground shadow-sm">
             <div className="flex items-center font-semibold mb-2"><Network className="h-4 w-4 mr-2 text-primary shrink-0" />拓扑说明</div>
             <ul className="list-disc list-inside space-y-1.5 pl-1">
-              <li>默认显示所有API源的服务器实例列表。点击 "查看拓扑" 可切换到图形视图，显示选定服务器及其连接的客户端。</li>
-              <li>在图形视图中，服务器和客户端节点均可拖动以调整布局。连接线将从服务器右侧弯曲指向客户端左侧。</li>
-              <li>连接关系基于客户端的 <code className="bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其连接的服务器地址)与服务器的 <code className="bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其监听地址)匹配。</li>
-              <li>客户端“落地”地址指其本地转发目标 <code className="bg-muted px-1 py-0.5 rounded text-foreground">&lt;target_addr&gt;</code>。</li>
-               <li><span className="inline-block w-3 h-3 rounded-sm bg-primary mr-1.5 align-middle"></span><code className="text-foreground">主色调线</code>: 服务器和客户端属于同一API配置。</li>
-              <li><span className="inline-block w-3 h-3 rounded-sm bg-accent mr-1.5 align-middle"></span><code className="text-foreground">强调色线</code>: 服务器和客户端属于不同API配置。</li>
+              <li>默认显示所有主控源的服务端实例列表。点击 "查看拓扑" 可切换到图形视图，显示选定服务端及其连接的客户端。</li>
+              <li>在图形视图中，服务端和客户端节点均可拖动以调整布局。连接线将从服务端右侧弯曲指向客户端左侧。</li>
+              <li>连接关系基于客户端的 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其连接的服务端地址)与服务端的 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其监听地址)匹配。</li>
+              <li>客户端“落地”地址指其本地转发目标 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;target_addr&gt;</code>。</li>
+               <li><span className="inline-block w-3 h-3 rounded-sm bg-primary mr-1.5 align-middle"></span><code className="text-foreground">主色调线</code>: 服务端和客户端属于同一主控配置。</li>
+              <li><span className="inline-block w-3 h-3 rounded-sm bg-accent mr-1.5 align-middle"></span><code className="text-foreground">强调色线</code>: 服务端和客户端属于不同主控配置。</li>
               <li>点击图形视图中的节点卡片可查看其详细信息。</li>
             </ul>
           </div>
@@ -669,5 +670,3 @@ const TopologyPage: NextPage = () => {
 };
 
 export default TopologyPage;
-
-    

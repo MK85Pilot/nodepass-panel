@@ -64,27 +64,27 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle className="flex items-center">
+            <DialogTitle className="flex items-center font-title">
               <KeyRound className="mr-2 h-5 w-5 text-primary" />
-              {isEditing ? '编辑 API 连接' : '添加 API 连接'}
+              {isEditing ? '编辑主控连接' : '添加主控连接'}
             </DialogTitle>
             <DialogDescription>
-              输入 NodePass API 名称、URL、令牌和可选前缀路径。API 端点固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
+              输入 NodePass 主控名称、URL、令牌和可选前缀路径。主控接口版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-1">
-              <Label htmlFor="config-name">连接名称</Label>
+              <Label htmlFor="config-name">主控名称</Label>
               <Input
                 id="config-name"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
-                placeholder="例: 本地服务器"
+                placeholder="例: 本地主控"
                 required
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="api-url">API 地址</Label>
+              <Label htmlFor="api-url">主控地址</Label>
               <Input
                 id="api-url"
                 value={apiUrlInput}
@@ -123,7 +123,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 id="prefix-path"
                 value={prefixPathInput}
                 onChange={(e) => setPrefixPathInput(e.target.value)}
-                placeholder="例: api (若 API 为 http://host/api/v1)"
+                placeholder="例: api (若主控为 http://host/api/v1)"
               />
             </div>
           </div>

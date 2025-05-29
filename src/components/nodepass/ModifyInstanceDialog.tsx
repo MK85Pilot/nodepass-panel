@@ -63,7 +63,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
     if (schemeMatch && (schemeMatch[1] === 'server' || schemeMatch[1] === 'client')) {
       result.instanceType = schemeMatch[1] as 'server' | 'client';
     } else {
-      console.warn("Could not parse instanceType from URL:", url);
+      console.warn("无法从 URL 解析实例类型:", url);
       return result;
     }
 
@@ -111,7 +111,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       }
     }
   } catch (e) {
-    console.error("Error parsing NodePass URL:", url, e);
+    console.error("解析 NodePass URL 错误:", url, e);
   }
   return result;
 }
@@ -166,7 +166,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
 
   const modifyInstanceMutation = useMutation({
     mutationFn: (data: { instanceId: string; config: ModifyInstanceConfigRequest }) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("API配置不完整。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
       if (!data.instanceId) throw new Error("实例ID未提供。");
       
       const validatedApiData = modifyInstanceConfigApiSchema.parse(data.config);
@@ -202,12 +202,12 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center text-xl">
+          <DialogTitle className="flex items-center text-xl font-title">
             <Pencil className="mr-2 h-6 w-6 text-primary" />
             修改实例配置
           </DialogTitle>
           <DialogDescription>
-            编辑实例 <span className="font-semibold">{instance.id.substring(0,12)}...</span> 的配置 (API: {apiName || 'N/A'})。
+            编辑实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 的配置 (主控: {apiName || 'N/A'})。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -229,7 +229,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="server">服务器</SelectItem>
+                      <SelectItem value="server">服务端</SelectItem>
                       <SelectItem value="client">客户端</SelectItem>
                     </SelectContent>
                   </Select>
@@ -247,15 +247,15 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   <FormLabel>隧道地址</FormLabel>
                   <FormControl>
                     <Input
-                      className="text-sm"
-                      placeholder={instanceType === "server" ? "服务器监听控制通道地址" : "连接的NodePass服务器隧道地址"}
+                      className="text-sm font-mono"
+                      placeholder={instanceType === "server" ? "服务端监听控制通道地址" : "连接的 NodePass 服务端隧道地址"}
                       {...field}
                     />
                   </FormControl>
                    <FormDescription>
                     {instanceType === "server"
-                      ? "服务器模式: 监听控制连接 (例 '0.0.0.0:10101')。"
-                      : "客户端模式: NodePass服务器隧道地址 (例 'server.example.com:10101')。"}
+                      ? "服务端模式: 监听控制连接 (例 '0.0.0.0:10101')。"
+                      : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -270,14 +270,14 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   <FormLabel>目标地址</FormLabel>
                   <FormControl>
                     <Input
-                      className="text-sm"
-                      placeholder={instanceType === "server" ? "服务器监听流量转发地址" : "本地流量转发地址"}
+                      className="text-sm font-mono"
+                      placeholder={instanceType === "server" ? "服务端监听流量转发地址" : "本地流量转发地址"}
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
                     {instanceType === "server"
-                      ? "服务器模式: 监听隧道流量 (例 '0.0.0.0:8080')。"
+                      ? "服务端模式: 监听隧道流量 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 本地接收流量转发地址 (例 '127.0.0.1:8000')。"}
                   </FormDescription>
                   <FormMessage />
@@ -317,7 +317,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>TLS 模式 (服务器)</FormLabel>
+                      <FormLabel>TLS 模式 (服务端)</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "0"}>
                         <FormControl>
                           <SelectTrigger className="text-sm">
@@ -344,7 +344,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                           <FormLabel>证书路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input
-                              className="text-sm"
+                              className="text-sm font-mono"
                               placeholder="例: /path/to/cert.pem"
                               {...field}
                               value={field.value || ""}
@@ -362,7 +362,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                           <FormLabel>密钥路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input
-                              className="text-sm"
+                              className="text-sm font-mono"
                               placeholder="例: /path/to/key.pem"
                               {...field}
                               value={field.value || ""}
