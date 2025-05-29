@@ -9,11 +9,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ClipboardCopy } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface InstanceDetailsModalProps {
@@ -38,7 +37,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
 
   useEffect(() => {
     if (open) {
-      setShowApiKey(false); // Reset visibility when modal opens or instance changes
+      setShowApiKey(false); 
     }
   }, [open, instance]);
 
@@ -63,7 +62,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
         description: `无法将 ${entity} 复制到剪贴板。`,
         variant: 'destructive',
       });
-      console.error('Failed to copy: ', err);
+      console.error('复制失败: ', err);
     }
   };
 
@@ -72,7 +71,19 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
   const isApiKeyInstance = instance.id === '********';
 
   const detailItems = [
-    { label: "ID", value: <span className="font-mono text-xs">{instance.id}</span>, icon: <Fingerprint className="h-4 w-4 text-muted-foreground" /> },
+    { 
+      label: "ID", 
+      value: (
+        <span 
+          className="font-mono text-xs cursor-pointer hover:text-primary hover:underline"
+          title={`点击复制: ${instance.id}`}
+          onClick={() => handleCopyToClipboard(instance.id, "ID")}
+        >
+          {instance.id}
+        </span>
+      ), 
+      icon: <Fingerprint className="h-4 w-4 text-muted-foreground" /> 
+    },
     {
       label: "类型",
       value: isApiKeyInstance ? (
@@ -105,31 +116,22 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
       label: isApiKeyInstance ? "API 密钥" : "URL", 
       value: (
         <div className="flex items-center justify-between w-full">
-          <span className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''}`}>
+          <span 
+            className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''} cursor-pointer hover:text-primary hover:underline`}
+            title={`点击复制: ${instance.url}`}
+            onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
+          >
             {isApiKeyInstance ? (showApiKey ? instance.url : '••••••••••••••••••••••••••••••••') : instance.url}
           </span>
-          <div className="flex items-center flex-shrink-0 ml-2">
-            {isApiKeyInstance && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setShowApiKey(!showApiKey)}
-                aria-label={showApiKey ? "隐藏密钥" : "显示密钥"}
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
-              aria-label={`复制 ${isApiKeyInstance ? 'API 密钥' : 'URL'}`}
+          {isApiKeyInstance && (
+            <button
+              className="p-1 ml-2 rounded-md hover:bg-muted flex-shrink-0"
+              onClick={(e) => { e.stopPropagation(); setShowApiKey(!showApiKey);}}
+              aria-label={showApiKey ? "隐藏密钥" : "显示密钥"}
             >
-              <ClipboardCopy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          )}
         </div>
       ), 
       fullWidth: true 
@@ -146,7 +148,13 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
         <DialogHeader>
           <DialogTitle className="font-title">实例详情</DialogTitle>
           <DialogDescription className="font-sans">
-            实例 <span className="font-semibold font-mono">{instance.id.substring(0,12)}...</span> 详情。
+            实例 <span 
+                    className="font-semibold font-mono cursor-pointer hover:text-primary hover:underline"
+                    title={`点击复制: ${instance.id}`}
+                    onClick={() => handleCopyToClipboard(instance.id, "ID")}
+                  >
+                    {instance.id.substring(0,12)}...
+                  </span> 详情。
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 space-y-3">

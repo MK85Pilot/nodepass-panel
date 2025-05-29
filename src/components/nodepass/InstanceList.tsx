@@ -10,10 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound, ClipboardCopy } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -104,29 +103,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
     },
   });
 
-
-  const filteredInstances = instances?.filter(instance =>
-    instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    instance.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const renderSkeletons = () => {
-    return Array.from({ length: 3 }).map((_, i) => (
-      <TableRow key={`skeleton-${i}`}>
-        {[
-          <TableCell key={`skc1-${i}`}><Skeleton className="h-4 w-24" /></TableCell>,
-          <TableCell key={`skc2-${i}`}><Skeleton className="h-4 w-16" /></TableCell>,
-          <TableCell key={`skc3-${i}`}><Skeleton className="h-4 w-20" /></TableCell>,
-          <TableCell key={`skc4-${i}`}><Skeleton className="h-4 w-40" /></TableCell>,
-          <TableCell key={`skc5-${i}`}><Skeleton className="h-4 w-16" /></TableCell>,
-          <TableCell key={`skc6-${i}`}><Skeleton className="h-4 w-16" /></TableCell>,
-          <TableCell key={`skc7-${i}`}><Skeleton className="h-4 w-24" /></TableCell>
-        ]}
-      </TableRow>
-    ));
-  };
-
   const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
     if (!navigator.clipboard) {
       toast({
@@ -148,8 +124,29 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
         description: `无法将 ${entity} 复制到剪贴板。`,
         variant: 'destructive',
       });
-      console.error('Failed to copy: ', err);
+      console.error('复制失败: ', err);
     }
+  };
+
+
+  const filteredInstances = instances?.filter(instance =>
+    instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    instance.type.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const renderSkeletons = () => {
+    return Array.from({ length: 3 }).map((_, i) => (
+      <TableRow key={`skeleton-${i}`}>
+        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+      </TableRow>
+    ));
   };
 
 
@@ -221,7 +218,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                     </TableCell>
                     <TableCell>
                       {instance.id === '********' ? (
-                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans">
+                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
                           <KeyRound className="mr-1 h-3.5 w-3.5" />
                           监听中
                         </Badge>
@@ -229,21 +226,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                         <InstanceStatusBadge status={instance.status} />
                       )}
                     </TableCell>
-                    <TableCell className="truncate max-w-sm text-xs font-mono">
-                      <div className="flex items-center justify-between">
-                        <span className="truncate" title={instance.url}>
-                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 ml-2 flex-shrink-0"
-                          onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
-                          aria-label={`复制 ${instance.id === '********' ? 'API 密钥' : 'URL'}`}
-                        >
-                          <ClipboardCopy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                    <TableCell 
+                      className="truncate max-w-sm text-xs font-mono cursor-pointer hover:text-primary hover:underline"
+                      title={`点击复制: ${instance.url}`}
+                      onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
+                    >
+                        {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
                     </TableCell>
                     <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
@@ -260,17 +248,29 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                               isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
                           />
                         )}
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} aria-label="查看详情">
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <button
+                            className="p-2 rounded-md hover:bg-muted"
+                            onClick={() => setSelectedInstanceForDetails(instance)}
+                            aria-label="查看详情"
+                        >
+                            <Eye className="h-4 w-4" />
+                        </button>
                         {instance.id !== '********' && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForModify(instance)} aria-label="修改">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} aria-label="删除">
+                            <button
+                                className="p-2 rounded-md hover:bg-muted"
+                                onClick={() => setSelectedInstanceForModify(instance)}
+                                aria-label="修改"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
+                                onClick={() => setSelectedInstanceForDelete(instance)}
+                                aria-label="删除"
+                            >
                               <Trash2 className="h-4 w-4" />
-                            </Button>
+                            </button>
                           </>
                         )}
                       </div>

@@ -8,7 +8,7 @@ import { useApiConfig } from '@/hooks/use-api-key';
 import { nodePassApi } from '@/lib/api';
 import type { Instance } from '@/types/nodepass';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound, ClipboardCopy } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound } from 'lucide-react';
 import { InstanceStatusBadge } from '@/components/nodepass/InstanceStatusBadge';
 import { InstanceDetailsModal } from '@/components/nodepass/InstanceDetailsModal';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +39,7 @@ interface Position {
 
 interface NodeBase {
   id: string;
-  type: 'server' | 'client';
+  type: 'server' | 'client' | 'apikey';
   url: string;
   status: Instance['status'];
   apiId: string;
@@ -61,6 +61,10 @@ interface ClientNode extends NodeBase {
   connectedToServerId: string | null;
 }
 
+interface ApiKeyNode extends NodeBase {
+  type: 'apikey';
+}
+
 
 type DraggableNode = ServerNode | ClientNode;
 
@@ -73,7 +77,7 @@ interface ConnectionLine {
 
 interface DraggingNodeInfo {
   id: string;
-  type: DraggableNode['type']; // Differentiate between server and client
+  type: DraggableNode['type']; 
   initialMouseX: number;
   initialMouseY: number;
   initialNodeX: number;
@@ -83,9 +87,8 @@ interface DraggingNodeInfo {
 function parseTunnelAddr(urlString: string): string | null {
   try {
     const url = new URL(urlString);
-    return url.host; // e.g., "0.0.0.0:10101" or "server.example.com:10101"
+    return url.host; 
   } catch (e) {
-    // Fallback for URLs that might not be perfectly formed but follow scheme://tunnel/target
     const schemeSeparator = "://";
     const schemeIndex = urlString.indexOf(schemeSeparator);
     if (schemeIndex === -1) return null;
@@ -126,24 +129,21 @@ function parseTargetAddr(urlString: string): string | null {
 
 function splitHostPort(address: string | null): { host: string | null; port: string | null } {
   if (!address) return { host: null, port: null };
-  // Regex to match IPv6 with port: [ipv6_address]:port
   const ipv6WithPortMatch = address.match(/^\[(.+)\]:(\d+)$/);
   if (ipv6WithPortMatch) {
     return { host: ipv6WithPortMatch[1], port: ipv6WithPortMatch[2] };
   }
-  // For IPv4 or hostnames, split by the last colon
   const lastColonIndex = address.lastIndexOf(':');
-  if (lastColonIndex === -1 || address.substring(0, lastColonIndex).includes(':')) { // No colon or it's an IPv6 address without brackets
+  if (lastColonIndex === -1 || address.substring(0, lastColonIndex).includes(':')) { 
     return { host: address, port: null };
   }
   const potentialHost = address.substring(0, lastColonIndex);
   const potentialPort = address.substring(lastColonIndex + 1);
 
-  // Validate port
   if (potentialPort && !isNaN(parseInt(potentialPort, 10)) && parseInt(potentialPort, 10).toString() === potentialPort) {
     return { host: potentialHost, port: potentialPort };
   }
-  return { host: address, port: null }; // Cannot reliably split port
+  return { host: address, port: null }; 
 }
 
 
@@ -155,14 +155,14 @@ const GRAPH_CLIENT_SPACING_Y = 20;
 
 
 const TopologyPage: NextPage = () => {
-  const { apiConfigsList, isLoading: isLoadingApiConfigGlobal, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
+  const { apiConfigsList, isLoading: isLoadingApiConfigGlobal, getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
 
   const [allServerInstances, setAllServerInstances] = useState<ServerNode[]>([]);
   const [allClientInstances, setAllClientInstances] = useState<ClientNode[]>([]);
 
 
-  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table'); // 'table' or 'graph'
+  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table');
   const [selectedServerForGraph, setSelectedServerForGraph] = useState<ServerNode | null>(null);
   const [clientsForSelectedServer, setClientsForSelectedServer] = useState<ClientNode[]>([]);
 
@@ -186,7 +186,7 @@ const TopologyPage: NextPage = () => {
     const cNodes: ClientNode[] = [];
 
     fetchedInstances.forEach(inst => {
-      if (inst.id === '********') { // Skip API Key "instance"
+      if (inst.id === '********') { 
         return;
       }
       if (inst.type === 'server') {
@@ -197,7 +197,7 @@ const TopologyPage: NextPage = () => {
           status: inst.status,
           apiId: inst.apiId,
           apiName: inst.apiName,
-          position: { x: 50, y: 50 + sNodes.length * (NODE_HEIGHT_SERVER + GRAPH_CLIENT_SPACING_Y) }, // Initial position
+          position: { x: 50, y: 50 + sNodes.length * (NODE_HEIGHT_SERVER + GRAPH_CLIENT_SPACING_Y) }, 
           serverListeningAddress: parseTunnelAddr(inst.url),
           serverForwardsToAddress: parseTargetAddr(inst.url),
           originalInstance: inst,
@@ -210,16 +210,15 @@ const TopologyPage: NextPage = () => {
           status: inst.status,
           apiId: inst.apiId,
           apiName: inst.apiName,
-          position: { x: 50 + GRAPH_CLIENT_OFFSET_X, y: 50 }, // Initial position, will be adjusted
+          position: { x: 50 + GRAPH_CLIENT_OFFSET_X, y: 50 }, 
           clientConnectsToServerAddress: parseTunnelAddr(inst.url),
           localTargetAddress: parseTargetAddr(inst.url),
-          connectedToServerId: null, // Will be determined
+          connectedToServerId: null, 
           originalInstance: inst,
         });
       }
     });
 
-    // Determine connections
     cNodes.forEach(client => {
       const clientConnAddr = client.clientConnectsToServerAddress;
       if (!clientConnAddr) return;
@@ -231,7 +230,7 @@ const TopologyPage: NextPage = () => {
         const { host: serverHostListensOn, port: serverPortListensOn } = splitHostPort(serverListenAddr);
 
         if (clientPortConnectsTo && serverPortListensOn && clientPortConnectsTo === serverPortListensOn) {
-          const isServerHostWildcard = serverHostListensOn === '0.0.0.0' || serverHostListensOn === '::' || !serverHostListensOn; // Consider empty host as wildcard
+          const isServerHostWildcard = serverHostListensOn === '0.0.0.0' || serverHostListensOn === '::' || !serverHostListensOn; 
           if (isServerHostWildcard || clientHostConnectsTo === serverHostListensOn) {
             client.connectedToServerId = server.id;
             break; 
@@ -265,7 +264,6 @@ const TopologyPage: NextPage = () => {
             return [];
           }
           try {
-            // console.log(`TopologyPage: Fetching instances for API: ${config.name} (Root: ${apiRootVal})`);
             const data = await nodePassApi.getInstances(apiRootVal, tokenVal);
             return data.map(inst => ({ ...inst, apiId: config.id, apiName: config.name }));
           } catch (error: any) {
@@ -276,7 +274,7 @@ const TopologyPage: NextPage = () => {
               description: errorMessage.length > 100 ? errorMessage.substring(0, 97) + "..." : errorMessage,
               variant: 'destructive',
             });
-            return Promise.reject(new Error(`Failed to fetch from ${config.name}: ${errorMessage}`));
+            return []; 
           }
         })
       );
@@ -285,10 +283,10 @@ const TopologyPage: NextPage = () => {
         if (result.status === 'fulfilled' && result.value) {
           combinedInstances.push(...result.value);
         } else if (result.status === 'rejected') {
-          // Error already toasted and logged
+           console.warn(`拓扑页: API请求失败: ${result.reason?.message || result.reason}`);
         }
       });
-      return combinedInstances.filter(inst => inst.id !== '********'); // Filter out API key instances here
+      return combinedInstances.filter(inst => inst.id !== '********'); 
     },
     enabled: !isLoadingApiConfigGlobal && apiConfigsList.length > 0,
     refetchOnMount: 'always',
@@ -325,8 +323,7 @@ const TopologyPage: NextPage = () => {
       setLines([]);
       return;
     }
-
-    // Server out-point (right-middle)
+    
     const serverX_out = serverNode.position.x + NODE_WIDTH;
     const serverY_out = serverNode.position.y + NODE_HEIGHT_SERVER / 2;
 
@@ -335,16 +332,14 @@ const TopologyPage: NextPage = () => {
       const clientEl = nodeRefs.current.get(`client-${client.id}`);
       if (!clientEl) return;
       
-      // Client in-point (left-middle)
       const clientX_in = client.position.x;
       const clientY_in = client.position.y + NODE_HEIGHT_CLIENT / 2;
       
-      const controlPointX1 = serverX_out + 50;
+      const controlPointX1 = serverX_out + 50; 
       const controlPointY1 = serverY_out;
-      const controlPointX2 = clientX_in - 50;
+      const controlPointX2 = clientX_in - 50; 
       const controlPointY2 = clientY_in;
 
-      // M = move to, C = cubic bezier curve
       const path = `M ${serverX_out} ${serverY_out} C ${controlPointX1} ${controlPointY1}, ${controlPointX2} ${controlPointY2}, ${clientX_in} ${clientY_in}`;
       
       newLines.push({
@@ -370,17 +365,18 @@ const TopologyPage: NextPage = () => {
     let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id);
     
     const initialServerY = 100; 
+    const serverNodeHeight = NODE_HEIGHT_SERVER;
 
     const positionedClients = relevantClients.map((client, index) => ({
       ...client,
       position: {
         x: 50 + GRAPH_CLIENT_OFFSET_X, 
-        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) - (relevantClients.length > 1 ? (((relevantClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0) + (NODE_HEIGHT_SERVER / 2) - (NODE_HEIGHT_CLIENT / 2),
+        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) - (relevantClients.length > 1 ? (((relevantClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0) + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2),
       }
     }));
     
     const serverY = positionedClients.length > 0 
-      ? positionedClients[0].position.y + ( (positionedClients.length -1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))/2 + (NODE_HEIGHT_CLIENT / 2) - (NODE_HEIGHT_SERVER / 2)
+      ? positionedClients[0].position.y + ( (positionedClients.length -1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))/2 + (NODE_HEIGHT_CLIENT / 2) - (serverNodeHeight / 2)
       : initialServerY;
 
 
@@ -393,7 +389,7 @@ const TopologyPage: NextPage = () => {
     setViewMode('table');
     setSelectedServerForGraph(null);
     setClientsForSelectedServer([]);
-    setLines([]); // Clear lines when going back to table
+    setLines([]); 
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, nodeId: string, nodeType: DraggableNode['type']) => {
@@ -610,6 +606,7 @@ const TopologyPage: NextPage = () => {
   const tableServerInstances = allServerInstances.map(serverNode => ({
     ...serverNode,
     serverListeningAddress: serverNode.serverListeningAddress || 'N/A',
+    serverForwardsToAddress: serverNode.serverForwardsToAddress || 'N/A',
   }));
 
 
@@ -639,7 +636,7 @@ const TopologyPage: NextPage = () => {
           </div>
 
           {!isLoadingData && tableServerInstances.length === 0 && viewMode === 'table' && (
-             <Card className="text-center py-10 shadow-lg flex-grow flex flex-col justify-center items-center bg-card">
+             <Card className="text-center py-10 shadow-lg flex-grow flex flex-col justify-center items-center bg-card card-hover-shadow">
               <CardHeader><CardTitle className="font-title">无数据显示</CardTitle></CardHeader>
               <CardContent><p className="text-muted-foreground font-sans">{apiConfigsList.length > 0 ? "未找到任何服务端实例。" : "请先配置主控连接。"}</p></CardContent>
             </Card>
@@ -655,6 +652,7 @@ const TopologyPage: NextPage = () => {
                     <TableHead className="font-sans">状态</TableHead>
                     <TableHead className="font-sans">URL</TableHead>
                     <TableHead className="font-sans">监听地址</TableHead>
+                    <TableHead className="font-sans">转发地址</TableHead>
                     <TableHead className="text-right font-sans">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -664,34 +662,38 @@ const TopologyPage: NextPage = () => {
                        <TableCell className="max-w-[150px] sm:max-w-xs font-sans">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-default truncate block">{item.apiName}</span>
+                             <span 
+                              className="cursor-pointer hover:text-primary hover:underline truncate block"
+                              onClick={() => handleCopyToClipboard(item.apiName, '来源主控名称')}
+                              title={`点击复制: ${item.apiName}`}
+                            >
+                              {item.apiName}
+                            </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="font-sans">{item.apiName}</p>
+                            <p className="font-sans">{item.apiName} (ID: {item.apiId})</p>
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.id.substring(0,12)}...</TableCell>
+                      <TableCell 
+                        className="font-mono text-xs cursor-pointer hover:text-primary hover:underline"
+                        onClick={() => handleCopyToClipboard(item.id, '实例 ID')}
+                        title={`点击复制: ${item.id}`}
+                      >
+                        {item.id.substring(0,12)}...
+                      </TableCell>
                       <TableCell>
                         <InstanceStatusBadge status={item.status} />
                       </TableCell>
-                      <TableCell className="font-mono text-xs max-w-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="truncate" title={item.url}>
+                      <TableCell 
+                        className="font-mono text-xs max-w-xs truncate cursor-pointer hover:text-primary hover:underline"
+                        onClick={() => handleCopyToClipboard(item.url, 'URL')}
+                        title={`点击复制: ${item.url}`}
+                       >
                            {item.url}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 ml-2 flex-shrink-0"
-                            onClick={() => handleCopyToClipboard(item.url, 'URL')}
-                            aria-label="复制 URL"
-                          >
-                            <ClipboardCopy className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{item.serverListeningAddress}</TableCell>
+                      <TableCell className="font-mono text-xs">{item.serverForwardsToAddress}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="default" size="sm" onClick={() => handleViewServerTopology(item as ServerNode)} className="font-sans">
                           <Eye className="mr-2 h-4 w-4" /> 查看拓扑
