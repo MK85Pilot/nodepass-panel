@@ -4,7 +4,7 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { z } from 'zod';
+// import type { z } from 'zod'; // No longer needed
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,8 @@ import { Pencil, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
+import type { AppLogEntry } from './EventLog';
+
 
 interface ModifyInstanceDialogProps {
   instance: Instance | null;
@@ -35,6 +37,7 @@ interface ModifyInstanceDialogProps {
   apiToken: string | null;
   apiName: string | null;
   activeApiConfig: NamedApiConfig | null;
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
 interface ParsedNodePassUrl {
@@ -146,7 +149,7 @@ const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode, string> = {
 };
 
 
-export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: ModifyInstanceDialogProps) {
+export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: ModifyInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -179,6 +182,8 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
         certPath: parsedUrl.certPath || '',
         keyPath: parsedUrl.keyPath || '',
       });
+    } else if (!open) {
+      form.reset(); // Reset form when dialog closes
     }
   }, [instance, open, form]);
 
@@ -191,25 +196,32 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
       return nodePassApi.modifyInstanceConfig(data.instanceId, validatedApiData, apiRoot, apiToken);
     },
     onSuccess: (updatedInstance) => {
+      const shortId = updatedInstance.id.substring(0,8);
       toast({
         title: '实例已修改',
-        description: `实例 ${updatedInstance.id.substring(0,8)}... 配置已更新。`,
+        description: `实例 ${shortId}... 配置已更新。`,
       });
+      onLog?.(`实例 ${shortId}... 配置已更新。新URL: ${updatedInstance.url}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopology']});
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       onOpenChange(false);
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
+      const shortId = variables.instanceId.substring(0,8);
       toast({
         title: '修改实例配置出错',
-        description: error.message || '修改实例配置时发生未知错误。',
+        description: `修改实例 ${shortId}... 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
+      onLog?.(`修改实例 ${shortId}... 失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
   function onSubmit(values: ModifyInstanceFormValues) {
     if (instance) {
       const newUrl = buildUrl(values);
+      onLog?.(`尝试修改实例 ${instance.id.substring(0,8)}... 新URL: ${newUrl}`, 'ACTION');
       modifyInstanceMutation.mutate({ instanceId: instance.id, config: { url: newUrl } });
     }
   }
@@ -280,8 +292,8 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听控制连接 (例 '0.0.0.0:10101')。"
-                      : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
+                      ? "服务端模式: 监听控制连接。"
+                      : "客户端模式: NodePass 服务端隧道地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -303,8 +315,8 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   </FormControl>
                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听隧道流量 (例 '0.0.0.0:8080')。"
-                      : "客户端模式: 本地接收流量转发地址 (例 '127.0.0.1:8000')。"}
+                      ? "服务端模式: 监听隧道流量。"
+                      : "客户端模式: 本地接收流量转发地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { z } from 'zod';
+// import type { z } from 'zod'; // No longer needed if type is imported
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,8 @@ import { PlusCircle, Loader2, Info } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig, type MasterLogLevel, type MasterTlsMode } from '@/hooks/use-api-key';
+import type { AppLogEntry } from './EventLog';
+
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -35,19 +37,14 @@ interface CreateInstanceDialogProps {
   apiToken: string | null;
   apiName: string | null;
   activeApiConfig: NamedApiConfig | null;
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
 function parseTunnelAddr(urlString: string): string | null {
   try {
-    // Attempt to parse as a full URL to handle schemes, etc.
-    // If it doesn't have a scheme, prepend http for the URL constructor.
     const url = new URL(urlString.includes('://') ? urlString : `http://${urlString}`);
-    // The host property includes hostname and port if present
     return url.host;
   } catch (e) {
-    // If URL parsing fails, it might be a simple host:port string or malformed.
-    // We are interested in the part before the first '/' if no scheme,
-    // and before '?'
     const schemeSeparator = "://";
     const schemeIndex = urlString.indexOf(schemeSeparator);
     let restOfString = urlString;
@@ -69,7 +66,6 @@ function parseTunnelAddr(urlString: string): string | null {
     }
     
     const tunnelAddrCandidate = endOfTunnelAddr !== -1 ? restOfString.substring(0, endOfTunnelAddr) : restOfString;
-    // Basic check to see if it contains a colon, typical for host:port
     if (tunnelAddrCandidate.includes(':') || (!tunnelAddrCandidate.includes(':') && tunnelAddrCandidate.length > 0) ) {
         return tunnelAddrCandidate;
     }
@@ -108,26 +104,19 @@ function buildUrl(values: CreateInstanceFormValues): string {
 function extractHostname(urlOrHostPort: string): string | null {
   if (!urlOrHostPort) return null;
   try {
-    // If it doesn't include '://', assume it's host:port and prepend a scheme for URL constructor
     const fullUrl = urlOrHostPort.includes('://') ? urlOrHostPort : `scheme://${urlOrHostPort}`;
     const url = new URL(fullUrl);
-    // For IPv6 addresses, hostname might include brackets, which is fine.
-    // The URL constructor's hostname property correctly handles this.
-    return url.hostname.replace(/^\[|\]$/g, ''); // Remove brackets for IPv6 for comparison
+    return url.hostname.replace(/^\[|\]$/g, '');
   } catch (e) {
-    // Fallback for simple host:port strings that might not be valid URLs
-    // or if URL constructor fails for other reasons.
     const parts = urlOrHostPort.split(':');
     if (parts.length > 0) {
-        // Handles case where there is no port, or IPv6 without brackets and port
         let hostCandidate = parts[0];
-        if (urlOrHostPort.includes('[')) { // Likely IPv6 with brackets
+        if (urlOrHostPort.includes('[')) { 
             const match = urlOrHostPort.match(/^\[(.*?)\]/);
             if (match && match[1]) {
                 hostCandidate = match[1];
             }
         }
-        // Very basic check if it's not empty
         return hostCandidate.length > 0 ? hostCandidate : null;
     }
     return null;
@@ -135,10 +124,10 @@ function extractHostname(urlOrHostPort: string): string | null {
 }
 
 
-export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: CreateInstanceDialogProps) {
+export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList } = useApiConfig(); // Get the list of all API configurations
+  const { apiConfigsList } = useApiConfig();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
 
   const form = useForm<CreateInstanceFormValues>({
@@ -171,7 +160,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         keyPath: '',
         autoCreateServer: false,
       });
-      setExternalApiSuggestion(null); // Reset suggestion when dialog opens
+      setExternalApiSuggestion(null);
     }
   }, [open, form]);
   
@@ -196,7 +185,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         return;
       }
 
-      const localHostnames = ['localhost', '127.0.0.1', '::', '::1'];
+      const localHostnames = ['localhost', '127.0.0.1', '::', '::1', '']; // Added empty string for cases like ":port"
       if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
         setExternalApiSuggestion(null);
         return;
@@ -247,29 +236,40 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       return nodePassApi.createInstance(validatedApiData, apiRoot, apiToken);
     },
     onSuccess: (data, variables) => {
+      const shortUrl = variables.url.length > 40 ? variables.url.substring(0,37) + "..." : variables.url;
       toast({
         title: '实例已创建',
-        description: `实例 (URL: ${variables.url.substring(0,30)}...) 已成功创建。`,
+        description: `实例 (URL: ${shortUrl}) 已成功创建。`,
       });
+      onLog?.(`实例创建成功: ${data.type} - ${data.id.substring(0,8)}... (URL: ${shortUrl})`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopology']}); // Invalidate topology data
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']}); // Invalidate traffic data
     },
     onError: (error: any, variables) => {
+      const shortUrl = variables.url.length > 40 ? variables.url.substring(0,37) + "..." : variables.url;
       toast({
         title: '创建实例出错',
-        description: `创建实例 (URL: ${variables.url.substring(0,30)}...) 失败: ${error.message || '未知错误。'}`,
+        description: `创建实例 (URL: ${shortUrl}) 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-      throw error; 
+      onLog?.(`实例创建失败: (URL: ${shortUrl}) - ${error.message || '未知错误'}`, 'ERROR');
+      // Do not throw error here to allow form to remain open for corrections if desired
     },
   });
 
   async function onSubmit(values: CreateInstanceFormValues) {
     if (!apiId || !apiRoot || !apiToken) {
         toast({ title: "操作失败", description: "未选择活动主控或主控配置无效。", variant: "destructive"});
+        onLog?.('尝试创建实例失败: 未选择活动主控或主控配置无效。', 'ERROR');
         return;
     }
 
-    if (values.instanceType === 'client' && values.autoCreateServer) {
+    const isAutoCreatingServer = values.instanceType === 'client' && values.autoCreateServer;
+    let serverUrlToCreate = '';
+    let clientUrlToCreate = buildUrl(values);
+
+    if (isAutoCreatingServer) {
       const clientTunnelParts = values.tunnelAddress.split(':');
       const clientTargetParts = values.targetAddress.split(':');
 
@@ -277,9 +277,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       const clientTargetPort = clientTargetParts.pop();
 
       if (!clientTunnelPort || !clientTargetPort) {
-        toast({ title: '错误', description: '无法从客户端地址解析端口以自动创建服务端。', variant: 'destructive' });
+        const errorMsg = '无法从客户端地址解析端口以自动创建服务端。';
+        toast({ title: '错误', description: errorMsg, variant: 'destructive' });
         form.control.setError("tunnelAddress", {type: "manual", message: "端口解析失败"});
         form.control.setError("targetAddress", {type: "manual", message: "端口解析失败"});
+        onLog?.(`自动创建服务端失败: ${errorMsg}`, 'ERROR');
         return;
       }
       
@@ -296,32 +298,32 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         certPath: '', 
         keyPath: '',  
       };
-      const serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
+      serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
+      onLog?.(`准备自动创建服务端: ${serverUrlToCreate}`, 'INFO');
+    }
+    
+    onLog?.(`准备创建实例: ${clientUrlToCreate}`, 'INFO');
 
-      try {
+    try {
+      if (isAutoCreatingServer && serverUrlToCreate) {
         await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
-        // Toast for server creation success is handled by onSucess of mutation
-        const clientUrlToCreate = buildUrl(values);
-        await createInstanceMutation.mutateAsync({ url: clientUrlToCreate });
-        // Toast for client creation success is handled by onSucess of mutation
-        
-        form.reset();
-        onOpenChange(false); 
+        // Success toast for server is handled by mutation's onSuccess
+      }
+      await createInstanceMutation.mutateAsync({ url: clientUrlToCreate });
+      // Success toast for client is handled by mutation's onSuccess
 
-      } catch (error: any) {
-        // onError of mutation handles individual creation failure toasts
-        console.error("自动创建序列中发生错误:", error);
-      }
-    } else {
-      const constructedUrl = buildUrl(values);
-      try {
-        await createInstanceMutation.mutateAsync({ url: constructedUrl });
+      // Only reset and close if the final operation (client creation) was part of the sequence
+      // If only server was auto-created and client failed, or only client was created, 
+      // it would have been handled by individual mutateAsync calls.
+      // This ensures dialog closes only if the intended sequence completes or a single creation is successful.
+      if (!createInstanceMutation.isError) { // Check if the last mutation call had an error
         form.reset();
         onOpenChange(false); 
-      } catch (error) {
-         // onError of mutation handles individual creation failure toasts
-         console.error("创建单个实例时发生错误:", error);
       }
+    } catch (error: any) {
+       // Errors are handled by mutation's onError, including logging.
+       // No need to re-log or re-toast here.
+       console.error("创建实例序列中发生错误:", error);
     }
   }
   
@@ -333,7 +335,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     ? MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]
     : '主控配置';
 
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -343,7 +344,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             创建新实例
           </DialogTitle>
           <DialogDescription className="font-sans">
-            提供实例详情进行配置 (主控: {apiName || 'N/A'})。
+            为当前主控 “{apiName || 'N/A'}” 配置新实例。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -387,11 +388,11 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </FormControl>
                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
-                      : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
+                      ? "服务端模式: 监听客户端控制连接的地址。"
+                      : "客户端模式: NodePass 服务端隧道地址。"}
                   </FormDescription>
                   {externalApiSuggestion && (
-                    <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-sans">
                       <Info size={14} className="inline-block mr-1.5 align-text-bottom" />
                       {externalApiSuggestion}
                     </FormDescription>
@@ -455,8 +456,8 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </FormControl>
                    <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
-                      ? "服务端模式: 监听隧道流量的地址 (例 '0.0.0.0:8080')。"
-                      : "客户端模式: 接收流量的本地转发地址 (例 '127.0.0.1:8000')。"}
+                      ? "服务端模式: 监听隧道流量的地址。"
+                      : "客户端模式: 接收流量的本地转发地址。"}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -477,7 +478,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                     </FormControl>
                     <SelectContent>
                        <SelectItem value="master" className="font-sans">
-                        默认 ({masterLogLevelDisplay})
+                         默认 ({masterLogLevelDisplay})
                       </SelectItem>
                       <SelectItem value="debug" className="font-sans">Debug</SelectItem>
                       <SelectItem value="info" className="font-sans">Info</SelectItem>
@@ -587,7 +588,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </FormLabel>
                       <FormDescription className="font-sans text-xs">
                         如果勾选，将在创建此客户端实例前，尝试自动创建一个匹配的服务端实例。
-                        自动创建的服务端将使用与客户端相同的日志级别，并根据当前活动主控记录的默认TLS模式进行配置 (若主控未记录特定TLS模式，则默认为 '1' 自签名证书)。
+                        服务端将使用与客户端相同的日志级别，并根据当前活动主控记录的默认TLS模式进行配置 (若主控未记录特定TLS模式，则默认为 '1' 自签名证书)。
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -618,6 +619,3 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
-
-
-    

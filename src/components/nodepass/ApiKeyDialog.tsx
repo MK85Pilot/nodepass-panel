@@ -13,9 +13,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info } from 'lucide-react';
+import { KeyRound, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
+import type { AppLogEntry } from './EventLog';
+import { FormDescription } from "@/components/ui/form"; // Added import
 
 interface ApiConfigDialogProps {
   open: boolean;
@@ -23,9 +26,10 @@ interface ApiConfigDialogProps {
   onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void; 
   currentConfig?: NamedApiConfig | null;
   isEditing?: boolean;
+  onLog?: (message: string, type: AppLogEntry['type']) => void; // Optional logging
 }
 
-export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isEditing = false }: ApiConfigDialogProps) {
+export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isEditing = false, onLog }: ApiConfigDialogProps) {
   const [nameInput, setNameInput] = useState('');
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
@@ -33,6 +37,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [showToken, setShowToken] = useState(false);
   const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
   const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
+  const [ignoreSslErrorsInput, setIgnoreSslErrorsInput] = useState(false);
 
 
   useEffect(() => {
@@ -43,6 +48,17 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setPrefixPathInput(currentConfig?.prefixPath || '');
       setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
       setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
+      setIgnoreSslErrorsInput(currentConfig?.ignoreSslErrors || false);
+      setShowToken(false);
+    } else {
+       // Reset fields when dialog is closed but not necessarily unmounted
+      setNameInput('');
+      setApiUrlInput('http://localhost:3000');
+      setTokenInput('');
+      setPrefixPathInput('');
+      setMasterLogLevelInput('master');
+      setMasterTlsModeInput('master');
+      setIgnoreSslErrorsInput(false);
       setShowToken(false);
     }
   }, [open, currentConfig]);
@@ -58,12 +74,15 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         prefixPath: prefixPathInput.trim() || null,
         masterDefaultLogLevel: masterLogLevelInput,
         masterDefaultTlsMode: masterTlsModeInput,
+        ignoreSslErrors: ignoreSslErrorsInput,
       });
+      // onLog?.(`主控配置 "${nameInput.trim()}" 已${isEditing ? '更新' : '添加'}。`, 'ACTION');
+      // Logging is handled by the parent component's onSave callback (e.g., AppLayout or ConnectionsManager)
       onOpenChange(false);
     }
   };
 
-  const displayApiUrl = apiUrlInput || "http://[2a12::1]:3134";
+  const displayApiUrl = apiUrlInput || "http://[::1]:3000";
   const displayPrefixPath = prefixPathInput ? `/${prefixPathInput.replace(/^\/+|\/+$/g, '')}` : "/api";
 
 
@@ -74,10 +93,10 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
           <DialogHeader>
             <DialogTitle className="flex items-center font-title">
               <KeyRound className="mr-2 h-5 w-5 text-primary" />
-              {isEditing ? '编辑主控连接' : '添加主控连接'}
+              {isEditing ? '编辑主控' : '添加新主控'}
             </DialogTitle>
             <DialogDescription className="font-sans">
-              输入 NodePass 主控名称、URL、令牌和可选前缀路径。API 端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
+              输入 NodePass 主控名称、URL、令牌和可选API前缀。API 端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
               <br/>下方可选字段用于记录此主控的默认启动配置，仅作参考。
             </DialogDescription>
           </DialogHeader>
@@ -105,7 +124,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="token" className="font-sans">令牌</Label>
+              <Label htmlFor="token" className="font-sans">令牌 (API Key)</Label>
               <div className="relative">
                 <Input
                   id="token"
@@ -129,7 +148,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="prefix-path" className="font-sans">前缀路径 (可选)</Label>
+              <Label htmlFor="prefix-path" className="font-sans">API 前缀路径 (可选)</Label>
               <Input
                 id="prefix-path"
                 value={prefixPathInput}
@@ -137,6 +156,9 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 placeholder="例: api (若主控为 http://host/api/v1)"
                 className="font-sans"
               />
+               <FormDescription className="text-xs font-sans">
+                如果主控的API路径是 `http://host/custom-prefix/v1`，则此处填 `custom-prefix`。留空则默认为 `/api`。
+              </FormDescription>
             </div>
 
             <div className="my-3 border-t border-border"></div>
@@ -178,6 +200,27 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="items-top flex space-x-2 pt-2">
+              <Checkbox
+                id="ignore-ssl-errors"
+                checked={ignoreSslErrorsInput}
+                onCheckedChange={(checked) => setIgnoreSslErrorsInput(Boolean(checked))}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="ignore-ssl-errors"
+                  className="font-sans flex items-center cursor-pointer"
+                >
+                   <AlertTriangle size={14} className="mr-1.5 text-amber-500" />
+                  尝试忽略SSL错误 (不推荐)
+                </Label>
+                <p className="text-xs text-muted-foreground font-sans">
+                  此选项不能绕过浏览器安全限制。如果SSL证书无效，连接仍可能失败。仅建议用于受信任的开发服务器及自签名证书场景。
+                </p>
+              </div>
+            </div>
+
           </div>
           <DialogFooter className="font-sans">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
@@ -188,3 +231,5 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
     </Dialog>
   );
 }
+
+

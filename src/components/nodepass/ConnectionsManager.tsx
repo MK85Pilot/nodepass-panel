@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
-import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -26,10 +26,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import type { AppLogEntry } from './EventLog';
 
-export function ConnectionsManager() {
+interface ConnectionsManagerProps {
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
+}
+
+export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
   const router = useRouter();
   const { toast } = useToast();
   const {
@@ -52,13 +56,16 @@ export function ConnectionsManager() {
   };
 
   const handleSaveApiConfig = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
+    const isNew = !configToSave.id;
     const savedConfig = addOrUpdateApiConfig(configToSave);
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
+    const actionText = isNew ? '添加' : '更新';
     toast({
-      title: configToSave.id ? '主控已更新' : '主控已添加',
+      title: `主控已${actionText}`,
       description: `“${savedConfig.name}”已保存。`,
     });
+    onLog?.(`主控配置 "${savedConfig.name}" 已${actionText}。`, 'SUCCESS');
   };
 
   const handleSetActive = (id: string) => {
@@ -68,18 +75,20 @@ export function ConnectionsManager() {
       title: '活动主控已切换',
       description: `已连接到 “${config?.name}”。`,
     });
-    // Navigate to home page after setting active, regardless of current page
-    router.push('/');
+    onLog?.(`活动主控已切换至: "${config?.name}"`, 'INFO');
+    // router.push('/'); // Navigation handled by header or HomePage now
   };
 
   const handleDeleteConfirm = () => {
     if (deletingConfig) {
+      const name = deletingConfig.name;
       deleteApiConfig(deletingConfig.id);
       toast({
         title: '主控已删除',
-        description: `“${deletingConfig.name}”已被删除。`,
+        description: `“${name}”已被删除。`,
         variant: 'destructive',
       });
+      onLog?.(`主控配置 "${name}" 已删除。`, 'SUCCESS');
       setDeletingConfig(null);
     }
   };
@@ -91,6 +100,7 @@ export function ConnectionsManager() {
         description: '请先添加主控连接。',
         variant: 'destructive',
       });
+      onLog?.('尝试导出主控配置失败: 列表为空。', 'WARNING');
       return;
     }
     const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
@@ -104,6 +114,7 @@ export function ConnectionsManager() {
       title: '配置已导出',
       description: '主控连接配置已成功下载。',
     });
+    onLog?.('主控配置已导出。', 'INFO');
   };
 
   const handleImportFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,6 +132,7 @@ export function ConnectionsManager() {
 
         let importedCount = 0;
         let skippedCount = 0;
+        let invalidCount = 0;
 
         importedConfigs.forEach(importedConfig => {
           if (
@@ -133,6 +145,7 @@ export function ConnectionsManager() {
             if (existingConfig) {
               skippedCount++;
             } else {
+              // Ensure all fields of NamedApiConfig are present, providing defaults if necessary
               const configToAdd: Omit<NamedApiConfig, 'id'> & { id?: string } = {
                 id: importedConfig.id,
                 name: importedConfig.name,
@@ -141,19 +154,26 @@ export function ConnectionsManager() {
                 prefixPath: importedConfig.prefixPath === undefined ? null : importedConfig.prefixPath,
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
+                ignoreSslErrors: importedConfig.ignoreSslErrors || false,
               };
               addOrUpdateApiConfig(configToAdd);
               importedCount++;
             }
           } else {
             console.warn("跳过无效的导入配置项:", importedConfig);
+            invalidCount++;
           }
         });
         
+        let importSummary = `成功导入 ${importedCount} 条配置。`;
+        if (skippedCount > 0) importSummary += ` 跳过 ${skippedCount} 条重复ID配置。`;
+        if (invalidCount > 0) importSummary += ` ${invalidCount} 条配置格式无效被忽略。`;
+        
         toast({
           title: '导入完成',
-          description: `成功导入 ${importedCount} 条配置。跳过 ${skippedCount} 条重复ID配置。`,
+          description: importSummary,
         });
+        onLog?.(`主控配置导入完成: ${importSummary}`, 'INFO');
 
       } catch (error: any) {
         toast({
@@ -161,6 +181,7 @@ export function ConnectionsManager() {
           description: error.message || '解析文件失败或文件格式不正确。',
           variant: 'destructive',
         });
+        onLog?.(`主控配置导入失败: ${error.message || '未知错误'}`, 'ERROR');
       }
     };
     reader.onerror = () => {
@@ -169,10 +190,11 @@ export function ConnectionsManager() {
         description: '读取文件时发生错误。',
         variant: 'destructive',
       });
+      onLog?.('主控配置导入失败: 读取文件错误。', 'ERROR');
     }
     reader.readAsText(file);
     if (event.target) {
-      event.target.value = '';
+      event.target.value = ''; // Reset file input
     }
   };
 
@@ -188,10 +210,9 @@ export function ConnectionsManager() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        {/* Title is removed here, it will be provided by the parent page/card */}
-        <div className="flex flex-wrap gap-2 sm:ml-auto"> {/* sm:ml-auto to push buttons to right if no title */}
-          <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="lg" className="font-sans">
-            <Upload className="mr-2 h-5 w-5" />
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="font-sans">
+            <Upload className="mr-2 h-4 w-4" />
             导入配置
           </Button>
           <input
@@ -201,12 +222,12 @@ export function ConnectionsManager() {
             style={{ display: 'none' }}
             accept=".json"
           />
-          <Button onClick={handleExportConfigs} variant="outline" size="lg" className="font-sans">
-            <Download className="mr-2 h-5 w-5" />
+          <Button onClick={handleExportConfigs} variant="outline" size="sm" className="font-sans">
+            <Download className="mr-2 h-4 w-4" />
             导出配置
           </Button>
-          <Button onClick={() => handleOpenApiConfigDialog(null)} size="lg" className="font-sans">
-            <PlusCircle className="mr-2 h-5 w-5" />
+          <Button onClick={() => handleOpenApiConfigDialog(null)} size="sm" className="font-sans">
+            <PlusCircle className="mr-2 h-4 w-4" />
             添加新主控
           </Button>
         </div>
@@ -227,11 +248,12 @@ export function ConnectionsManager() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[80px] text-center font-sans">状态</TableHead>
+                <TableHead className="w-[60px] text-center font-sans">状态</TableHead>
                 <TableHead className="font-sans">主控名称</TableHead>
                 <TableHead className="font-sans">主控接口地址</TableHead>
-                <TableHead className="w-[150px] font-sans">前缀路径</TableHead>
-                <TableHead className="text-right w-[280px] font-sans">操作</TableHead>
+                <TableHead className="font-sans">API前缀</TableHead>
+                <TableHead className="font-sans text-center">忽略SSL</TableHead>
+                <TableHead className="text-right w-[250px] font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -245,6 +267,13 @@ export function ConnectionsManager() {
                   <TableCell className="font-medium break-all font-sans">{config.name}</TableCell>
                   <TableCell className="text-xs break-all font-mono">{config.apiUrl}</TableCell>
                   <TableCell className="text-xs break-all font-mono">{config.prefixPath || '无'}</TableCell>
+                  <TableCell className="text-center">
+                    {config.ignoreSslErrors ? (
+                      <AlertTriangle className="h-4 w-4 text-amber-500 inline-block" title="是"/>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">否</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-2">
                       <Button
@@ -254,7 +283,7 @@ export function ConnectionsManager() {
                         aria-label={`编辑主控 ${config.name}`}
                         className="font-sans"
                       >
-                        <Edit3 className="mr-1 h-4 w-4" />
+                        <Edit3 className="mr-1 h-3.5 w-3.5" />
                         编辑
                       </Button>
                       <AlertDialog>
@@ -267,7 +296,7 @@ export function ConnectionsManager() {
                             disabled={activeApiConfig?.id === config.id}
                             className="font-sans"
                           >
-                            <Trash2 className="mr-1 h-4 w-4" />
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
                             删除
                           </Button>
                         </AlertDialogTrigger>
@@ -283,7 +312,7 @@ export function ConnectionsManager() {
                               <AlertDialogCancel onClick={() => setDeletingConfig(null)} className="font-sans">取消</AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={handleDeleteConfirm}
-                                className="bg-destructive hover:bg-destructive/90 font-sans"
+                                className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
                               >
                                 删除
                               </AlertDialogAction>
@@ -299,7 +328,7 @@ export function ConnectionsManager() {
                         aria-label={`激活主控 ${config.name}`}
                         className="font-sans"
                       >
-                        <Power className="mr-1 h-4 w-4" />
+                        <Power className="mr-1 h-3.5 w-3.5" />
                         {activeApiConfig?.id === config.id ? '当前活动' : '设为活动'}
                       </Button>
                     </div>
@@ -317,9 +346,8 @@ export function ConnectionsManager() {
         onSave={handleSaveApiConfig}
         currentConfig={editingApiConfig}
         isEditing={!!editingApiConfig}
+        onLog={onLog}
       />
     </div>
   );
 }
-
-    

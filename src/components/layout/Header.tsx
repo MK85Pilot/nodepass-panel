@@ -20,19 +20,22 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Keep for navigation
+import type { AppLogEntry } from '@/components/nodepass/EventLog';
+
 
 interface HeaderProps {
   onManageApiConfigs: (configToEdit?: NamedApiConfig | null) => void;
   onClearActiveConfig?: () => void;
   hasActiveApiConfig: boolean;
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
-export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiConfig }: HeaderProps) {
+export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiConfig, onLog }: HeaderProps) {
   const { setTheme, theme } = useTheme();
-  const { apiConfigsList, activeApiConfig, setActiveApiConfigId, deleteApiConfig } = useApiConfig();
+  const { apiConfigsList, activeApiConfig, setActiveApiConfigId } = useApiConfig();
   const { toast } = useToast();
-  const router = useRouter();
+  const router = useRouter(); // Keep router for navigation
 
   const handleSwitchApiConfig = (id: string) => {
     const newActiveConf = apiConfigsList.find(c => c.id === id);
@@ -41,44 +44,25 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
       title: '活动主控已切换',
       description: `已连接到 “${newActiveConf?.name}”。`,
     });
-    window.location.href = '/';
+    // onLog is handled by HomePage's useEffect watching activeApiConfig
+    window.location.href = '/'; // Force full page reload
   };
-
-  const handleDeleteConfigFromDropdown = (configId: string, configName: string) => {
-    if (activeApiConfig?.id === configId) {
-      toast({
-        title: '操作失败',
-        description: '不能删除当前活动的主控。请先切换到其他主控。',
-        variant: 'destructive',
-      });
-      return;
-    }
-    deleteApiConfig(configId);
-    toast({
-      title: '主控已删除',
-      description: `“${configName}”已被删除。`,
-      variant: 'destructive',
-    });
-  };
-
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" style={{ height: 'var(--header-height)' }}>
       <div className="container mx-auto flex h-16 items-center px-4 sm:px-6 lg:px-8">
-        {/* Left Group: Logo, Title, Active API Name */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center" aria-label="主页">
             <Network className="mr-2 h-6 w-6 text-primary" />
-            <h1 className="text-flow-effect text-xl font-bold tracking-tight sm:text-2xl">NodePass 管理器</h1>
+            <h1 className="text-flow-effect text-xl font-title tracking-tight sm:text-2xl">NodePass 管理器</h1>
           </Link>
            {activeApiConfig && (
-            <span className="ml-3 text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full hidden sm:inline-block">
-              已连接: {activeApiConfig.name}
+            <span className="ml-3 text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full hidden sm:inline-block font-sans">
+              当前主控: {activeApiConfig.name}
             </span>
           )}
         </div>
 
-        {/* Right Group: Theme Toggle, Settings Dropdown - This group gets ml-auto */}
         <div className="flex items-center space-x-2 ml-auto">
           <Button
             variant="ghost"
@@ -95,8 +79,8 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                 <Settings className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>主控连接</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-64 font-sans">
+              <DropdownMenuLabel>主控管理</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => onManageApiConfigs(null)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 <span>添加新主控</span>

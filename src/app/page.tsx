@@ -1,12 +1,13 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
 import { CreateInstanceDialog } from '@/components/nodepass/CreateInstanceDialog';
 import { InstanceList } from '@/components/nodepass/InstanceList';
-import { EventLog } from '@/components/nodepass/EventLog'; // Re-import EventLog
+import { EventLog, type AppLogEntry } from '@/components/nodepass/EventLog';
+import { ConnectionsManager } from '@/components/nodepass/ConnectionsManager';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,17 @@ export default function HomePage() {
 
   const [isApiConfigDialogOpenForSetup, setIsApiConfigDialogOpenForSetup] = useState(false);
   const [editingApiConfigForSetup, setEditingApiConfigForSetup] = useState<NamedApiConfig | null>(null);
-
   const [isCreateInstanceDialogOpen, setIsCreateInstanceDialogOpen] = useState(false);
+
+  const [pageLogs, setPageLogs] = useState<AppLogEntry[]>([]);
+  const prevApiIdRef = useRef<string | null>(null);
+
+  const addPageLog = (message: string, type: AppLogEntry['type']) => {
+    setPageLogs(prevLogs => [
+      { timestamp: new Date().toISOString(), message, type },
+      ...prevLogs
+    ].slice(0, 100)); // Keep last 100 logs
+  };
 
   useEffect(() => {
     if (!isLoadingApiConfig && apiConfigsList.length === 0 && !activeApiConfig) {
@@ -37,6 +47,19 @@ export default function HomePage() {
       setIsApiConfigDialogOpenForSetup(true);
     }
   }, [apiConfigsList, isLoadingApiConfig, activeApiConfig]);
+
+  useEffect(() => {
+    if (activeApiConfig && prevApiIdRef.current !== activeApiConfig.id) {
+      if (prevApiIdRef.current !== null) { // Avoid logging on initial load
+        addPageLog(`活动主控已切换至: "${activeApiConfig.name}"`, 'INFO');
+      }
+      prevApiIdRef.current = activeApiConfig.id;
+    } else if (!activeApiConfig && prevApiIdRef.current !== null) {
+        addPageLog('活动主控已断开连接。', 'INFO');
+        prevApiIdRef.current = null;
+    }
+  }, [activeApiConfig]);
+
 
   const handleSaveApiConfigForSetup = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const savedConfig = addOrUpdateApiConfig(configToSave);
@@ -47,6 +70,7 @@ export default function HomePage() {
       title: '主控已添加',
       description: `“${savedConfig.name}”已保存并激活。`,
     });
+    addPageLog(`主控 "${savedConfig.name}" 已添加并激活。`, 'SUCCESS');
   };
 
   const handleOpenApiConfigDialogForSetup = () => {
@@ -72,7 +96,7 @@ export default function HomePage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout onLog={addPageLog}>
         {activeApiConfig ? (
           <div className="space-y-8">
             <div className="text-right">
@@ -88,10 +112,11 @@ export default function HomePage() {
               apiRoot={currentApiRoot}
               apiToken={currentToken}
               activeApiConfig={activeApiConfig}
+              onLog={addPageLog}
             />
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
+          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-8rem-var(--event-log-card-height,20rem))]"> {/* Adjusted height to account for log card */}
             <h2 className="text-2xl font-semibold mb-4 font-title">
               {apiConfigsList.length > 0 ? '未选择主控' : '需要主控连接'}
             </h2>
@@ -113,24 +138,11 @@ export default function HomePage() {
           </div>
         )}
 
-      {/* This card now holds the EventLog */}
-      <Card className="shadow-lg mt-8">
-        <CardHeader>
-          <CardTitle className="font-title">实时事件日志</CardTitle>
-          <CardDescription className="font-sans">
-            来自当前主控的实时事件流。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EventLog
-            key={currentApiId || 'no-api'} // Add key to ensure re-render on API change
-            apiId={currentApiId}
-            apiName={currentApiName}
-            apiRoot={currentApiRoot}
-            apiToken={currentToken}
-          />
-        </CardContent>
-      </Card>
+      {/* This card now holds the Application Action Log */}
+      <div className="mt-8" style={{ '--event-log-card-height': '20rem' } as React.CSSProperties}>
+        <EventLog logs={pageLogs} />
+      </div>
+      
 
       <ApiConfigDialog
         open={isApiConfigDialogOpenForSetup}
@@ -138,6 +150,7 @@ export default function HomePage() {
         onSave={handleSaveApiConfigForSetup}
         currentConfig={editingApiConfigForSetup}
         isEditing={!!editingApiConfigForSetup}
+        onLog={addPageLog}
       />
       <CreateInstanceDialog
         open={isCreateInstanceDialogOpen}
@@ -147,6 +160,7 @@ export default function HomePage() {
         apiToken={currentToken}
         apiName={currentApiName}
         activeApiConfig={activeApiConfig}
+        onLog={addPageLog}
       />
     </AppLayout>
   );

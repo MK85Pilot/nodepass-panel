@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound, ClipboardCopy } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -25,6 +25,7 @@ import { nodePassApi } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
+import type { AppLogEntry } from './EventLog';
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -40,9 +41,10 @@ interface InstanceListProps {
   apiRoot: string | null;
   apiToken: string | null;
   activeApiConfig: NamedApiConfig | null;
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
 }
 
-export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig }: InstanceListProps) {
+export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, onLog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -52,9 +54,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
-    queryKey: ['instances', apiId],
+    queryKey: ['instances', apiId], 
     queryFn: () => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
       return nodePassApi.getInstances(apiRoot, apiToken);
     },
     enabled: !!apiId && !!apiRoot && !!apiToken,
@@ -64,28 +66,34 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const updateInstanceMutation = useMutation({
     mutationFn: ({ instanceId, action }: { instanceId: string, action: UpdateInstanceRequest['action']}) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法更新实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
       return nodePassApi.updateInstance(instanceId, { action }, apiRoot, apiToken);
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      const actionTextMap = { start: '启动', stop: '停止', restart: '重启' };
+      const actionText = actionTextMap[variables.action] || variables.action;
       toast({
-        title: '实例已更新',
+        title: `实例操作: ${actionText}`,
         description: `实例 ${data.id.substring(0,8)}... 状态已改为 ${data.status}。`,
       });
+      onLog?.(`实例 ${data.id.substring(0,8)}... ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
+      const actionTextMap = { start: '启动', stop: '停止', restart: '重启' };
+      const actionText = actionTextMap[variables.action] || variables.action;
       toast({
-        title: '更新实例出错',
-        description: error.message || '未知错误。',
+        title: '实例操作失败',
+        description: `实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
+      onLog?.(`实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
   const deleteInstanceMutation = useMutation({
     mutationFn: (instanceId: string) => {
-      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法删除实例。");
+      if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整。");
       return nodePassApi.deleteInstance(instanceId, apiRoot, apiToken);
     },
     onSuccess: (_, instanceId) => {
@@ -93,15 +101,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         title: '实例已删除',
         description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
       });
+      onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTopology']}); 
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
     },
-    onError: (error: any) => {
+    onError: (error: any, instanceId) => {
       toast({
         title: '删除实例出错',
-        description: error.message || '未知错误。',
+        description: `删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
+       onLog?.(`删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -123,7 +135,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const filteredInstances = instances?.filter(instance =>
     instance.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    instance.type.toLowerCase().includes(searchTerm.toLowerCase())
+    (instance.id !== '********' && instance.type.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const renderSkeletons = () => {
@@ -160,7 +172,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <CardContent>
         {!apiId && (
           <div className="text-center py-10 text-muted-foreground font-sans">
-            请先选择活动主控。
+            请选择活动主控以查看实例。
           </div>
         )}
         {apiId && instancesError && (
@@ -192,13 +204,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     className="text-foreground/90 hover:text-foreground"
                     onDoubleClick={() => setSelectedInstanceForDetails(instance)}
                   >
-                    <TableCell className="font-medium truncate max-w-xs font-mono text-xs">{instance.id}</TableCell>
+                    <TableCell className="font-medium font-mono text-xs max-w-[100px] truncate" title={instance.id}>{instance.id}</TableCell>
                      <TableCell>
                       {instance.id === '********' ? (
-                        <span className="flex items-center text-xs font-sans whitespace-nowrap">
-                          <KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />
-                          API 密钥
-                        </span>
+                         <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+                           <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                         </Badge>
                       ) : (
                         <Badge
                           variant={instance.type === 'server' ? 'default' : 'accent'}
@@ -211,7 +222,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                     </TableCell>
                     <TableCell>
                       {instance.id === '********' ? (
-                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
+                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
                           <KeyRound className="mr-1 h-3.5 w-3.5" />
                           监听中
                         </Badge>
@@ -282,13 +293,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   <TableCell colSpan={7} className="text-center h-24 font-sans">
                     {isLoadingInstances
                       ? "加载中..."
-                      : !apiId
-                        ? "请先选择或添加一个主控。"
+                      : !activeApiConfig
+                        ? "请选择活动主控以查看实例。"
                         : searchTerm && (!filteredInstances || filteredInstances.length === 0)
-                          ? "无匹配搜索结果的实例。"
+                          ? `在 "${activeApiConfig.name}" 中未找到与 "${searchTerm}" 匹配的实例。`
                           : instances && instances.length === 0
-                            ? "当前主控下无实例。"
-                            : "加载中或无实例。"
+                            ? `主控 "${activeApiConfig.name}" 下无实例。`
+                            : "加载中或无可用实例数据。"
                     }
                   </TableCell>
                 </TableRow>
@@ -324,6 +335,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         apiRoot={apiRoot}
         apiToken={apiToken}
         activeApiConfig={activeApiConfig}
+        onLog={onLog}
       />
     </Card>
   );
