@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -179,13 +179,20 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                   <TableRow key={instance.id} className="text-foreground/90 hover:text-foreground">
                     <TableCell className="font-medium truncate max-w-xs font-mono text-xs">{instance.id}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={instance.type === 'server' ? 'default' : 'accent'}
-                        className="items-center whitespace-nowrap text-xs font-sans"
-                      >
-                        {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                        {instance.type === 'server' ? '服务端' : '客户端'}
-                      </Badge>
+                      {instance.id === '********' ? (
+                        <span className="flex items-center text-xs font-sans whitespace-nowrap">
+                          <KeyRound className="h-4 w-4 mr-1.5 text-primary" />
+                          API 密钥
+                        </span>
+                      ) : (
+                        <Badge
+                          variant={instance.type === 'server' ? 'default' : 'accent'}
+                          className="items-center whitespace-nowrap text-xs font-sans"
+                        >
+                          {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                          {instance.type === 'server' ? '服务端' : '客户端'}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <InstanceStatusBadge status={instance.status} />

@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound } from 'lucide-react';
 
 interface InstanceDetailsModalProps {
   instance: Instance | null;
@@ -34,16 +34,24 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
   if (!instance) return null;
 
   const detailItems = [
-    { label: "ID", value: instance.id, icon: <Fingerprint className="h-4 w-4 text-muted-foreground" /> },
-    { 
-      label: "类型", 
-      value: (
-        <Badge variant={instance.type === 'server' ? 'default' : 'accent'} className="capitalize whitespace-nowrap text-xs">
-          {instance.type === 'server' ? <ServerIcon className="h-3 w-3 mr-1" /> : <SmartphoneIcon className="h-3 w-3 mr-1" />}
+    { label: "ID", value: <span className="font-mono text-xs">{instance.id}</span>, icon: <Fingerprint className="h-4 w-4 text-muted-foreground" /> },
+    {
+      label: "类型",
+      value: instance.id === '********' ? (
+        <span className="flex items-center text-xs font-sans">
+          <KeyRound className="h-4 w-4 mr-1.5 text-primary" />
+          API 密钥
+        </span>
+      ) : (
+        <Badge
+          variant={instance.type === 'server' ? 'default' : 'accent'}
+          className="items-center whitespace-nowrap text-xs font-sans"
+        >
+          {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
           {instance.type === 'server' ? '服务端' : '客户端'}
         </Badge>
-      ), 
-      icon: instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" /> 
+      ),
+      icon: instance.id === '********' ? <KeyRound className="h-4 w-4 text-muted-foreground" /> : (instance.type === 'server' ? <ServerIcon className="h-4 w-4 text-muted-foreground" /> : <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />)
     },
     { label: "状态", value: <InstanceStatusBadge status={instance.status} />, icon: <Cable className="h-4 w-4 text-muted-foreground" /> },
     { label: "URL", value: <span className="break-all text-xs font-mono">{instance.url}</span>, fullWidth: true },
