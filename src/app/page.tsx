@@ -6,7 +6,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
 import { CreateInstanceDialog } from '@/components/nodepass/CreateInstanceDialog';
 import { InstanceList } from '@/components/nodepass/InstanceList';
-import { EventLog } from '@/components/nodepass/EventLog';
+// import { EventLog } from '@/components/nodepass/EventLog'; // 移除了 EventLog 的导入
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -43,7 +43,7 @@ export default function HomePage() {
     setEditingApiConfigForSetup(null);
     setIsApiConfigDialogOpenForSetup(false);
     toast({
-      title: configToSave.id ? '主控已更新' : '主控已添加',
+      title: '主控已添加',
       description: `“${savedConfig.name}”已保存并激活。`,
     });
   };
@@ -86,22 +86,22 @@ export default function HomePage() {
               apiToken={currentToken}
               activeApiConfig={activeApiConfig}
             />
-            <EventLog
+            {/* <EventLog
               apiId={activeApiConfig.id}
               apiName={activeApiConfig.name}
               apiRoot={currentApiRoot}
               apiToken={currentToken}
-            />
+            /> */} {/* 移除了 EventLog 组件的渲染 */}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]"> {/* Adjusted height for centering */}
+          <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
             <h2 className="text-2xl font-semibold mb-4 font-title">
-              {apiConfigsList.length > 0 ? '未选择主控连接' : '需要主控连接'}
+              {apiConfigsList.length > 0 ? '未选择主控' : '需要主控连接'}
             </h2>
             <p className="text-muted-foreground mb-6 font-sans">
               {apiConfigsList.length > 0
-                ? '请选择或添加主控连接。'
-                : '请先添加主控连接。'}
+                ? '请选择或添加一个主控连接。'
+                : '请先添加主控连接以开始使用。'}
             </p>
             {apiConfigsList.length === 0 && (
               <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
