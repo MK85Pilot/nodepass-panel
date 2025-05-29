@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 const API_CONFIGS_LIST_STORAGE_KEY = 'nodepass_api_configs_list';
 const ACTIVE_API_CONFIG_ID_STORAGE_KEY = 'nodepass_active_api_config_id';
 
+export type MasterLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'master';
+export type MasterTlsMode = '0' | '1' | '2' | 'master';
+
 export interface ApiConfig {
   apiUrl: string;
   token: string;
@@ -16,6 +19,8 @@ export interface ApiConfig {
 export interface NamedApiConfig extends ApiConfig {
   id: string;
   name: string;
+  masterDefaultLogLevel?: MasterLogLevel;
+  masterDefaultTlsMode?: MasterTlsMode;
 }
 
 export function useApiConfig() {
@@ -27,14 +32,21 @@ export function useApiConfig() {
     try {
       const storedConfigsList = localStorage.getItem(API_CONFIGS_LIST_STORAGE_KEY);
       if (storedConfigsList) {
-        setApiConfigsList(JSON.parse(storedConfigsList));
+        const parsedConfigs = JSON.parse(storedConfigsList) as NamedApiConfig[];
+        // Ensure new optional fields have default values if missing from old storage
+        const migratedConfigs = parsedConfigs.map(config => ({
+          ...config,
+          masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+          masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+        }));
+        setApiConfigsList(migratedConfigs);
       }
       const storedActiveConfigId = localStorage.getItem(ACTIVE_API_CONFIG_ID_STORAGE_KEY);
       if (storedActiveConfigId) {
         setActiveConfigId(storedActiveConfigId);
       }
     } catch (error) {
-      console.warn("无法从 localStorage 加载 API 配置列表:", error);
+      console.warn("无法从 localStorage 加载主控配置列表:", error);
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +57,7 @@ export function useApiConfig() {
       localStorage.setItem(API_CONFIGS_LIST_STORAGE_KEY, JSON.stringify(configs));
       setApiConfigsList(configs);
     } catch (error) {
-      console.error("无法将 API 配置列表保存到 localStorage:", error);
+      console.error("无法将主控配置列表保存到 localStorage:", error);
     }
   }, []);
 
@@ -58,28 +70,32 @@ export function useApiConfig() {
       }
       setActiveConfigId(id);
     } catch (error) {
-      console.error("无法将活动 API 配置 ID 保存到 localStorage:", error);
+      console.error("无法将活动主控 ID 保存到 localStorage:", error);
     }
   }, []);
 
   const addOrUpdateApiConfig = useCallback((config: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const newId = config.id || uuidv4();
-    const newConfigWithId = { ...config, id: newId };
+    const newConfigWithIdAndDefaults = {
+      ...config,
+      id: newId,
+      masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+      masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+    };
     
     setApiConfigsList(prevList => {
       const existingIndex = prevList.findIndex(c => c.id === newId);
       let newList;
       if (existingIndex > -1) {
         newList = [...prevList];
-        newList[existingIndex] = newConfigWithId;
+        newList[existingIndex] = newConfigWithIdAndDefaults;
       } else {
-        newList = [...prevList, newConfigWithId];
+        newList = [...prevList, newConfigWithIdAndDefaults];
       }
       saveApiConfigsList(newList);
       return newList;
     });
-    // Do not automatically set as active, let caller decide.
-    return newConfigWithId;
+    return newConfigWithIdAndDefaults;
   }, [saveApiConfigsList]);
 
   const deleteApiConfig = useCallback((id: string) => {
@@ -87,7 +103,6 @@ export function useApiConfig() {
       const newList = prevList.filter(c => c.id !== id);
       saveApiConfigsList(newList);
       if (activeConfigId === id) {
-        // If the active config was deleted, try to set the first in the list as active
         saveActiveConfigId(newList.length > 0 ? newList[0].id : null);
       }
       return newList;
@@ -100,12 +115,27 @@ export function useApiConfig() {
 
   const activeApiConfig = useMemo(() => {
     if (!activeConfigId) return null;
-    return apiConfigsList.find(c => c.id === activeConfigId) || null;
+    const config = apiConfigsList.find(c => c.id === activeConfigId) || null;
+    if (config) {
+      return {
+        ...config,
+        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+      };
+    }
+    return null;
   }, [apiConfigsList, activeConfigId]);
 
-  // Stricter getters: require an ID
   const getApiConfigById = useCallback((id: string): NamedApiConfig | null => {
-    return apiConfigsList.find(c => c.id === id) || null;
+    const config = apiConfigsList.find(c => c.id === id) || null;
+    if (config) {
+      return {
+        ...config,
+        masterDefaultLogLevel: config.masterDefaultLogLevel || 'master',
+        masterDefaultTlsMode: config.masterDefaultTlsMode || 'master',
+      };
+    }
+    return null;
   }, [apiConfigsList]);
 
   const getApiRootUrl = useCallback((id: string): string | null => {
@@ -132,8 +162,8 @@ export function useApiConfig() {
     deleteApiConfig,
     setActiveApiConfigId: saveActiveConfigId,
     clearActiveApiConfig,
-    getApiRootUrl, // For specific config by ID
-    getToken,      // For specific config by ID
-    getApiConfigById, // Helper to get full config
+    getApiRootUrl,
+    getToken,
+    getApiConfigById,
   };
 }

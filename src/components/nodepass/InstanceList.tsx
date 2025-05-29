@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ArrowDown, ArrowUp, ServerIcon, SmartphoneIcon, Search, Pencil, KeyRound, ClipboardCopy } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -24,6 +24,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import type { NamedApiConfig } from '@/hooks/use-api-key';
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -38,9 +39,10 @@ interface InstanceListProps {
   apiName: string | null;
   apiRoot: string | null;
   apiToken: string | null;
+  activeApiConfig: NamedApiConfig | null; // Pass the full active config
 }
 
-export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceListProps) {
+export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -50,7 +52,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
-    queryKey: ['instances', apiId],
+    queryKey: ['instances', apiId], 
     queryFn: () => {
       if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取实例。");
       return nodePassApi.getInstances(apiRoot, apiToken);
@@ -198,7 +200,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                 filteredInstances.map((instance) => (
                   <TableRow key={instance.id} className="text-foreground/90 hover:text-foreground">
                     <TableCell className="font-medium truncate max-w-xs font-mono text-xs">{instance.id}</TableCell>
-                    <TableCell>
+                     <TableCell>
                       {instance.id === '********' ? (
                         <span className="flex items-center text-xs font-sans whitespace-nowrap">
                           <KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />
@@ -230,7 +232,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                         <span 
                           className="cursor-pointer hover:text-primary transition-colors duration-150"
                           title={`点击复制: ${instance.url}`}
-                          onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
+                          onClick={(e) => {
+                            e.stopPropagation(); 
+                            handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+                          }}
                         >
                           {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
                         </span>
@@ -323,6 +328,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
         apiName={apiName}
         apiRoot={apiRoot}
         apiToken={apiToken}
+        activeApiConfig={activeApiConfig}
       />
     </Card>
   );

@@ -13,8 +13,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { KeyRound, Eye, EyeOff } from 'lucide-react';
-import type { NamedApiConfig } from '@/hooks/use-api-key'; 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { KeyRound, Eye, EyeOff, Info } from 'lucide-react';
+import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
 
 interface ApiConfigDialogProps {
   open: boolean;
@@ -30,6 +31,9 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [tokenInput, setTokenInput] = useState('');
   const [prefixPathInput, setPrefixPathInput] = useState('');
   const [showToken, setShowToken] = useState(false);
+  const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
+  const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
+
 
   useEffect(() => {
     if (open) {
@@ -37,7 +41,9 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000');
       setTokenInput(currentConfig?.token || '');
       setPrefixPathInput(currentConfig?.prefixPath || '');
-      setShowToken(false); // Reset token visibility when dialog opens
+      setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
+      setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
+      setShowToken(false);
     }
   }, [open, currentConfig]);
 
@@ -50,6 +56,8 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
         prefixPath: prefixPathInput.trim() || null,
+        masterDefaultLogLevel: masterLogLevelInput,
+        masterDefaultTlsMode: masterTlsModeInput,
       });
       onOpenChange(false);
     }
@@ -68,33 +76,36 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               <KeyRound className="mr-2 h-5 w-5 text-primary" />
               {isEditing ? '编辑主控连接' : '添加主控连接'}
             </DialogTitle>
-            <DialogDescription>
-              输入 NodePass 主控名称、URL、令牌和可选前缀路径。主控接口版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
+            <DialogDescription className="font-sans">
+              输入 NodePass 主控名称、URL、令牌和可选前缀路径。API 端点版本固定为 v1 (例: {displayApiUrl}{displayPrefixPath}/v1/*)。
+              <br/>下方可选字段用于记录此主控的默认启动配置，仅作参考。
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
             <div className="space-y-1">
-              <Label htmlFor="config-name">主控名称</Label>
+              <Label htmlFor="config-name" className="font-sans">主控名称</Label>
               <Input
                 id="config-name"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 placeholder="例: 本地主控"
                 required
+                className="font-sans"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="api-url">主控地址</Label>
+              <Label htmlFor="api-url" className="font-sans">主控地址</Label>
               <Input
                 id="api-url"
                 value={apiUrlInput}
                 onChange={(e) => setApiUrlInput(e.target.value)}
                 placeholder="例: http://localhost:3000"
                 required
+                className="font-sans"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="token">令牌</Label>
+              <Label htmlFor="token" className="font-sans">令牌</Label>
               <div className="relative">
                 <Input
                   id="token"
@@ -103,7 +114,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                   placeholder="输入令牌"
                   type={showToken ? 'text' : 'password'}
                   required
-                  className="pr-10" // Add padding to make space for the icon
+                  className="pr-10 font-sans"
                 />
                 <Button
                   type="button"
@@ -118,16 +129,57 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="prefix-path">前缀路径 (可选)</Label>
+              <Label htmlFor="prefix-path" className="font-sans">前缀路径 (可选)</Label>
               <Input
                 id="prefix-path"
                 value={prefixPathInput}
                 onChange={(e) => setPrefixPathInput(e.target.value)}
                 placeholder="例: api (若主控为 http://host/api/v1)"
+                className="font-sans"
               />
             </div>
+
+            <div className="my-3 border-t border-border"></div>
+
+            <div className="space-y-1">
+              <Label htmlFor="master-log-level" className="font-sans flex items-center">
+                <Info size={14} className="mr-1.5 text-muted-foreground" />
+                主控默认日志级别 (可选参考)
+              </Label>
+              <Select value={masterLogLevelInput} onValueChange={(value) => setMasterLogLevelInput(value as MasterLogLevel)}>
+                <SelectTrigger className="font-sans text-sm">
+                  <SelectValue placeholder="选择日志级别" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="master">未指定</SelectItem>
+                  <SelectItem value="debug">Debug</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                  <SelectItem value="warn">Warn</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="fatal">Fatal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="master-tls-mode" className="font-sans flex items-center">
+                 <Info size={14} className="mr-1.5 text-muted-foreground" />
+                主控默认TLS模式 (可选参考)
+              </Label>
+              <Select value={masterTlsModeInput} onValueChange={(value) => setMasterTlsModeInput(value as MasterTlsMode)}>
+                <SelectTrigger className="font-sans text-sm">
+                  <SelectValue placeholder="选择TLS模式" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="master">未指定</SelectItem>
+                  <SelectItem value="0">0: 无TLS (明文)</SelectItem>
+                  <SelectItem value="1">1: 自签名证书</SelectItem>
+                  <SelectItem value="2">2: 自定义证书</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="font-sans">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
             <Button type="submit" disabled={!nameInput.trim() || !apiUrlInput.trim() || !tokenInput.trim()}>保存配置</Button>
           </DialogFooter>

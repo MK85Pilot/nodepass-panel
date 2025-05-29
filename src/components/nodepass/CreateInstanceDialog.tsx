@@ -24,6 +24,7 @@ import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
 import { PlusCircle, Loader2 } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
+import type { NamedApiConfig } from '@/hooks/use-api-key'; // Import NamedApiConfig
 
 type CreateInstanceFormValues = z.infer<typeof createInstanceFormSchema>;
 
@@ -34,6 +35,7 @@ interface CreateInstanceDialogProps {
   apiRoot: string | null;
   apiToken: string | null;
   apiName: string | null;
+  activeApiConfig: NamedApiConfig | null; // Pass the full active config
 }
 
 function parseTunnelAddr(urlString: string): string | null {
@@ -64,7 +66,7 @@ function parseTunnelAddr(urlString: string): string | null {
 }
 
 
-export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName }: CreateInstanceDialogProps) {
+export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -181,6 +183,20 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     const constructedUrl = buildUrl(values);
     createInstanceMutation.mutate({ url: constructedUrl });
   }
+  
+  const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
+    ? activeApiConfig.masterDefaultLogLevel
+    : '未指定';
+  const masterTlsModeDisplayMap = {
+    '0': '0: 无TLS',
+    '1': '1: 自签名',
+    '2': '2: 自定义',
+    'master': '未指定',
+  };
+  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode
+    ? masterTlsModeDisplayMap[activeApiConfig.masterDefaultTlsMode]
+    : '未指定';
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -201,12 +217,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               name="instanceType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>实例类型</FormLabel>
+                  <FormLabel className="font-sans">实例类型</FormLabel>
                   <Select onValueChange={(value) => {
                       field.onChange(value);
                   }} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger className="text-sm">
+                      <SelectTrigger className="text-sm font-sans">
                         <SelectValue placeholder="选择实例类型" />
                       </SelectTrigger>
                     </FormControl>
@@ -225,15 +241,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               name="tunnelAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>隧道地址</FormLabel>
+                  <FormLabel className="font-sans">隧道地址</FormLabel>
                   <FormControl>
                     <Input 
-                      className="text-sm"
+                      className="text-sm font-mono"
                       placeholder={instanceType === "server" ? "服务端监听控制通道地址, 例: 0.0.0.0:10101" : "连接的 NodePass 服务端隧道地址, 例: your.server.com:10101"} 
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription className="font-sans">
+                  <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
                       ? "服务端模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
                       : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
@@ -245,7 +261,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
             {instanceType === 'client' && (
               <FormItem>
-                <FormLabel>或从现有服务端选择</FormLabel>
+                <FormLabel className="font-sans">或从现有服务端选择</FormLabel>
                 <Select 
                   onValueChange={(value) => {
                     if (value) {
@@ -255,7 +271,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   disabled={isLoadingServerInstances || !serverInstances || serverInstances.length === 0}
                 >
                   <FormControl>
-                    <SelectTrigger className="text-sm">
+                    <SelectTrigger className="text-sm font-sans">
                       <SelectValue placeholder={
                         isLoadingServerInstances ? "加载服务端中..." : 
                         (!serverInstances || serverInstances.length === 0) ? "无可用服务端" : "选择服务端隧道"
@@ -264,19 +280,19 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </FormControl>
                   <SelectContent>
                     {isLoadingServerInstances && (
-                        <div className="flex items-center justify-center p-2">
+                        <div className="flex items-center justify-center p-2 font-sans">
                             <Loader2 className="h-4 w-4 animate-spin mr-2"/> 加载中...
                         </div>
                     )}
                     {serverInstances && serverInstances.map(server => (
-                      <SelectItem key={server.id} value={server.tunnelAddr}>
+                      <SelectItem key={server.id} value={server.tunnelAddr} className="font-sans">
                         {server.display}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {serverInstances && serverInstances.length === 0 && !isLoadingServerInstances && (
-                    <FormDescription className="font-sans">当前主控无可用服务端实例。</FormDescription>
+                    <FormDescription className="font-sans text-xs">当前主控无可用服务端实例。</FormDescription>
                 )}
               </FormItem>
             )}
@@ -287,15 +303,15 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               name="targetAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>目标地址</FormLabel>
+                  <FormLabel className="font-sans">目标地址</FormLabel>
                   <FormControl>
                     <Input 
-                      className="text-sm"
+                      className="text-sm font-mono"
                       placeholder={instanceType === "server" ? "服务端监听流量转发地址, 例: 0.0.0.0:8080" : "本地流量转发地址, 例: 127.0.0.1:8000"} 
                       {...field} 
                     />
                   </FormControl>
-                   <FormDescription className="font-sans">
+                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
                       ? "服务端模式: 监听隧道流量的地址 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 接收流量的本地转发地址 (例 '127.0.0.1:8000')。"}
@@ -310,22 +326,25 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
               name="logLevel"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>日志级别</FormLabel>
+                  <FormLabel className="font-sans">日志级别</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger className="text-sm">
+                      <SelectTrigger className="text-sm font-sans">
                         <SelectValue placeholder="选择日志级别" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="master">默认 (主控配置)</SelectItem>
-                      <SelectItem value="debug">Debug</SelectItem>
-                      <SelectItem value="info">Info</SelectItem>
-                      <SelectItem value="warn">Warn</SelectItem>
-                      <SelectItem value="error">Error</SelectItem>
-                      <SelectItem value="fatal">Fatal</SelectItem>
+                      <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                      <SelectItem value="debug" className="font-sans">Debug</SelectItem>
+                      <SelectItem value="info" className="font-sans">Info</SelectItem>
+                      <SelectItem value="warn" className="font-sans">Warn</SelectItem>
+                      <SelectItem value="error" className="font-sans">Error</SelectItem>
+                      <SelectItem value="fatal" className="font-sans">Fatal</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormDescription className="font-sans text-xs">
+                    选择“默认”将继承主控设置 (当前主控参考默认: {masterLogLevelDisplay})。
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -338,20 +357,23 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>TLS 模式 (服务端)</FormLabel>
+                      <FormLabel className="font-sans">TLS 模式 (服务端)</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value || "master"}>
                         <FormControl>
-                          <SelectTrigger className="text-sm">
+                          <SelectTrigger className="text-sm font-sans">
                             <SelectValue placeholder="选择 TLS 模式" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="master">默认 (主控配置)</SelectItem>
-                          <SelectItem value="0">0: 无 TLS (明文)</SelectItem>
-                          <SelectItem value="1">1: 自签名证书</SelectItem>
-                          <SelectItem value="2">2: 自定义证书</SelectItem>
+                          <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                          <SelectItem value="0" className="font-sans">0: 无 TLS (明文)</SelectItem>
+                          <SelectItem value="1" className="font-sans">1: 自签名证书</SelectItem>
+                          <SelectItem value="2" className="font-sans">2: 自定义证书</SelectItem>
                         </SelectContent>
                       </Select>
+                       <FormDescription className="font-sans text-xs">
+                        选择“默认”将继承主控设置 (当前主控参考默认TLS: {masterTlsModeDisplay})。
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -363,10 +385,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       name="certPath"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>证书路径 (TLS 2)</FormLabel>
+                          <FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input 
-                              className="text-sm"
+                              className="text-sm font-mono"
                               placeholder="例: /path/to/cert.pem" 
                               {...field} 
                               value={field.value || ""}
@@ -381,10 +403,10 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       name="keyPath"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>密钥路径 (TLS 2)</FormLabel>
+                          <FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input 
-                              className="text-sm"
+                              className="text-sm font-mono"
                               placeholder="例: /path/to/key.pem" 
                               {...field} 
                               value={field.value || ""}
@@ -400,7 +422,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             )}
           </form>
         </Form>
-        <DialogFooter className="pt-4">
+        <DialogFooter className="pt-4 font-sans">
           <DialogClose asChild>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={createInstanceMutation.isPending}>
               取消

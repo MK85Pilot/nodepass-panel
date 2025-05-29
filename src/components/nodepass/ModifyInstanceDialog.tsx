@@ -24,6 +24,7 @@ import type { Instance, ModifyInstanceConfigRequest } from '@/types/nodepass';
 import { Pencil } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
+import type { NamedApiConfig } from '@/hooks/use-api-key'; // Import NamedApiConfig
 
 interface ModifyInstanceDialogProps {
   instance: Instance | null;
@@ -33,6 +34,7 @@ interface ModifyInstanceDialogProps {
   apiRoot: string | null;
   apiToken: string | null;
   apiName: string | null;
+  activeApiConfig: NamedApiConfig | null; // Pass the full active config
 }
 
 interface ParsedNodePassUrl {
@@ -51,7 +53,7 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
     tunnelAddress: '',
     targetAddress: '',
     logLevel: 'master',
-    tlsMode: null, // Will be 'master' for server if not specified
+    tlsMode: null, 
     certPath: '',
     keyPath: '',
   };
@@ -64,9 +66,8 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
       result.instanceType = schemeMatch[1] as 'server' | 'client';
     } else {
       console.warn("无法从 URL 解析实例类型:", url);
-      // Attempt to guess type if scheme is missing but format is recognizable
       if (url.includes("?tls=") || url.includes("&tls=")) result.instanceType = "server";
-      else result.instanceType = "client"; // Best guess
+      else result.instanceType = "client"; 
     }
 
     const restOfUrl = schemeMatch ? url.substring(schemeMatch[0].length) : url;
@@ -105,7 +106,6 @@ function parseNodePassUrl(url: string): ParsedNodePassUrl {
         }
       }
     } else {
-      // Defaults if no query part
       result.logLevel = 'master';
       if (result.instanceType === 'server') {
         result.tlsMode = 'master';
@@ -139,13 +139,13 @@ function buildUrl(values: ModifyInstanceFormValues): string {
 }
 
 
-export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiRoot, apiToken, apiName }: ModifyInstanceDialogProps) {
+export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: ModifyInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<ModifyInstanceFormValues>({
     resolver: zodResolver(modifyInstanceFormSchema),
-    defaultValues: { // These will be overwritten by parsed URL
+    defaultValues: { 
       instanceType: 'server', 
       tunnelAddress: '',
       targetAddress: '',
@@ -206,6 +206,19 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
       modifyInstanceMutation.mutate({ instanceId: instance.id, config: { url: newUrl } });
     }
   }
+  
+  const masterLogLevelDisplay = activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master'
+    ? activeApiConfig.masterDefaultLogLevel
+    : '未指定';
+  const masterTlsModeDisplayMap = {
+    '0': '0: 无TLS',
+    '1': '1: 自签名',
+    '2': '2: 自定义',
+    'master': '未指定',
+  };
+  const masterTlsModeDisplay = activeApiConfig?.masterDefaultTlsMode
+    ? masterTlsModeDisplayMap[activeApiConfig.masterDefaultTlsMode]
+    : '未指定';
 
   if (!instance) return null;
 
@@ -228,23 +241,23 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="instanceType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>实例类型 (只读)</FormLabel>
+                  <FormLabel className="font-sans">实例类型 (只读)</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
                     value={field.value} 
-                    disabled // Instance type is not changeable
+                    disabled 
                   >
                     <FormControl>
-                      <SelectTrigger className="text-sm">
+                      <SelectTrigger className="text-sm font-sans">
                         <SelectValue placeholder="选择实例类型" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="server">服务端</SelectItem>
-                      <SelectItem value="client">客户端</SelectItem>
+                      <SelectItem value="server" className="font-sans">服务端</SelectItem>
+                      <SelectItem value="client" className="font-sans">客户端</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription className="font-sans">实例的类型创建后不可更改。</FormDescription>
+                  <FormDescription className="font-sans text-xs">实例的类型创建后不可更改。</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -255,7 +268,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="tunnelAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>隧道地址</FormLabel>
+                  <FormLabel className="font-sans">隧道地址</FormLabel>
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
@@ -263,7 +276,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       {...field}
                     />
                   </FormControl>
-                   <FormDescription className="font-sans">
+                   <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
                       ? "服务端模式: 监听控制连接 (例 '0.0.0.0:10101')。"
                       : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
@@ -278,7 +291,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="targetAddress"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>目标地址</FormLabel>
+                  <FormLabel className="font-sans">目标地址</FormLabel>
                   <FormControl>
                     <Input
                       className="text-sm font-mono"
@@ -286,7 +299,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription className="font-sans">
+                  <FormDescription className="font-sans text-xs">
                     {instanceType === "server"
                       ? "服务端模式: 监听隧道流量 (例 '0.0.0.0:8080')。"
                       : "客户端模式: 本地接收流量转发地址 (例 '127.0.0.1:8000')。"}
@@ -301,22 +314,25 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
               name="logLevel"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>日志级别</FormLabel>
+                  <FormLabel className="font-sans">日志级别</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger className="text-sm">
+                      <SelectTrigger className="text-sm font-sans">
                         <SelectValue placeholder="选择日志级别" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="master">默认 (主控配置)</SelectItem>
-                      <SelectItem value="debug">Debug</SelectItem>
-                      <SelectItem value="info">Info</SelectItem>
-                      <SelectItem value="warn">Warn</SelectItem>
-                      <SelectItem value="error">Error</SelectItem>
-                      <SelectItem value="fatal">Fatal</SelectItem>
+                      <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                      <SelectItem value="debug" className="font-sans">Debug</SelectItem>
+                      <SelectItem value="info" className="font-sans">Info</SelectItem>
+                      <SelectItem value="warn" className="font-sans">Warn</SelectItem>
+                      <SelectItem value="error" className="font-sans">Error</SelectItem>
+                      <SelectItem value="fatal" className="font-sans">Fatal</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormDescription className="font-sans text-xs">
+                    选择“默认”将继承主控设置 (当前主控参考默认: {masterLogLevelDisplay})。
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -329,20 +345,23 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                   name="tlsMode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>TLS 模式 (服务端)</FormLabel>
+                      <FormLabel className="font-sans">TLS 模式 (服务端)</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || "master"}>
                         <FormControl>
-                          <SelectTrigger className="text-sm">
+                          <SelectTrigger className="text-sm font-sans">
                             <SelectValue placeholder="选择TLS模式" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="master">默认 (主控配置)</SelectItem>
-                          <SelectItem value="0">0: 无TLS (明文)</SelectItem>
-                          <SelectItem value="1">1: 自签名证书</SelectItem>
-                          <SelectItem value="2">2: 自定义证书</SelectItem>
+                          <SelectItem value="master" className="font-sans">默认 (主控配置)</SelectItem>
+                          <SelectItem value="0" className="font-sans">0: 无TLS (明文)</SelectItem>
+                          <SelectItem value="1" className="font-sans">1: 自签名证书</SelectItem>
+                          <SelectItem value="2" className="font-sans">2: 自定义证书</SelectItem>
                         </SelectContent>
                       </Select>
+                      <FormDescription className="font-sans text-xs">
+                        选择“默认”将继承主控设置 (当前主控参考默认TLS: {masterTlsModeDisplay})。
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -354,7 +373,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       name="certPath"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>证书路径 (TLS 2)</FormLabel>
+                          <FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input
                               className="text-sm font-mono"
@@ -372,7 +391,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
                       name="keyPath"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>密钥路径 (TLS 2)</FormLabel>
+                          <FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel>
                           <FormControl>
                             <Input
                               className="text-sm font-mono"
@@ -391,7 +410,7 @@ export function ModifyInstanceDialog({ instance, open, onOpenChange, apiId, apiR
             )}
           </form>
         </Form>
-        <DialogFooter className="pt-4">
+        <DialogFooter className="pt-4 font-sans">
           <DialogClose asChild>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={modifyInstanceMutation.isPending}>
               取消

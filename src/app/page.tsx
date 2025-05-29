@@ -62,7 +62,7 @@ export default function HomePage() {
       <AppLayout>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg">加载主控配置...</p>
+          <p className="ml-4 text-lg font-sans">加载主控配置...</p>
         </div>
       </AppLayout>
     );
@@ -73,7 +73,7 @@ export default function HomePage() {
         {activeApiConfig ? (
           <div className="space-y-8">
             <div className="text-right">
-              <Button onClick={() => setIsCreateInstanceDialogOpen(true)} disabled={!currentApiRoot || !currentToken}>
+              <Button onClick={() => setIsCreateInstanceDialogOpen(true)} disabled={!currentApiRoot || !currentToken} className="font-sans">
                 <PlusCircle className="mr-2 h-5 w-5" />
                 创建新实例
               </Button>
@@ -84,6 +84,7 @@ export default function HomePage() {
               apiName={activeApiConfig.name}
               apiRoot={currentApiRoot}
               apiToken={currentToken}
+              activeApiConfig={activeApiConfig}
             />
             <EventLog
               apiId={activeApiConfig.id}
@@ -94,21 +95,21 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]"> {/* Adjusted height for centering */}
-            <h2 className="text-2xl font-semibold mb-4">
+            <h2 className="text-2xl font-semibold mb-4 font-title">
               {apiConfigsList.length > 0 ? '未选择主控连接' : '需要主控连接'}
             </h2>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-muted-foreground mb-6 font-sans">
               {apiConfigsList.length > 0
                 ? '请选择或添加主控连接。'
                 : '请先添加主控连接。'}
             </p>
             {apiConfigsList.length === 0 && (
-              <Button onClick={handleOpenApiConfigDialogForSetup} size="lg">
+              <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
                 添加主控连接
               </Button>
             )}
              {apiConfigsList.length > 0 && !activeApiConfig && (
-              <p className="text-sm text-muted-foreground mt-4">
+              <p className="text-sm text-muted-foreground mt-4 font-sans">
                 点击右上角设置图标管理主控连接。
               </p>
             )}
@@ -128,6 +129,7 @@ export default function HomePage() {
         apiRoot={currentApiRoot}
         apiToken={currentToken}
         apiName={activeApiConfig?.name || null}
+        activeApiConfig={activeApiConfig}
       />
     </AppLayout>
   );
