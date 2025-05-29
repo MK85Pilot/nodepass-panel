@@ -107,19 +107,19 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
           case 'update':
           case 'delete':
             frontendEventType = serverEventPayload.type;
-            frontendEventData = serverEventPayload.instance || {}; // The whole instance is usually the data
+            frontendEventData = serverEventPayload.instance || {}; 
             instanceDetailsPayload = serverEventPayload.instance;
             break;
           case 'log':
             frontendEventType = 'log';
             let rawLogData = serverEventPayload.logs || `日志事件，但缺少 .logs 字段: ${JSON.stringify(serverEventPayload)}`;
             if (typeof rawLogData === 'string') {
-              parsedLevel = parseLogLevel(rawLogData); // Parse level from raw data
-              frontendEventData = stripAnsiCodes(rawLogData); // Store stripped data
+              parsedLevel = parseLogLevel(rawLogData); 
+              frontendEventData = stripAnsiCodes(rawLogData); 
             } else {
               frontendEventData = rawLogData;
             }
-            instanceDetailsPayload = serverEventPayload.instance; // Log events also carry instance context
+            instanceDetailsPayload = serverEventPayload.instance; 
             break;
           case 'shutdown':
             frontendEventType = 'shutdown';
@@ -134,7 +134,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
             break;
           default:
             console.warn("未知服务端事件类型 (fetch):", serverEventPayload.type, serverEventPayload);
-            frontendEventType = 'log'; // Treat unknown as log
+            frontendEventType = 'log'; 
             let unknownData = serverEventPayload.data || serverEventPayload.instance || serverEventPayload;
             frontendEventData = `未知事件 ${serverEventPayload.type}: ${JSON.stringify(unknownData)}`;
             if (typeof frontendEventData === 'string') {
@@ -146,8 +146,8 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         
         const newEventToLog: InstanceEvent = {
           type: frontendEventType,
-          data: frontendEventData, // This could be the instance object or log string
-          instanceDetails: instanceDetailsPayload, // Explicitly store instance details
+          data: frontendEventData, 
+          instanceDetails: instanceDetailsPayload, 
           level: parsedLevel,
           timestamp: serverEventPayload.time || new Date().toISOString(),
         };
@@ -158,7 +158,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         const errorEventToLog: InstanceEvent = { type: 'log', data: `解析事件错误: ${stripAnsiCodes(eventDataLine)}`, timestamp: new Date().toISOString(), level: 'ERROR' };
         addEventToLog(errorEventToLog);
       }
-    } else if (eventDataLine && !eventDataLine.startsWith('retry:')) { // Handle plain messages, ignore retry lines from server
+    } else if (eventDataLine && !eventDataLine.startsWith('retry:')) { 
         const genericEvent: InstanceEvent = {
           type: 'log',
           data: `通用消息: ${stripAnsiCodes(eventDataLine)}`,
@@ -183,15 +183,13 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
     
     const eventsUrl = getEventsUrl(apiRoot);
     
-    if (isInitialAttemptForThisApi) {
-      setUiConnectionStatus('connecting');
-      setEvents(prev => [{ type: 'log', data: `正在初始化事件流 (fetch) 到 ${eventsUrl} (携带 X-API-Key)...`, timestamp: new Date().toISOString() }, ...prev.filter(e => {
-        if (typeof e.data !== 'string') return true;
-        return !STATUS_MESSAGE_KEYWORDS.some(kw => (e.data as string).includes(kw));
-      })]);
+    if (isInitialAttemptForThisApi && !hasLoggedInitialConnectionRef.current) {
+        setEvents(prev => [{ type: 'log', data: `正在初始化事件流 (fetch) 到 ${eventsUrl} (携带 X-API-Key)...`, timestamp: new Date().toISOString() }, ...prev.filter(e => typeof e.data !== 'string' || (!e.data.startsWith('正在初始化') && !e.data.includes('错误') && !e.data.includes('已连接') && !e.data.includes('已禁用')))]);
     }
     setIsConnecting(true); 
     setIsConnected(false);
+    setUiConnectionStatus('connecting');
+
 
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -314,15 +312,14 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         setEvents([]);
         setIsConnected(false);
         setIsConnecting(true);
-        setUiConnectionStatus('connecting');
+        // setUiConnectionStatus('connecting'); // Already set in connectWithFetch
         retryCountRef.current = 0;
         hasLoggedInitialConnectionRef.current = false;
         currentApiIdRef.current = apiId;
-        connectWithFetch(true);
-      } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current && uiConnectionStatus !== 'connected') {
-        setUiConnectionStatus('connecting'); 
-        retryCountRef.current = 0; 
-        connectWithFetch(true); 
+        connectWithFetch(true); // Pass true for initial attempt for this API
+      } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current && uiConnectionStatus !== 'connected' && uiConnectionStatus !== 'connecting') {
+         // If not connected, not currently attempting, and no reconnect scheduled, try to connect.
+        connectWithFetch(false); // Not necessarily the initial attempt for *this* API ID if it was just a drop
       }
     } else { 
       setEvents([]);
@@ -337,6 +334,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         reconnectTimeoutRef.current = null;
       }
       currentApiIdRef.current = null;
+      hasLoggedInitialConnectionRef.current = false;
     }
 
     return () => {
@@ -353,7 +351,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiId, apiRoot, apiToken, apiName]); 
+  }, [apiId, apiRoot, apiToken, apiName, connectWithFetch]); // connectWithFetch is stable due to useCallback
 
 
   const getBadgeTextAndVariant = (type: InstanceEvent['type']): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'accent' } => {
@@ -370,9 +368,9 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
   };
 
   const isExpandable = (event: InstanceEvent): boolean => {
-    if (event.instanceDetails) return true; // For create, update, delete, initial
-    if (event.type === 'log' && typeof event.data === 'string' && event.data.length > LOG_LINE_TRUNCATE_LENGTH) return true; // For long log messages
-    if (event.type === 'error' && typeof event.data === 'string' && event.data.length > 0) return true; // For error messages
+    if (event.instanceDetails) return true; 
+    if (event.type === 'log' && typeof event.data === 'string' && event.data.length > LOG_LINE_TRUNCATE_LENGTH) return true; 
+    if (event.type === 'error' && typeof event.data === 'string' && event.data.length > 0) return true; 
     return false;
   };
 
@@ -439,7 +437,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
               <span className={`font-semibold ${statusColorClass.split(' ')[0]}`}>{statusText}</span>
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="font-sans">
@@ -517,7 +515,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
             const canExpand = isExpandable(event);
 
             return (
-              <div key={`${event.timestamp}-${index}`} className="py-1.5 border-b border-border/30 last:border-b-0 last:pb-0 first:pt-0">
+              <div key={`${event.timestamp}-${index}-${event.type}-${Math.random()}`} className="py-1.5 border-b border-border/30 last:border-b-0 last:pb-0 first:pt-0">
                 <div
                   className={`flex items-start space-x-2 text-sm font-sans ${canExpand ? 'cursor-pointer hover:bg-muted/50 -mx-1 px-1 rounded-sm' : ''}`}
                   onClick={() => canExpand && setExpandedIndex(isExpanded ? null : index)}
@@ -553,7 +551,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                         <span className="font-mono text-xs">{instance.id === '********' ? instance.id : instance.id.substring(0, 8)}...</span>
                         {instance.id === '********' ? (
                            <span className="flex items-center text-xs font-sans">
-                            <KeyRound className="h-3 w-3 mr-1 text-primary" />
+                            <KeyRound className="h-3 w-3 mr-1 text-yellow-500" />
                             API 密钥
                           </span>
                         ) : (
@@ -565,9 +563,18 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                             {instance.type === 'server' ? '服务端' : '客户端'}
                           </Badge>
                         )}
-                        <InstanceStatusBadge status={instance.status} />
+                        {instance.id === '********' ? (
+                            <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans text-xs">
+                                <KeyRound className="mr-1 h-3.5 w-3.5" />
+                                监听中
+                            </Badge>
+                        ) : (
+                            <InstanceStatusBadge status={instance.status} />
+                        )}
                         <span className="font-medium text-sm">URL:</span>
-                        <span className="font-mono truncate text-xs" title={instance.url}>{instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url}</span>
+                        <span className="font-mono truncate text-xs" title={instance.url}>
+                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : (instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url)}
+                        </span>
                       </div>
                     ) : (
                        <p className="font-mono text-xs text-foreground/90 break-all whitespace-pre-wrap leading-relaxed">

@@ -133,7 +133,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
       <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
         <div>
           <CardTitle className="font-title">实例概览 (主控: {apiName || 'N/A'})</CardTitle>
-          <CardDescription>管理和监控 NodePass 实例。</CardDescription>
+          <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="relative mt-4 sm:mt-0 w-full sm:w-64">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -142,18 +142,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
             placeholder="搜索实例..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-8 w-full"
+            className="pl-8 w-full font-sans"
           />
         </div>
       </CardHeader>
       <CardContent>
         {!apiId && (
-          <div className="text-center py-10 text-muted-foreground">
-            请先选择活动主控连接。
+          <div className="text-center py-10 text-muted-foreground font-sans">
+            请先选择活动主控。
           </div>
         )}
         {apiId && instancesError && (
-          <div className="text-destructive-foreground bg-destructive p-4 rounded-md flex items-center">
+          <div className="text-destructive-foreground bg-destructive p-4 rounded-md flex items-center font-sans">
             <AlertTriangle className="h-5 w-5 mr-2" />
             加载实例错误: {instancesError.message}
           </div>
@@ -163,13 +163,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>URL</TableHead>
-                <TableHead className="text-center whitespace-nowrap"><ArrowDown className="inline mr-1 h-4 w-4"/>TCP Rx/Tx</TableHead>
-                <TableHead className="text-center whitespace-nowrap"><ArrowUp className="inline mr-1 h-4 w-4"/>UDP Rx/Tx</TableHead>
-                <TableHead className="text-right">操作</TableHead>
+                <TableHead className="font-sans">ID</TableHead>
+                <TableHead className="font-sans">类型</TableHead>
+                <TableHead className="font-sans">状态</TableHead>
+                <TableHead className="font-sans">URL / 密钥</TableHead>
+                <TableHead className="text-center whitespace-nowrap font-sans"><ArrowDown className="inline mr-1 h-4 w-4"/>TCP Rx/Tx</TableHead>
+                <TableHead className="text-center whitespace-nowrap font-sans"><ArrowUp className="inline mr-1 h-4 w-4"/>UDP Rx/Tx</TableHead>
+                <TableHead className="text-right font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,7 +181,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                     <TableCell>
                       {instance.id === '********' ? (
                         <span className="flex items-center text-xs font-sans whitespace-nowrap">
-                          <KeyRound className="h-4 w-4 mr-1.5 text-primary" />
+                          <KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />
                           API 密钥
                         </span>
                       ) : (
@@ -195,9 +195,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                       )}
                     </TableCell>
                     <TableCell>
-                      <InstanceStatusBadge status={instance.status} />
+                      {instance.id === '********' ? (
+                        <Badge variant="outline" className="border-yellow-500 text-yellow-600 whitespace-nowrap font-sans">
+                          <KeyRound className="mr-1 h-3.5 w-3.5" />
+                          监听中
+                        </Badge>
+                      ) : (
+                        <InstanceStatusBadge status={instance.status} />
+                      )}
                     </TableCell>
-                    <TableCell className="truncate max-w-sm text-xs font-mono">{instance.url}</TableCell>
+                    <TableCell className="truncate max-w-sm text-xs font-mono">
+                      {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+                    </TableCell>
                     <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
                     </TableCell>
@@ -206,35 +215,41 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end items-center space-x-1">
-                        <InstanceControls
-                            instance={instance}
-                            onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
-                            isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-                        />
+                        {instance.id !== '********' && (
+                          <InstanceControls
+                              instance={instance}
+                              onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                              isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+                          />
+                        )}
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} aria-label="查看详情">
                           <Eye className="h-4 w-4" />
                         </Button>
-                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForModify(instance)} aria-label="修改">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} aria-label="删除">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {instance.id !== '********' && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForModify(instance)} aria-label="修改">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} aria-label="删除">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center h-24">
+                  <TableCell colSpan={7} className="text-center h-24 font-sans">
                     {isLoadingInstances
                       ? "加载中..."
                       : !apiId
-                        ? "请选择或添加一个主控连接。"
+                        ? "请选择或添加一个主控。"
                         : searchTerm && (!filteredInstances || filteredInstances.length === 0)
                           ? "无匹配搜索结果的实例。"
                           : instances && instances.length === 0
-                            ? "当前主控连接下无实例。"
+                            ? "当前主控下无实例。"
                             : "加载中或无实例。"
                     }
                   </TableCell>
