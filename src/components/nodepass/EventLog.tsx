@@ -19,19 +19,22 @@ import type { Instance, InstanceEvent } from '@/types/nodepass';
 import { getEventsUrl } from '@/lib/api';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 
-interface EventLogProps {
-  apiId: string | null;
-  apiRoot: string | null;
-  apiToken: string | null;
-  apiName: string | null;
-}
-
 const ALL_EVENT_TYPES: InstanceEvent['type'][] = ['initial', 'create', 'update', 'delete', 'log', 'shutdown', 'error'];
 const ALL_LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'];
 const RECONNECT_DELAY_MS = 5000;
+const LOG_LINE_TRUNCATE_LENGTH = 100; // Max length for a log line before truncation
 
+// Keywords to identify status messages that should be cleared when a new one arrives
 const STATUS_MESSAGE_KEYWORDS = ['正在初始化', '错误', '已连接', '已禁用', '无法建立', '服务器关闭', '事件流连接已由服务器关闭', '连接已断开'];
 
+// Utility function to remove ANSI escape codes
+function stripAnsiCodes(str: string): string {
+  if (typeof str !== 'string') return str;
+  // Regex to match ANSI escape codes
+  // eslint-disable-next-line no-control-regex
+  const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+  return str.replace(ansiRegex, '');
+}
 
 function parseLogLevel(logMessage: string): string | undefined {
   if (typeof logMessage !== 'string') return undefined;
@@ -42,17 +45,15 @@ function parseLogLevel(logMessage: string): string | undefined {
 export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
   const [events, setEvents] = useState<InstanceEvent[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false); // For the very initial connection attempt
   const [uiConnectionStatus, setUiConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error' | 'idle'>('idle');
-
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef<number>(0);
   const hasLoggedInitialConnectionRef = useRef<boolean>(false);
   const currentApiIdRef = useRef<string | null>(null);
-
 
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<InstanceEvent['type']>>(new Set());
   const [selectedLogLevels, setSelectedLogLevels] = useState<Set<string>>(new Set());
@@ -66,13 +67,12 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
           !(typeof e.data === 'string' && STATUS_MESSAGE_KEYWORDS.some(kw => e.data.includes(kw)))
         );
       }
-      return [newEvent, ...filteredPrevEvents.slice(0, 199)];
+      return [newEvent, ...filteredPrevEvents.slice(0, 199)]; // Keep a max of 200 events
     });
   }, []);
 
-
   const processSseMessageData = useCallback((messageBlock: string) => {
-    let eventTypeFromServer = 'message';
+    let eventTypeFromServer = 'message'; // Default if no 'event:' line
     let eventDataLine = '';
 
     const lines = messageBlock.split('\n');
@@ -102,24 +102,34 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
             break;
           case 'log':
             frontendEventType = 'log';
-            frontendEventData = serverEventPayload.logs || `日志事件，但缺少 .logs 字段: ${JSON.stringify(serverEventPayload)}`;
-            if (typeof frontendEventData === 'string') {
-              parsedLevel = parseLogLevel(frontendEventData);
+            let rawLogData = serverEventPayload.logs || `日志事件，但缺少 .logs 字段: ${JSON.stringify(serverEventPayload)}`;
+            if (typeof rawLogData === 'string') {
+              parsedLevel = parseLogLevel(rawLogData); // Parse level from raw data
+              frontendEventData = stripAnsiCodes(rawLogData); // Store stripped data
+            } else {
+              frontendEventData = rawLogData;
             }
+            instanceDetailsPayload = serverEventPayload.instance; // Log events also carry instance context
             break;
           case 'shutdown':
             frontendEventType = 'shutdown';
-            frontendEventData = "主控服务即将关闭。事件流已停止。";
+            frontendEventData = "主控服务已关闭，事件流中断。";
             if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
               abortControllerRef.current.abort("Server shutdown event received");
             }
             break;
+          case 'error': // Assuming a specific error event type from server
+            frontendEventType = 'error';
+            frontendEventData = serverEventPayload.error || serverEventPayload.message || `服务器报告错误: ${JSON.stringify(serverEventPayload)}`;
+            break;
           default:
             console.warn("未知服务器事件类型 (fetch):", serverEventPayload.type, serverEventPayload);
-            frontendEventType = 'log';
-            frontendEventData = `未知事件 ${serverEventPayload.type}: ${JSON.stringify(serverEventPayload.data || serverEventPayload.instance || serverEventPayload)}`;
+            frontendEventType = 'log'; // Treat unknown as log
+            let unknownData = serverEventPayload.data || serverEventPayload.instance || serverEventPayload;
+            frontendEventData = `未知事件 ${serverEventPayload.type}: ${JSON.stringify(unknownData)}`;
             if (typeof frontendEventData === 'string') {
-              parsedLevel = parseLogLevel(frontendEventData);
+                parsedLevel = parseLogLevel(frontendEventData);
+                frontendEventData = stripAnsiCodes(frontendEventData);
             }
             break;
         }
@@ -134,52 +144,43 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         addEventToLog(newEventToLog);
 
       } catch (error) {
-        console.error("无法解析事件数据 (fetch):", error, "原始数据:", eventDataLine);
-        const errorEventToLog: InstanceEvent = { type: 'log', data: `解析事件错误 (fetch): ${eventDataLine}`, timestamp: new Date().toISOString() };
+        console.error("解析SSE事件数据错误:", error, "原始数据:", eventDataLine);
+        const errorEventToLog: InstanceEvent = { type: 'log', data: `解析事件错误: ${stripAnsiCodes(eventDataLine)}`, timestamp: new Date().toISOString(), level: 'ERROR' };
         addEventToLog(errorEventToLog);
       }
-    } else if (eventDataLine) {
-      // Handle plain messages without 'event: instance'
-      // This might include 'retry: XXXX' messages or other server hints
-      if (eventDataLine.startsWith('retry:')) {
-        // Potentially adjust reconnect delay based on server advice, though EventSource handles 'retry' natively.
-        // For fetch, this is informational unless we implement custom retry timing based on it.
-        // console.log('SSE server advised retry interval:', eventDataLine);
-      } else {
+    } else if (eventDataLine && !eventDataLine.startsWith('retry:')) { // Handle plain messages, ignore retry lines from server
         const genericEvent: InstanceEvent = {
           type: 'log',
-          data: `通用消息 (fetch): ${eventDataLine}`,
+          data: `通用消息: ${stripAnsiCodes(eventDataLine)}`,
           timestamp: new Date().toISOString()
         };
         addEventToLog(genericEvent);
-      }
     }
   }, [addEventToLog]);
 
-  const connectWithFetch = useCallback(async (isInitialAttemptForCurrentApi: boolean) => {
+  const connectWithFetch = useCallback(async (isInitialAttemptForThisApi: boolean) => {
     if (!apiId || !apiRoot || !apiToken || !apiName) {
       setUiConnectionStatus('idle');
-      const configInvalidEvent: InstanceEvent = { type: 'log', data: `API 配置无效，事件流禁用。`, timestamp: new Date().toISOString() };
-      addEventToLog(configInvalidEvent);
+      addEventToLog({ type: 'log', data: `API配置无效，事件流禁用。`, timestamp: new Date().toISOString(), level: 'WARN' });
       return;
     }
 
     if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
-      abortControllerRef.current.abort("Reconnecting or new connection attempt");
+      abortControllerRef.current.abort("Reconnecting or new API connection attempt");
     }
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
     const eventsUrl = getEventsUrl(apiRoot);
     
-    if (isInitialAttemptForCurrentApi) {
-      setIsConnecting(true); // Show "连接中..." in CardDescription
+    if (isInitialAttemptForThisApi) {
       setUiConnectionStatus('connecting');
       // Only add "正在初始化" message to UI log for the very first attempt for this API config
       addEventToLog({ type: 'log', data: `正在初始化事件流 (fetch) 到 ${eventsUrl} (携带 X-API-Key)...`, timestamp: new Date().toISOString() });
     }
-    
-    // Clear any pending reconnect timeout
+    setIsConnecting(true); // Show "连接中..." in CardDescription regardless of log
+    setIsConnected(false); // Ensure disconnected state visually
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -198,7 +199,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP错误 ${response.status}: ${response.statusText}. 详情: ${errorText.substring(0, 200)}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText.substring(0, 200)}`);
       }
 
       if (!response.body) {
@@ -208,10 +209,10 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       setIsConnected(true);
       setIsConnecting(false);
       setUiConnectionStatus('connected');
-      retryCountRef.current = 0; // Reset retry count on successful connection
+      retryCountRef.current = 0; 
 
       if (!hasLoggedInitialConnectionRef.current) {
-        addEventToLog({ type: 'log', data: `事件流 (fetch) 已连接。等待事件... (目标: ${eventsUrl})`, timestamp: new Date().toISOString() });
+        addEventToLog({ type: 'log', data: `事件流 (fetch) 已连接。等待事件...`, timestamp: new Date().toISOString() });
         hasLoggedInitialConnectionRef.current = true;
       }
 
@@ -222,88 +223,67 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const { value, done } = await reader.read();
-        if (signal.aborted) {
-          // console.log('Fetch aborted by signal');
-          break;
-        }
+        if (signal.aborted) break;
         if (done) {
-          setIsConnected(false);
-          // Don't log to UI immediately, schedule reconnect
-          // console.log('SSE Stream closed by server.');
-          if (!signal.aborted) { // Only reconnect if not deliberately aborted
-             scheduleReconnect("服务器关闭");
-          }
+          if (!signal.aborted) scheduleReconnect("服务器关闭");
           break;
         }
-
         buffer += decoder.decode(value, { stream: true });
         const messageBlocks = buffer.split('\n\n');
-        buffer = messageBlocks.pop() || ''; // Keep the last partial message in buffer
+        buffer = messageBlocks.pop() || ''; 
 
         for (const block of messageBlocks) {
-          if (block.trim() !== '') {
-            processSseMessageData(block);
-          }
+          if (block.trim() !== '') processSseMessageData(block);
         }
       }
     } catch (error: any) {
-      setIsConnected(false);
-      setIsConnecting(false);
       if (signal.aborted && error.name === 'AbortError') {
-         // console.log(`Fetch aborted: ${error.message}`);
-         // If aborted by component unmount or new API, don't attempt reconnect from here
+        // Expected if component unmounts or API changes
       } else {
-        // console.error(`Fetch error during connectWithFetch:`, error);
-        if (!signal.aborted) { // Only schedule reconnect if not deliberately aborted by user action
-           scheduleReconnect(error.message || "未知错误");
-        }
+        const errorMessage = error.message || "未知错误";
+        if (!signal.aborted) scheduleReconnect(errorMessage);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiId, apiRoot, apiToken, apiName, processSseMessageData, addEventToLog]);
 
 
   const scheduleReconnect = useCallback((reason: string) => {
-    if (abortControllerRef.current?.signal.aborted) return; // Don't reconnect if intentionally aborted
+    if (abortControllerRef.current?.signal.aborted) return;
 
     retryCountRef.current++;
-    setIsConnected(false); // Ensure isConnected is false before retrying
+    setIsConnected(false);
+    setIsConnecting(false); // No longer actively trying in this exact moment
     setUiConnectionStatus('disconnected');
-
 
     const eventsUrl = apiRoot ? getEventsUrl(apiRoot) : '未知目标';
     let uiErrorMessage = "";
-
-    if (reason.startsWith("服务器关闭")) {
-      uiErrorMessage = `事件流连接已由服务器关闭。${RECONNECT_DELAY_MS / 1000}秒后尝试第 ${retryCountRef.current} 次重连... (目标: ${eventsUrl})`;
-    } else {
-      const corsHint = reason.toLowerCase().includes('failed to fetch') || reason.toLowerCase().includes('networkerror') 
-        ? '这通常由于目标服务器的CORS策略阻止了请求 (缺少 Access-Control-Allow-Origin 头部), 或网络连接问题。'
-        : '';
-      uiErrorMessage = `无法建立 SSE 连接 (fetch) 到 ${eventsUrl}. 原因: ${reason.substring(0, 100)}... ${corsHint} ${RECONNECT_DELAY_MS / 1000}秒后尝试第 ${retryCountRef.current} 次重连...`;
-    }
+    let isNetworkError = reason.toLowerCase().includes('failed to fetch') || reason.toLowerCase().includes('networkerror');
     
-    if (retryCountRef.current > 1) { // Show error in UI log only after the first silent retry fails
-      addEventToLog({ type: 'log', data: uiErrorMessage, timestamp: new Date().toISOString(), level: 'ERROR' });
+    if (reason.startsWith("服务器关闭")) {
+      uiErrorMessage = `事件流连接已由服务器关闭。`;
+    } else if (isNetworkError) {
+      uiErrorMessage = `无法建立 SSE 连接 (fetch) 到 ${eventsUrl}。原因: 网络错误。请检查网络、服务器日志及CORS配置。`;
     } else {
-      // console.log(`Silent retry attempt ${retryCountRef.current} for: ${reason}`);
+      uiErrorMessage = `SSE 连接 (fetch) 尝试失败。目标: ${eventsUrl}。原因: ${reason.substring(0, 100)}... 查看服务器日志了解详情。`;
+    }
+
+    if (retryCountRef.current > 1) { // Show error in UI log only after the first silent retry fails
+      addEventToLog({ type: 'log', data: `${uiErrorMessage} ${RECONNECT_DELAY_MS / 1000}秒后尝试第 ${retryCountRef.current} 次重连...`, timestamp: new Date().toISOString(), level: 'ERROR' });
     }
 
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     reconnectTimeoutRef.current = setTimeout(() => {
-       // console.log(`Attempting reconnect #${retryCountRef.current}`);
-      connectWithFetch(false); // false because it's not the initial attempt for this API
+      if (!abortControllerRef.current?.signal.aborted) {
+         connectWithFetch(false); // false: not the initial attempt for this API
+      }
     }, RECONNECT_DELAY_MS);
 
   }, [apiRoot, connectWithFetch, addEventToLog]);
 
 
   useEffect(() => {
-    // This effect runs when apiId, apiRoot, etc. change, or on mount.
     if (apiId && apiRoot && apiToken && apiName) {
-      // If API config changes, reset state related to previous connection
       if (currentApiIdRef.current !== apiId) {
-        // console.log(`API ID changed from ${currentApiIdRef.current} to ${apiId}. Resetting SSE state.`);
         if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
           abortControllerRef.current.abort("API configuration changed");
         }
@@ -311,25 +291,20 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
-        setEvents([]); // Clear logs from previous API
+        setEvents([]);
         setIsConnected(false);
-        setIsConnecting(true); // Set true for the new API's initial attempt
-        setUiConnectionStatus('connecting');
-        retryCountRef.current = 0;
-        hasLoggedInitialConnectionRef.current = false; // Reset for the new API
-        currentApiIdRef.current = apiId;
-        connectWithFetch(true); // true because it's the initial attempt for this new API
-      } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current) {
-        // If not connected, not currently trying, and no reconnect scheduled,
-        // it might be the initial mount for an already set API ID.
-        // console.log('Initial mount or re-attempt for existing API ID, not connected and no reconnect scheduled.');
         setIsConnecting(true);
         setUiConnectionStatus('connecting');
-        retryCountRef.current = 0; // Reset retry count for fresh attempts
+        retryCountRef.current = 0;
+        hasLoggedInitialConnectionRef.current = false;
+        currentApiIdRef.current = apiId;
+        connectWithFetch(true);
+      } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current && uiConnectionStatus !== 'connected') {
+        setUiConnectionStatus('connecting');
+        retryCountRef.current = 0;
         connectWithFetch(true);
       }
     } else {
-      // API config is not valid, clear everything
       setEvents([]);
       setIsConnected(false);
       setIsConnecting(false);
@@ -341,13 +316,12 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      currentApiIdRef.current = null; // Reset current API ID
+      currentApiIdRef.current = null;
     }
 
-    return () => { // Cleanup function
+    return () => {
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
         abortControllerRef.current.abort("Component unmounted or dependencies changed");
-        // Don't add to log here as it's a cleanup, not necessarily an error for the user
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -355,16 +329,16 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiId, apiRoot, apiToken, apiName]); // connectWithFetch is memoized and handles its own state
+  }, [apiId, apiRoot, apiToken, apiName]); // connectWithFetch is memoized
 
   const getBadgeTextAndVariant = (type: InstanceEvent['type']): { text: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'accent' } => {
     switch (type) {
-      case 'initial': return { text: '初始', variant: 'default' };
-      case 'create': return { text: '创建', variant: 'default' }; // Consider 'success' or a green-like variant if available
-      case 'update': return { text: '更新', variant: 'secondary' };
-      case 'delete': return { text: '删除', variant: 'destructive' };
+      case 'initial': return { text: '初始状态', variant: 'default' };
+      case 'create': return { text: '已创建', variant: 'default' };
+      case 'update': return { text: '已更新', variant: 'secondary' };
+      case 'delete': return { text: '已删除', variant: 'destructive' };
       case 'log': return { text: '日志', variant: 'outline' };
-      case 'shutdown': return { text: '关闭', variant: 'destructive'};
+      case 'shutdown': return { text: '服务关闭', variant: 'destructive'};
       case 'error': return { text: '错误', variant: 'destructive'};
       default: return { text: String(type).toUpperCase(), variant: 'outline'};
     }
@@ -372,37 +346,37 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
 
   const isExpandable = (event: InstanceEvent): boolean => {
     if (event.instanceDetails) return true;
-    if (event.type === 'log' && typeof event.data === 'string' && event.data.length > 100) return true;
+    if (event.type === 'log' && typeof event.data === 'string' && event.data.length > LOG_LINE_TRUNCATE_LENGTH) return true;
     if (['initial', 'create', 'update', 'delete'].includes(event.type) && typeof event.data === 'object' && event.data !== null && Object.keys(event.data).length > 0 && !event.instanceDetails) return true;
     return false;
   };
 
   let statusText = "等待配置...";
-  let StatusIcon = AlertTriangle;
+  let StatusIconComponent = AlertTriangle; // Renamed to avoid conflict with StatusIcon prop
   let statusColorClass = "text-yellow-500";
 
   if (apiId && apiRoot && apiToken) {
     switch (uiConnectionStatus) {
       case 'connecting':
         statusText = "连接中...";
-        StatusIcon = Loader2;
+        StatusIconComponent = Loader2;
         statusColorClass = "text-yellow-500 animate-spin";
         break;
       case 'connected':
         statusText = "已连接";
-        StatusIcon = CheckCircle;
+        StatusIconComponent = CheckCircle;
         statusColorClass = "text-green-500";
         break;
       case 'disconnected':
       case 'error':
         statusText = retryCountRef.current > 1 ? "连接已断开" : "尝试连接...";
-        StatusIcon = AlertTriangle;
+        StatusIconComponent = AlertTriangle;
         statusColorClass = "text-red-500";
         break;
       case 'idle':
       default:
         statusText = "未连接";
-        StatusIcon = AlertTriangle;
+        StatusIconComponent = AlertTriangle;
         statusColorClass = "text-muted-foreground";
         break;
     }
@@ -430,25 +404,25 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
           <div className="flex-grow">
-            <CardTitle className="flex items-center text-xl">
+            <CardTitle className="flex items-center text-xl font-title">
               <Rss className="mr-2 h-5 w-5 text-primary" />
               实时事件日志
             </CardTitle>
-             <CardDescription className="flex items-center">
+             <CardDescription className="flex items-center font-sans">
               来自 NodePass 实例 (API: {apiName || 'N/A'})。
-              状态: <StatusIcon className={`ml-1.5 mr-1 h-4 w-4 ${statusColorClass}`} />
+              状态: <StatusIconComponent className={`ml-1.5 mr-1 h-4 w-4 ${statusColorClass}`} />
               <span className={`font-semibold ${statusColorClass.split(' ')[0]}`}>{statusText}</span>
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="font-sans">
                   <Filter className="mr-2 h-4 w-4" />
                   事件类型 ({selectedEventTypes.size > 0 ? selectedEventTypes.size : '全部'})
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
+              <DropdownMenuContent className="w-56 font-sans">
                 <DropdownMenuLabel>筛选事件类型</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {ALL_EVENT_TYPES.map((type) => (
@@ -472,12 +446,12 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="font-sans">
                   <Filter className="mr-2 h-4 w-4" />
                   日志级别 ({selectedLogLevels.size > 0 ? selectedLogLevels.size : '全部'})
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
+              <DropdownMenuContent className="w-56 font-sans">
                 <DropdownMenuLabel>筛选日志级别</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {ALL_LOG_LEVELS.map((level) => (
@@ -500,7 +474,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
             </DropdownMenu>
 
             {(selectedEventTypes.size > 0 || selectedLogLevels.size > 0) && (
-              <Button variant="ghost" size="sm" onClick={handleClearFilters} className="text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" onClick={handleClearFilters} className="text-muted-foreground hover:text-foreground font-sans">
                 <XCircle className="mr-1.5 h-4 w-4" />
                 清除
               </Button>
@@ -509,8 +483,8 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-80 w-full rounded-md border p-3 bg-muted/20 text-xs">
-          {filteredEvents.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">无匹配事件。</p>}
+        <ScrollArea className="h-80 w-full rounded-md border p-3 bg-muted/20">
+          {filteredEvents.length === 0 && <p className="text-sm text-muted-foreground text-center py-4 font-sans">无匹配事件。</p>}
           {filteredEvents.map((event, index) => {
             const isExpanded = expandedIndex === index;
             const { text: badgeText, variant: badgeVariant } = getBadgeTextAndVariant(event.type);
@@ -520,7 +494,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
             return (
               <div key={`${event.timestamp}-${index}`} className="py-1.5 border-b border-border/30 last:border-b-0 last:pb-0 first:pt-0">
                 <div
-                  className={`flex items-start space-x-2 ${canExpand ? 'cursor-pointer' : ''}`}
+                  className={`flex items-start space-x-2 text-sm font-sans ${canExpand ? 'cursor-pointer hover:bg-muted/50 -mx-1 px-1 rounded-sm' : ''}`}
                   onClick={() => canExpand && setExpandedIndex(isExpanded ? null : index)}
                   role={canExpand ? "button" : undefined}
                   tabIndex={canExpand ? 0 : undefined}
@@ -530,62 +504,65 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                     }
                   }}
                 >
-                  <div className="flex items-center shrink-0 w-6 h-[1.125rem]">
+                  <div className="flex items-center shrink-0 w-6 h-[1.25rem]"> {/* Adjusted height for text-sm */}
                     {canExpand && (
                       isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
-                  <Badge variant={badgeVariant} className="py-0.5 px-1.5 shadow-sm whitespace-nowrap shrink-0 self-start">
+                  <Badge variant={badgeVariant} className="py-0.5 px-1.5 shadow-sm whitespace-nowrap shrink-0 self-start text-xs font-sans">
                     {badgeText}
                   </Badge>
                   {event.type === 'log' && event.level && (
                     <Badge variant={
                       event.level === 'ERROR' || event.level === 'FATAL' ? 'destructive' :
                       event.level === 'WARN' ? 'secondary' : 'outline'
-                    } className="py-0.5 px-1.5 shadow-sm whitespace-nowrap shrink-0 self-start">
+                    } className="py-0.5 px-1.5 shadow-sm whitespace-nowrap shrink-0 self-start text-xs font-sans">
                       {event.level}
                     </Badge>
                   )}
+                  
                   <div className="flex-grow min-w-0">
                     {event.type !== 'log' && instance ? (
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-tight">
-                        <Badge
+                        <span className="font-medium">ID:</span>
+                        <span className="font-mono text-xs">{instance.id.substring(0, 8)}...</span>
+                         <Badge
                             variant={instance.type === 'server' ? 'default' : 'accent'}
-                            className="items-center whitespace-nowrap text-xs shrink-0"
+                            className="items-center whitespace-nowrap text-xs font-sans"
                           >
                             {instance.type === 'server' ? <Server size={12} className="mr-1" /> : <Smartphone size={12} className="mr-1" />}
                             {instance.type === 'server' ? '服务器' : '客户端'}
-                        </Badge>
-                        <span className="font-mono text-foreground/90">ID: {instance.id.substring(0, 8)}...</span>
+                          </Badge>
                         <InstanceStatusBadge status={instance.status} />
-                        <span className="font-mono truncate text-foreground/70" title={instance.url}>{instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url}</span>
+                        <span className="font-medium">URL:</span>
+                        <span className="font-mono truncate text-xs" title={instance.url}>{instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url}</span>
                       </div>
                     ) : (
-                       <p className="font-mono break-words whitespace-pre-wrap text-foreground/90 leading-relaxed">
-                        {typeof event.data === 'string' && (isExpanded || !canExpand || event.data.length <= 70) ? event.data : `${String(event.data).substring(0, 70)}...`}
+                       <p className="font-mono text-xs text-foreground/90 break-all whitespace-pre-wrap leading-relaxed">
+                        {typeof event.data === 'string' && (isExpanded || !canExpand || event.data.length <= LOG_LINE_TRUNCATE_LENGTH) ? event.data : `${String(event.data).substring(0, LOG_LINE_TRUNCATE_LENGTH)}...`}
                       </p>
                     )}
                   </div>
-                  <span className="text-muted-foreground whitespace-nowrap ml-auto pl-2 self-start shrink-0">
-                    {new Date(event.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  <span className="font-mono text-xs text-muted-foreground whitespace-nowrap ml-auto pl-2 self-start shrink-0">
+                    {new Date(event.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                   </span>
                 </div>
                 {isExpanded && canExpand && (
                   <div className="mt-2 ml-8 pl-4 border-l-2 border-muted/50 py-2 bg-background/30 rounded-r-md">
-                    {instance ? (
-                      <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all">
+                    {instance && (event.type === 'initial' || event.type === 'create' || event.type === 'update' || event.type === 'delete') ? (
+                      <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
                         {JSON.stringify(instance, null, 2)}
                       </pre>
                     ) : event.type === 'log' && typeof event.data === 'string' ? (
                       <p className="font-mono break-all whitespace-pre-wrap text-foreground/90 leading-relaxed text-xs">
                         {event.data}
                       </p>
-                    ) : typeof event.data === 'object' && event.data !== null && Object.keys(event.data).length > 0 ? (
-                       <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all">
+                    ) : typeof event.data === 'object' && event.data !== null && Object.keys(event.data).length > 0 && !instance ? (
+                       <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
                         {JSON.stringify(event.data, null, 2)}
                       </pre>
                     ) : (
-                       <p className="text-xs text-muted-foreground italic">无详情。</p>
+                       <p className="text-xs text-muted-foreground italic font-sans">无更多详情。</p>
                     )}
                   </div>
                 )}
@@ -597,6 +574,3 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
     </Card>
   );
 }
-
-
-    
