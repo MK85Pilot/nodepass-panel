@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { KeyRound, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
 import type { AppLogEntry } from './EventLog';
-import { FormDescription } from "@/components/ui/form"; // Added import
+// Removed import for FormDescription as it's no longer used
 
 interface ApiConfigDialogProps {
   open: boolean;
@@ -51,7 +51,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
       setIgnoreSslErrorsInput(currentConfig?.ignoreSslErrors || false);
       setShowToken(false);
     } else {
-       // Reset fields when dialog is closed but not necessarily unmounted
       setNameInput('');
       setApiUrlInput('http://localhost:3000');
       setTokenInput('');
@@ -76,8 +75,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
         masterDefaultTlsMode: masterTlsModeInput,
         ignoreSslErrors: ignoreSslErrorsInput,
       });
-      // onLog?.(`主控配置 "${nameInput.trim()}" 已${isEditing ? '更新' : '添加'}。`, 'ACTION');
-      // Logging is handled by the parent component's onSave callback (e.g., AppLayout or ConnectionsManager)
       onOpenChange(false);
     }
   };
@@ -156,9 +153,9 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 placeholder="例: api (若主控为 http://host/api/v1)"
                 className="font-sans"
               />
-               <FormDescription className="text-xs font-sans">
+               <p className="text-xs text-muted-foreground font-sans">
                 如果主控的API路径是 `http://host/custom-prefix/v1`，则此处填 `custom-prefix`。留空则默认为 `/api`。
-              </FormDescription>
+              </p>
             </div>
 
             <div className="my-3 border-t border-border"></div>
@@ -231,5 +228,3 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
     </Dialog>
   );
 }
-
-
