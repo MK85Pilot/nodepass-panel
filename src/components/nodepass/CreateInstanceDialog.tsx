@@ -177,7 +177,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         description: `实例 (URL: ${variables.url.substring(0,30)}...) 已成功创建。`,
       });
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
-      // Do not close dialog here if part of a sequence
     },
     onError: (error: any, variables) => {
       toast({
@@ -185,7 +184,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         description: `创建实例 (URL: ${variables.url.substring(0,30)}...) 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-      throw error; // Re-throw to be caught by mutateAsync if used
+      throw error; 
     },
   });
 
@@ -208,44 +207,40 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         form.control.setError("targetAddress", {type: "manual", message: "端口解析失败"});
         return;
       }
+      
+      const effectiveMasterTlsMode = (activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master') 
+                                      ? activeApiConfig.masterDefaultTlsMode 
+                                      : '1'; // Fallback to self-signed if master's default is 'master' (unspecified)
 
       const serverConfigForAutoCreate: CreateInstanceFormValues = {
         instanceType: 'server',
         tunnelAddress: `0.0.0.0:${clientTunnelPort}`,
-        targetAddress: `0.0.0.0:${clientTargetPort}`, // Server listens for tunneled traffic on this port
+        targetAddress: `0.0.0.0:${clientTargetPort}`, 
         logLevel: values.logLevel,
-        tlsMode: '1', // Default to self-signed for auto-created server
-        certPath: '',
-        keyPath: '',
+        tlsMode: effectiveMasterTlsMode,
+        certPath: '', // Not applicable for tlsMode '0' or '1'
+        keyPath: '',  // Not applicable for tlsMode '0' or '1'
       };
       const serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
 
       try {
         await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
-        // Success toast for server is handled by mutation's onSuccess
-        
-        // Now create client
         const clientUrlToCreate = buildUrl(values);
         await createInstanceMutation.mutateAsync({ url: clientUrlToCreate });
-        // Success toast for client is handled by mutation's onSuccess
         
         form.reset();
-        onOpenChange(false); // Close dialog only after both succeed
+        onOpenChange(false); 
 
       } catch (error: any) {
-        // Error toast is handled by mutation's onError
-        // No need to re-toast here unless for specific sequence failure message
         console.error("自动创建序列中发生错误:", error);
       }
     } else {
-      // Original logic: create single instance
       const constructedUrl = buildUrl(values);
       try {
         await createInstanceMutation.mutateAsync({ url: constructedUrl });
         form.reset();
-        onOpenChange(false); // Close dialog on success
+        onOpenChange(false); 
       } catch (error) {
-        // Error toast is handled by mutation's onError
          console.error("创建单个实例时发生错误:", error);
       }
     }
@@ -507,7 +502,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </FormLabel>
                       <FormDescription className="font-sans text-xs">
                         如果勾选，将在创建此客户端实例前，尝试自动创建一个匹配的服务端实例。
-                        自动创建的服务端将使用与客户端相同的日志级别，并默认启用TLS模式 '1' (自签名证书)。
+                        自动创建的服务端将使用与客户端相同的日志级别，并继承当前活动主控配置的默认TLS模式 (如果主控未指定具体TLS模式，则默认为 '1' 自签名证书)。
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -538,3 +533,5 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
+    
