@@ -12,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Instance, InstanceEvent } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, ServerIcon, SmartphoneIcon, Fingerprint, Cable, KeyRound, Eye, EyeOff, ScrollText, Network } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEventsUrl } from '@/lib/api'; // Assuming getEventsUrl is correctly exported
@@ -21,8 +21,8 @@ interface InstanceDetailsModalProps {
   instance: Instance | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  apiRoot: string | null; // Added prop
-  apiToken: string | null; // Added prop
+  apiRoot: string | null;
+  apiToken: string | null;
 }
 
 function formatBytes(bytes: number, decimals = 2) {
@@ -34,7 +34,6 @@ function formatBytes(bytes: number, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-// Helper to strip ANSI codes (copied from EventLog.tsx)
 function stripAnsiCodes(str: string): string {
   if (typeof str !== 'string') return str;
   // eslint-disable-next-line no-control-regex
@@ -83,7 +82,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
 
   const connectToSse = useCallback(async () => {
-    if (!instance || !apiRoot || !apiToken || !open) {
+    if (!instance || !apiRoot || !apiToken || !open || instance.id === '********') { // Do not connect SSE for API Key 'instance'
       return;
     }
 
@@ -127,7 +126,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (done) {
           if (!signal.aborted) {
             console.log(`Modal SSE for ${instance.id}: Stream closed by server.`);
-            // Optional: Schedule reconnect if desired for modal context
+            setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流已由服务端关闭。`, ...prev.slice(0, MAX_LOG_LINES -1)]);
           }
           break;
         }
@@ -143,7 +142,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         console.log(`Modal SSE for ${instance.id}: Fetch aborted as expected.`);
       } else {
         console.error(`Modal SSE for ${instance.id}: Connection error:`, error.message);
-         // Optional: Schedule reconnect if desired for modal context
+        setInstanceLogs(prev => [`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 事件流连接错误: ${error.message}`, ...prev.slice(0, MAX_LOG_LINES -1)]);
       }
     }
   }, [instance, apiRoot, apiToken, open, processSseMessageData]);
@@ -151,7 +150,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
   useEffect(() => {
     if (open && instance && apiRoot && apiToken) {
-      setInstanceLogs([]); // Clear logs when modal opens for a new instance
+      setInstanceLogs([`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 正在初始化实例日志流...`]);
       connectToSse();
     }
 
@@ -167,7 +166,6 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
 
 
   useEffect(() => {
-    // Reset showApiKey state when the instance changes or modal reopens
     if (open) {
       setShowApiKey(false);
     }
@@ -254,12 +252,31 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
           )}
         </div>
       ), 
+      icon: <Network className="h-4 w-4 text-muted-foreground" />,
       fullWidth: true 
     },
-    { label: "TCP 接收", value: <span className="font-mono text-xs">{formatBytes(instance.tcprx)}</span>, icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
-    { label: "TCP 发送", value: <span className="font-mono text-xs">{formatBytes(instance.tcptx)}</span>, icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
-    { label: "UDP 接收", value: <span className="font-mono text-xs">{formatBytes(instance.udprx)}</span>, icon: <ArrowDownCircle className="h-4 w-4 text-blue-500" /> },
-    { label: "UDP 发送", value: <span className="font-mono text-xs">{formatBytes(instance.udptx)}</span>, icon: <ArrowUpCircle className="h-4 w-4 text-green-500" /> },
+    { 
+      label: "TCP 流量 (接收/发送)", 
+      value: (
+        <span className="font-mono text-xs">
+          <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.tcprx)}
+          <span className="mx-1">/</span>
+          <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.tcptx)}
+        </span>
+      ), 
+      icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
+    },
+    { 
+      label: "UDP 流量 (接收/发送)", 
+      value: (
+        <span className="font-mono text-xs">
+          <ArrowDownCircle className="inline-block h-3.5 w-3.5 mr-1 text-blue-500" />{formatBytes(instance.udprx)}
+          <span className="mx-1">/</span>
+          <ArrowUpCircle className="inline-block h-3.5 w-3.5 mr-1 text-green-500" />{formatBytes(instance.udptx)}
+        </span>
+      ), 
+      icon: <Cable className="h-4 w-4 text-muted-foreground" /> 
+    },
   ];
 
   return (
@@ -279,23 +296,23 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         </DialogHeader>
         <div className="mt-4 space-y-3 overflow-y-auto pr-1">
           {detailItems.map((item, index) => (
-            <div key={index} className={`flex ${item.fullWidth ? 'flex-col' : 'items-center justify-between'} py-2 border-b last:border-b-0`}>
+            <div key={index} className={`flex ${item.fullWidth ? 'flex-col' : 'items-center justify-between'} py-2 border-b border-border/50 last:border-b-0`}>
               <div className="flex items-center">
-                {item.icon && <span className="mr-2">{item.icon}</span>}
-                <span className="text-sm font-medium text-muted-foreground font-sans">{item.label}:</span>
+                {item.icon && <span className="mr-2 shrink-0">{item.icon}</span>}
+                <span className="text-sm font-medium text-muted-foreground font-sans shrink-0">{item.label}:</span>
               </div>
-              <div className={`text-sm ${item.fullWidth ? 'mt-1 w-full' : ''}`}>{item.value}</div>
+              <div className={`text-xs ${item.fullWidth ? 'mt-1 w-full' : 'ml-2 text-right break-all'}`}>{item.value}</div>
             </div>
           ))}
         </div>
         
         {!isApiKeyInstance && (
-          <div className="mt-4 pt-4 border-t flex-shrink-0">
+          <div className="mt-4 pt-4 border-t border-border/50 flex-shrink-0 flex flex-col min-h-0">
             <h3 className="text-md font-semibold mb-2 flex items-center font-title">
               <ScrollText size={18} className="mr-2 text-primary" />
               实例日志
             </h3>
-            <ScrollArea className="h-48 w-full rounded-md border p-3 bg-muted/20">
+            <ScrollArea className="h-48 w-full rounded-md border border-border/30 p-3 bg-muted/20 flex-grow">
               {instanceLogs.length === 0 && <p className="text-xs text-muted-foreground text-center py-2 font-sans">等待日志...</p>}
               {instanceLogs.map((log, index) => (
                 <p key={index} className="text-xs font-mono py-0.5 whitespace-pre-wrap break-all">
@@ -310,4 +327,3 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
-    
