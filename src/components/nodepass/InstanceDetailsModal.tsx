@@ -75,7 +75,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
       label: "ID", 
       value: (
         <span 
-          className="font-mono text-xs cursor-pointer hover:text-primary hover:underline"
+          className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
           title={`点击复制: ${instance.id}`}
           onClick={() => handleCopyToClipboard(instance.id, "ID")}
         >
@@ -117,7 +117,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
       value: (
         <div className="flex items-center justify-between w-full">
           <span 
-            className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''} cursor-pointer hover:text-primary hover:underline`}
+            className={`font-mono text-xs break-all ${isApiKeyInstance ? 'flex-grow' : ''} cursor-pointer hover:text-primary transition-colors duration-150`}
             title={`点击复制: ${instance.url}`}
             onClick={() => handleCopyToClipboard(instance.url, isApiKeyInstance ? 'API 密钥' : 'URL')}
           >
@@ -149,7 +149,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange }: InstanceD
           <DialogTitle className="font-title">实例详情</DialogTitle>
           <DialogDescription className="font-sans">
             实例 <span 
-                    className="font-semibold font-mono cursor-pointer hover:text-primary hover:underline"
+                    className="font-semibold font-mono cursor-pointer hover:text-primary transition-colors duration-150"
                     title={`点击复制: ${instance.id}`}
                     onClick={() => handleCopyToClipboard(instance.id, "ID")}
                   >

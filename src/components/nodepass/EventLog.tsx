@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Rss, ChevronRight, ChevronDown, ServerIcon, SmartphoneIcon, Filter, XCircle, AlertTriangle, CheckCircle, Loader2, KeyRound, ClipboardCopy } from 'lucide-react';
+import { Rss, ChevronRight, ChevronDown, ServerIcon, SmartphoneIcon, Filter, XCircle, AlertTriangle, CheckCircle, Loader2, KeyRound } from 'lucide-react';
 import type { Instance, InstanceEvent } from '@/types/nodepass';
 import { getEventsUrl } from '@/lib/api';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
@@ -62,8 +62,8 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef<number>(0);
-  const hasLoggedInitialConnectionRef = useRef<boolean>(false); // For "Connecting..." log
-  const hasLoggedSuccessfulConnectionRef = useRef<boolean>(false); // For "Connected." log
+  const hasLoggedInitialConnectionRef = useRef<boolean>(false); 
+  const hasLoggedSuccessfulConnectionRef = useRef<boolean>(false); 
   const currentApiIdRef = useRef<string | null>(null);
 
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<InstanceEvent['type']>>(new Set());
@@ -263,7 +263,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         if (errorMessage.toLowerCase().includes('failed to fetch')) {
             detailedErrorMessage = `网络错误或CORS策略问题。请检查目标服务器 (${eventsUrl}) 的CORS配置及网络连通性。错误: ${errorMessage}`;
         }
-        console.error(`EventLog connectWithFetch error: ${detailedErrorMessage}`, error); // Log the original error too
+        console.error(`EventLog connectWithFetch error: ${detailedErrorMessage}`, error); 
         if (!signal.aborted) scheduleReconnect(detailedErrorMessage);
       }
     }
@@ -321,8 +321,8 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
         setIsConnected(false);
         setIsConnecting(true);
         retryCountRef.current = 0;
-        hasLoggedInitialConnectionRef.current = false; // Reset for the new API
-        hasLoggedSuccessfulConnectionRef.current = false; // Reset for the new API
+        hasLoggedInitialConnectionRef.current = false; 
+        hasLoggedSuccessfulConnectionRef.current = false; 
         currentApiIdRef.current = apiId;
         connectWithFetch(); 
       } else if (!isConnected && !isConnecting && !reconnectTimeoutRef.current && uiConnectionStatus !== 'connected' && uiConnectionStatus !== 'connecting') {
@@ -606,21 +606,16 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                         )}
                         <div className="flex items-center">
                           <span className="font-medium text-sm mr-1">URL:</span>
-                          <span className="font-mono truncate text-xs" title={instance.url}>
+                          <span
+                             className="font-mono truncate text-xs cursor-pointer hover:text-primary transition-colors duration-150"
+                             title={instance.url}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
+                             }}
+                           >
                             {instance.id === '********' ? 'API 密钥 (已隐藏)' : (instance.url.length > 30 ? instance.url.substring(0, 27) + '...' : instance.url)}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 ml-1 flex-shrink-0"
-                            onClick={(e) => {
-                                e.stopPropagation(); // Prevent accordion toggle
-                                handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL');
-                            }}
-                            aria-label={`复制 ${instance.id === '********' ? 'API 密钥' : 'URL'}`}
-                           >
-                            <ClipboardCopy className="h-3 w-3" />
-                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -635,7 +630,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                 </div>
                 {isExpanded && canExpand && (
                   <div className="mt-2 ml-8 pl-4 border-l-2 border-muted/50 py-2 bg-background/30 rounded-r-md">
-                    {instance && typeof event.data === 'object' && event.data !== null ? ( // Check if event.data is the instance itself
+                    {instance && typeof event.data === 'object' && event.data !== null ? ( 
                       <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
                         {JSON.stringify(event.data, null, 2)}
                       </pre>
@@ -643,7 +638,7 @@ export function EventLog({ apiId, apiRoot, apiToken, apiName }: EventLogProps) {
                       <p className="font-mono break-all whitespace-pre-wrap text-foreground/90 leading-relaxed text-xs">
                         {event.data}
                       </p>
-                    ) : instance ? ( // Fallback to instanceDetails if event.data was not the instance object directly
+                    ) : instance ? ( 
                        <pre className="text-xs p-2 rounded-md overflow-x-auto bg-muted/40 whitespace-pre-wrap break-all font-mono">
                         {JSON.stringify(instance, null, 2)}
                       </pre>

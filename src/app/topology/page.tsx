@@ -39,7 +39,7 @@ interface Position {
 
 interface NodeBase {
   id: string;
-  type: 'server' | 'client' | 'apikey';
+  type: 'server' | 'client';
   url: string;
   status: Instance['status'];
   apiId: string;
@@ -59,10 +59,6 @@ interface ClientNode extends NodeBase {
   clientConnectsToServerAddress: string | null;
   localTargetAddress: string | null;
   connectedToServerId: string | null;
-}
-
-interface ApiKeyNode extends NodeBase {
-  type: 'apikey';
 }
 
 
@@ -86,7 +82,7 @@ interface DraggingNodeInfo {
 
 function parseTunnelAddr(urlString: string): string | null {
   try {
-    const url = new URL(urlString);
+    const url = new URL(urlString); 
     return url.host; 
   } catch (e) {
     const schemeSeparator = "://";
@@ -510,13 +506,13 @@ const TopologyPage: NextPage = () => {
 
     let Icon = ServerIcon;
     let bgColor = 'bg-primary/10 border-primary/30'; 
-    let titleText = '服务端实例'; 
+    let title = '服务端实例'; 
     let nodeHeight = NODE_HEIGHT_SERVER;
 
     if (isClient) {
       Icon = SmartphoneIcon;
       bgColor = 'bg-accent/10 border-accent/30';
-      titleText = '客户端实例';
+      title = '客户端实例';
       nodeHeight = NODE_HEIGHT_CLIENT;
     }
 
@@ -553,7 +549,7 @@ const TopologyPage: NextPage = () => {
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs break-all text-xs font-sans">
             <p>来源主控: {node.apiName} (ID: {node.apiId})</p>
-            <p>{titleText} ID: {node.id}</p>
+            <p>{title} ID: {node.id}</p>
             <p>URL: {node.url}</p>
           </TooltipContent>
         </Tooltip>
@@ -663,7 +659,7 @@ const TopologyPage: NextPage = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                              <span 
-                              className="cursor-pointer hover:text-primary hover:underline truncate block"
+                              className="cursor-pointer hover:text-primary transition-colors duration-150 truncate block"
                               onClick={() => handleCopyToClipboard(item.apiName, '来源主控名称')}
                               title={`点击复制: ${item.apiName}`}
                             >
@@ -676,21 +672,29 @@ const TopologyPage: NextPage = () => {
                         </Tooltip>
                       </TableCell>
                       <TableCell 
-                        className="font-mono text-xs cursor-pointer hover:text-primary hover:underline"
-                        onClick={() => handleCopyToClipboard(item.id, '实例 ID')}
+                        className="font-mono text-xs"
                         title={`点击复制: ${item.id}`}
-                      >
-                        {item.id.substring(0,12)}...
+                       >
+                        <span
+                          className="cursor-pointer hover:text-primary transition-colors duration-150"
+                          onClick={() => handleCopyToClipboard(item.id, '实例 ID')}
+                        >
+                          {item.id.substring(0,12)}...
+                        </span>
                       </TableCell>
                       <TableCell>
                         <InstanceStatusBadge status={item.status} />
                       </TableCell>
                       <TableCell 
-                        className="font-mono text-xs max-w-xs truncate cursor-pointer hover:text-primary hover:underline"
-                        onClick={() => handleCopyToClipboard(item.url, 'URL')}
-                        title={`点击复制: ${item.url}`}
+                        className="font-mono text-xs max-w-xs truncate"
                        >
-                           {item.url}
+                           <span
+                             className="cursor-pointer hover:text-primary transition-colors duration-150"
+                             onClick={() => handleCopyToClipboard(item.url, 'URL')}
+                             title={`点击复制: ${item.url}`}
+                           >
+                            {item.url}
+                           </span>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{item.serverListeningAddress}</TableCell>
                       <TableCell className="font-mono text-xs">{item.serverForwardsToAddress}</TableCell>

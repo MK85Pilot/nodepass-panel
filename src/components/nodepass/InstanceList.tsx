@@ -68,7 +68,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
     onSuccess: (data) => {
       toast({
         title: '实例已更新',
-        description: `实例 ${data.id} 状态已改为 ${data.status}。`,
+        description: `实例 ${data.id.substring(0,8)}... 状态已改为 ${data.status}。`,
       });
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
@@ -89,7 +89,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
     onSuccess: (_, instanceId) => {
       toast({
         title: '实例已删除',
-        description: `实例 ${instanceId} 已删除。`,
+        description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
       });
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       setSelectedInstanceForDelete(null);
@@ -138,13 +138,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
       <TableRow key={`skeleton-${i}`}>
-        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+        {[...Array(7)].map((_, cellIndex) => (
+          <TableCell key={`skeleton-cell-${i}-${cellIndex}`}>
+            <Skeleton className={`h-4 ${cellIndex === 3 ? 'w-40' : cellIndex === 0 ? 'w-24' : 'w-16'}`} />
+          </TableCell>
+        ))}
       </TableRow>
     ));
   };
@@ -227,11 +225,15 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken }: InstanceList
                       )}
                     </TableCell>
                     <TableCell 
-                      className="truncate max-w-sm text-xs font-mono cursor-pointer hover:text-primary hover:underline"
-                      title={`点击复制: ${instance.url}`}
-                      onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
+                      className="truncate max-w-sm text-xs font-mono"
                     >
-                        {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+                        <span 
+                          className="cursor-pointer hover:text-primary transition-colors duration-150"
+                          title={`点击复制: ${instance.url}`}
+                          onClick={() => handleCopyToClipboard(instance.url, instance.id === '********' ? 'API 密钥' : 'URL')}
+                        >
+                          {instance.id === '********' ? 'API 密钥 (已隐藏)' : instance.url}
+                        </span>
                     </TableCell>
                     <TableCell className="text-center text-xs whitespace-nowrap font-mono">
                       {formatBytes(instance.tcprx)} / {formatBytes(instance.tcptx)}
