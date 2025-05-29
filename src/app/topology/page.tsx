@@ -38,7 +38,7 @@ interface Position {
 }
 
 interface NodeBase {
-  id: string;
+  id: string; // This is the instance's local ID
   type: 'server' | 'client';
   url: string;
   status: Instance['status'];
@@ -72,8 +72,9 @@ interface ConnectionLine {
 }
 
 interface DraggingNodeInfo {
-  id: string;
+  id: string; // local ID of the instance being dragged
   type: DraggableNode['type']; 
+  apiId: string; // apiId of the instance being dragged, to form a global unique ID with 'id'
   initialMouseX: number;
   initialMouseY: number;
   initialNodeX: number;
@@ -261,6 +262,7 @@ const TopologyPage: NextPage = () => {
             return [];
           }
           try {
+            console.log(`拓扑页: 正在从主控 "${config.name}" (ID: ${config.id}) 加载实例... URL: ${apiRootVal}`);
             const data = await nodePassApi.getInstances(apiRootVal, tokenVal);
             return data.map(inst => ({ ...inst, apiId: config.id, apiName: config.name }));
           } catch (error: any) {
@@ -315,7 +317,7 @@ const TopologyPage: NextPage = () => {
     const connectedClients = clientsForSelectedServer;
     const newLines: ConnectionLine[] = [];
   
-    const serverEl = nodeRefs.current.get(`server-${serverNode.id}`);
+    const serverEl = nodeRefs.current.get(`server-${serverNode.apiId}-${serverNode.id}`);
     if (!serverEl) {
       setLines([]);
       return;
@@ -328,27 +330,29 @@ const TopologyPage: NextPage = () => {
     const serverY = serverNode.position.y;
   
     connectedClients.forEach(client => {
-      const clientEl = nodeRefs.current.get(`client-${client.id}`);
+      const clientEl = nodeRefs.current.get(`client-${client.apiId}-${client.id}`);
       if (!clientEl) return;
   
       const clientRect = clientEl.getBoundingClientRect();
       const clientX = client.position.x;
       const clientY = client.position.y;
   
-      let sx_anchor = serverX + NODE_WIDTH; 
-      let sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; 
+      // Anchors on the middle of the right edge of server, and middle of left edge of client
+      const sx_anchor = serverX + NODE_WIDTH; 
+      const sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; 
       
-      let cx_anchor = clientX; 
-      let cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; 
+      const cx_anchor = clientX; 
+      const cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; 
 
-
+      // Control point for the quadratic Bezier curve
+      // This creates a curve that flows outwards from the server then towards the client
       const controlX = (sx_anchor + cx_anchor) / 2 + (Math.abs(sx_anchor - cx_anchor) * 0.2 * (sx_anchor < cx_anchor ? 1 : -1) ) ;
       const controlY = (sy_anchor + cy_anchor) / 2 ;
   
       const path = `M ${sx_anchor} ${sy_anchor} Q ${controlX} ${controlY}, ${cx_anchor} ${cy_anchor}`;
   
       newLines.push({
-        id: `line-${serverNode.id}-${client.id}`,
+        id: `line-${serverNode.apiId}-${serverNode.id}-${client.apiId}-${client.id}`,
         pathData: path,
         type: serverNode.apiId === client.apiId ? 'intra-api' : 'inter-api',
       });
@@ -389,20 +393,18 @@ const TopologyPage: NextPage = () => {
   };
 
   const handleViewServerTopology = (server: ServerNode) => {
-    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id);
+    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id && c.apiId === server.apiId); // Match server by ID and API ID
     setInitialGraphLayout(server, relevantClients);
     setViewMode('graph');
   };
   
   const resetSelectedServerLayout = () => {
     if (!selectedServerForGraph) return;
-    // Find the original server data from allServerInstances to ensure we use the non-modified version
-    const originalServerNode = allServerInstances.find(s => s.id === selectedServerForGraph.id);
+    const originalServerNode = allServerInstances.find(s => s.id === selectedServerForGraph.id && s.apiId === selectedServerForGraph.apiId);
     if (!originalServerNode) return;
 
-    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === originalServerNode.id);
+    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === originalServerNode.id && c.apiId === originalServerNode.apiId);
     setInitialGraphLayout(originalServerNode, relevantClients);
-    // Lines will recalculate due to useEffect dependencies
   };
 
 
@@ -413,16 +415,16 @@ const TopologyPage: NextPage = () => {
     setLines([]); 
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, nodeId: string, nodeType: DraggableNode['type']) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, nodeId: string, nodeType: DraggableNode['type'], nodeApiId: string) => {
     didDragRef.current = false; 
     e.preventDefault(); 
     e.stopPropagation();
 
     let nodeToDrag: DraggableNode | undefined;
-    if (nodeType === 'server' && selectedServerForGraph?.id === nodeId) {
+    if (nodeType === 'server' && selectedServerForGraph?.id === nodeId && selectedServerForGraph?.apiId === nodeApiId) {
         nodeToDrag = selectedServerForGraph;
     } else if (nodeType === 'client') {
-        nodeToDrag = clientsForSelectedServer.find(c => c.id === nodeId);
+        nodeToDrag = clientsForSelectedServer.find(c => c.id === nodeId && c.apiId === nodeApiId);
     }
 
 
@@ -435,6 +437,7 @@ const TopologyPage: NextPage = () => {
     setDraggingNodeInfo({
       id: nodeId,
       type: nodeType,
+      apiId: nodeApiId,
       initialMouseX: mouseXInCanvas,
       initialMouseY: mouseYInCanvas,
       initialNodeX: nodeToDrag.position.x,
@@ -457,7 +460,7 @@ const TopologyPage: NextPage = () => {
     let newX = draggingNodeInfo.initialNodeX + dx;
     let newY = draggingNodeInfo.initialNodeY + dy;
 
-    const nodeEl = nodeRefs.current.get(`${draggingNodeInfo.type}-${draggingNodeInfo.id}`);
+    const nodeEl = nodeRefs.current.get(`${draggingNodeInfo.type}-${draggingNodeInfo.apiId}-${draggingNodeInfo.id}`);
     let nodeWidth = nodeEl?.offsetWidth || NODE_WIDTH; 
     let nodeHeight = draggingNodeInfo.type === 'client' ? NODE_HEIGHT_CLIENT : NODE_HEIGHT_SERVER;
 
@@ -465,12 +468,12 @@ const TopologyPage: NextPage = () => {
     newX = Math.max(0, Math.min(newX, canvasRef.current.scrollWidth - nodeWidth));
     newY = Math.max(0, Math.min(newY, canvasRef.current.scrollHeight - nodeHeight));
 
-    if (draggingNodeInfo.type === 'server' && selectedServerForGraph?.id === draggingNodeInfo.id) {
+    if (draggingNodeInfo.type === 'server' && selectedServerForGraph?.id === draggingNodeInfo.id && selectedServerForGraph?.apiId === draggingNodeInfo.apiId) {
       setSelectedServerForGraph(prev => prev ? { ...prev, position: { x: newX, y: newY } } : null);
     } else if (draggingNodeInfo.type === 'client') {
       setClientsForSelectedServer(prevClients =>
         prevClients.map(c =>
-          c.id === draggingNodeInfo.id ? { ...c, position: { x: newX, y: newY } } : c
+          (c.id === draggingNodeInfo.id && c.apiId === draggingNodeInfo.apiId) ? { ...c, position: { x: newX, y: newY } } : c
         )
       );
     }
@@ -544,11 +547,12 @@ const TopologyPage: NextPage = () => {
     }
 
     const displayId = node.id.substring(0, 8) + '...';
+    const uniqueNodeRefKey = `${node.type}-${node.apiId}-${node.id}`;
 
     return (
       <Card
-        key={`${node.type}-${node.id}`}
-        ref={el => nodeRefs.current.set(`${node.type}-${node.id}`, el)}
+        key={uniqueNodeRefKey}
+        ref={el => nodeRefs.current.set(uniqueNodeRefKey, el)}
         className={cn(
           "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-lg flex flex-col border-2",
           bgColor,
@@ -558,10 +562,10 @@ const TopologyPage: NextPage = () => {
           top: `${node.position.y}px`,
           width: `${NODE_WIDTH}px`, 
           height: `${nodeHeight}px`, 
-          zIndex: draggingNodeInfo?.id === node.id && draggingNodeInfo?.type === node.type ? 100 : 1,
+          zIndex: draggingNodeInfo?.id === node.id && draggingNodeInfo?.type === node.type && draggingNodeInfo?.apiId === node.apiId ? 100 : 1,
           userSelect: 'none', 
         }}
-        onMouseDown={(e) => handleMouseDown(e, node.id, node.type)}
+        onMouseDown={(e) => handleMouseDown(e, node.id, node.type, node.apiId)}
         onClick={() => openInstanceDetailsModal(node)}
       >
         <Tooltip>
@@ -587,12 +591,6 @@ const TopologyPage: NextPage = () => {
           </div>
           {isServer && (node as ServerNode).serverListeningAddress && (
             <p className="truncate font-mono" title={(node as ServerNode).serverListeningAddress!}>监听: {(node as ServerNode).serverListeningAddress}</p>
-          )}
-           {isServer && (node as ServerNode).serverForwardsToAddress && (
-            <p className="truncate font-mono" title={(node as ServerNode).serverForwardsToAddress!}>转发至: {(node as ServerNode).serverForwardsToAddress}</p>
-          )}
-          {isClient && (node as ClientNode).clientConnectsToServerAddress && (
-            <p className="truncate font-mono" title={(node as ClientNode).clientConnectsToServerAddress!}>连接至: {(node as ClientNode).clientConnectsToServerAddress}</p>
           )}
           {isClient && (node as ClientNode).localTargetAddress && (
              <p className="truncate text-green-600 dark:text-green-400 font-mono" title={(node as ClientNode).localTargetAddress!}>
@@ -813,5 +811,3 @@ const TopologyPage: NextPage = () => {
 };
 
 export default TopologyPage;
-
-    
