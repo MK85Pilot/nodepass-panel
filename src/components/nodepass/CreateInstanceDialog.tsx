@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
@@ -22,10 +22,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
-import { PlusCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Loader2, Info } from 'lucide-react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
-import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
+import { useApiConfig, type NamedApiConfig, type MasterLogLevel, type MasterTlsMode } from '@/hooks/use-api-key';
 
 interface CreateInstanceDialogProps {
   open: boolean;
@@ -39,14 +39,22 @@ interface CreateInstanceDialogProps {
 
 function parseTunnelAddr(urlString: string): string | null {
   try {
-    const url = new URL(urlString);
+    // Attempt to parse as a full URL to handle schemes, etc.
+    // If it doesn't have a scheme, prepend http for the URL constructor.
+    const url = new URL(urlString.includes('://') ? urlString : `http://${urlString}`);
+    // The host property includes hostname and port if present
     return url.host;
   } catch (e) {
+    // If URL parsing fails, it might be a simple host:port string or malformed.
+    // We are interested in the part before the first '/' if no scheme,
+    // and before '?'
     const schemeSeparator = "://";
     const schemeIndex = urlString.indexOf(schemeSeparator);
-    if (schemeIndex === -1) return null;
+    let restOfString = urlString;
 
-    const restOfString = urlString.substring(schemeIndex + schemeSeparator.length);
+    if (schemeIndex !== -1) {
+      restOfString = urlString.substring(schemeIndex + schemeSeparator.length);
+    }
     
     const pathSeparatorIndex = restOfString.indexOf('/');
     const querySeparatorIndex = restOfString.indexOf('?');
@@ -60,7 +68,12 @@ function parseTunnelAddr(urlString: string): string | null {
       endOfTunnelAddr = querySeparatorIndex;
     }
     
-    return endOfTunnelAddr !== -1 ? restOfString.substring(0, endOfTunnelAddr) : restOfString;
+    const tunnelAddrCandidate = endOfTunnelAddr !== -1 ? restOfString.substring(0, endOfTunnelAddr) : restOfString;
+    // Basic check to see if it contains a colon, typical for host:port
+    if (tunnelAddrCandidate.includes(':') || (!tunnelAddrCandidate.includes(':') && tunnelAddrCandidate.length > 0) ) {
+        return tunnelAddrCandidate;
+    }
+    return null;
   }
 }
 
@@ -70,7 +83,6 @@ const MASTER_TLS_MODE_DISPLAY_MAP: Record<MasterTlsMode, string> = {
   '1': '1: 自签名',
   '2': '2: 自定义',
 };
-
 
 function buildUrl(values: CreateInstanceFormValues): string {
   let url = `${values.instanceType}://${values.tunnelAddress}/${values.targetAddress}`;
@@ -93,10 +105,41 @@ function buildUrl(values: CreateInstanceFormValues): string {
   return queryString ? `${url}?${queryString}` : url;
 }
 
+function extractHostname(urlOrHostPort: string): string | null {
+  if (!urlOrHostPort) return null;
+  try {
+    // If it doesn't include '://', assume it's host:port and prepend a scheme for URL constructor
+    const fullUrl = urlOrHostPort.includes('://') ? urlOrHostPort : `scheme://${urlOrHostPort}`;
+    const url = new URL(fullUrl);
+    // For IPv6 addresses, hostname might include brackets, which is fine.
+    // The URL constructor's hostname property correctly handles this.
+    return url.hostname.replace(/^\[|\]$/g, ''); // Remove brackets for IPv6 for comparison
+  } catch (e) {
+    // Fallback for simple host:port strings that might not be valid URLs
+    // or if URL constructor fails for other reasons.
+    const parts = urlOrHostPort.split(':');
+    if (parts.length > 0) {
+        // Handles case where there is no port, or IPv6 without brackets and port
+        let hostCandidate = parts[0];
+        if (urlOrHostPort.includes('[')) { // Likely IPv6 with brackets
+            const match = urlOrHostPort.match(/^\[(.*?)\]/);
+            if (match && match[1]) {
+                hostCandidate = match[1];
+            }
+        }
+        // Very basic check if it's not empty
+        return hostCandidate.length > 0 ? hostCandidate : null;
+    }
+    return null;
+  }
+}
+
 
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { apiConfigsList } = useApiConfig(); // Get the list of all API configurations
+  const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
@@ -114,6 +157,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
 
   const instanceType = form.watch("instanceType");
   const tlsMode = form.watch("tlsMode");
+  const tunnelAddressValue = form.watch("tunnelAddress");
 
   useEffect(() => {
     if (open) {
@@ -127,6 +171,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         keyPath: '',
         autoCreateServer: false,
       });
+      setExternalApiSuggestion(null); // Reset suggestion when dialog opens
     }
   }, [open, form]);
   
@@ -139,11 +184,41 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         if (form.getValues("tlsMode") === undefined) {
             form.setValue("tlsMode", "master");
         }
-        form.setValue("autoCreateServer", false); // Cannot auto-create server if type is server
+        form.setValue("autoCreateServer", false); 
     }
   }, [instanceType, form]);
 
-  const { data: serverInstances, isLoading: isLoadingServerInstances } = useQuery<Instance[], Error, {id: string, display: string, tunnelAddr: string}[]>({
+  useEffect(() => {
+    if (instanceType === 'client' && tunnelAddressValue) {
+      const clientTunnelHost = extractHostname(tunnelAddressValue);
+      if (!clientTunnelHost) {
+        setExternalApiSuggestion(null);
+        return;
+      }
+
+      const localHostnames = ['localhost', '127.0.0.1', '::', '::1'];
+      if (localHostnames.includes(clientTunnelHost.toLowerCase())) {
+        setExternalApiSuggestion(null);
+        return;
+      }
+
+      const isKnownHost = apiConfigsList.some(config => {
+        const configuredApiHost = extractHostname(config.apiUrl);
+        return configuredApiHost && configuredApiHost.toLowerCase() === clientTunnelHost.toLowerCase();
+      });
+
+      if (!isKnownHost) {
+        setExternalApiSuggestion(`提示: 您似乎正在连接到一个外部主控 (${clientTunnelHost})。考虑将其添加为主控连接以便于管理。`);
+      } else {
+        setExternalApiSuggestion(null);
+      }
+    } else {
+      setExternalApiSuggestion(null);
+    }
+  }, [tunnelAddressValue, instanceType, apiConfigsList]);
+
+
+  const { data: serverInstancesForDropdown, isLoading: isLoadingServerInstances } = useQuery<Instance[], Error, {id: string, display: string, tunnelAddr: string}[]>({
     queryKey: ['instances', apiId, 'serversForTunnelSelection'],
     queryFn: async () => {
       if (!apiId || !apiRoot || !apiToken) throw new Error("主控配置不完整，无法获取服务端实例。");
@@ -210,7 +285,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       
       const effectiveMasterTlsMode = (activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master') 
                                       ? activeApiConfig.masterDefaultTlsMode 
-                                      : '1'; // Fallback to self-signed if master's default is 'master' (unspecified)
+                                      : '1'; 
 
       const serverConfigForAutoCreate: CreateInstanceFormValues = {
         instanceType: 'server',
@@ -218,20 +293,23 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         targetAddress: `0.0.0.0:${clientTargetPort}`, 
         logLevel: values.logLevel,
         tlsMode: effectiveMasterTlsMode,
-        certPath: '', // Not applicable for tlsMode '0' or '1'
-        keyPath: '',  // Not applicable for tlsMode '0' or '1'
+        certPath: '', 
+        keyPath: '',  
       };
       const serverUrlToCreate = buildUrl(serverConfigForAutoCreate);
 
       try {
         await createInstanceMutation.mutateAsync({ url: serverUrlToCreate });
+        // Toast for server creation success is handled by onSucess of mutation
         const clientUrlToCreate = buildUrl(values);
         await createInstanceMutation.mutateAsync({ url: clientUrlToCreate });
+        // Toast for client creation success is handled by onSucess of mutation
         
         form.reset();
         onOpenChange(false); 
 
       } catch (error: any) {
+        // onError of mutation handles individual creation failure toasts
         console.error("自动创建序列中发生错误:", error);
       }
     } else {
@@ -241,6 +319,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         form.reset();
         onOpenChange(false); 
       } catch (error) {
+         // onError of mutation handles individual creation failure toasts
          console.error("创建单个实例时发生错误:", error);
       }
     }
@@ -311,6 +390,12 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       ? "服务端模式: 监听客户端控制连接的地址 (例 '0.0.0.0:10101')。"
                       : "客户端模式: NodePass 服务端隧道地址 (例 'server.example.com:10101')。"}
                   </FormDescription>
+                  {externalApiSuggestion && (
+                    <FormDescription className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      <Info size={14} className="inline-block mr-1.5 align-text-bottom" />
+                      {externalApiSuggestion}
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -325,13 +410,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       form.setValue('tunnelAddress', value, { shouldValidate: true, shouldDirty: true });
                     }
                   }}
-                  disabled={isLoadingServerInstances || !serverInstances || serverInstances.length === 0}
+                  disabled={isLoadingServerInstances || !serverInstancesForDropdown || serverInstancesForDropdown.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger className="text-sm font-sans">
                       <SelectValue placeholder={
                         isLoadingServerInstances ? "加载服务端中..." : 
-                        (!serverInstances || serverInstances.length === 0) ? "无可用服务端" : "选择服务端隧道"
+                        (!serverInstancesForDropdown || serverInstancesForDropdown.length === 0) ? "当前主控无可用服务端" : "选择服务端隧道"
                       } />
                     </SelectTrigger>
                   </FormControl>
@@ -341,14 +426,14 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                             <Loader2 className="h-4 w-4 animate-spin mr-2"/> 加载中...
                         </div>
                     )}
-                    {serverInstances && serverInstances.map(server => (
+                    {serverInstancesForDropdown && serverInstancesForDropdown.map(server => (
                       <SelectItem key={server.id} value={server.tunnelAddr} className="font-sans">
                         {server.display}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {serverInstances && serverInstances.length === 0 && !isLoadingServerInstances && (
+                {serverInstancesForDropdown && serverInstancesForDropdown.length === 0 && !isLoadingServerInstances && (
                     <FormDescription className="font-sans text-xs">当前主控无可用服务端实例。</FormDescription>
                 )}
               </FormItem>
@@ -403,7 +488,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                   </Select>
                   <FormDescription className="font-sans text-xs">
                     选择“默认”将继承主控实际启动时应用的设置。
-                    {activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master' && ` (当前主控默认为: ${activeApiConfig.masterDefaultLogLevel.toUpperCase()})`}
+                    {activeApiConfig?.masterDefaultLogLevel && activeApiConfig.masterDefaultLogLevel !== 'master' && ` (当前主控记录的默认级别为: ${activeApiConfig.masterDefaultLogLevel.toUpperCase()})`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -435,7 +520,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </Select>
                        <FormDescription className="font-sans text-xs">
                         选择“默认”将继承主控实际启动时应用的设置。
-                        {activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master' && ` (当前主控默认为: ${MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]})`}
+                        {activeApiConfig?.masterDefaultTlsMode && activeApiConfig.masterDefaultTlsMode !== 'master' && ` (当前主控记录的默认TLS模式为: ${MASTER_TLS_MODE_DISPLAY_MAP[activeApiConfig.masterDefaultTlsMode]})`}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -502,7 +587,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
                       </FormLabel>
                       <FormDescription className="font-sans text-xs">
                         如果勾选，将在创建此客户端实例前，尝试自动创建一个匹配的服务端实例。
-                        自动创建的服务端将使用与客户端相同的日志级别，并继承当前活动主控配置的默认TLS模式 (如果主控未指定具体TLS模式，则默认为 '1' 自签名证书)。
+                        自动创建的服务端将使用与客户端相同的日志级别，并根据当前活动主控记录的默认TLS模式进行配置 (若主控未记录特定TLS模式，则默认为 '1' 自签名证书)。
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -533,5 +618,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     </Dialog>
   );
 }
+
 
     
