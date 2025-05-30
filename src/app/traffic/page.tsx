@@ -12,10 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Loader2, RefreshCw, AlertTriangle, BarChart3, List } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, BarChartHorizontalBig, List } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Server, Smartphone } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
 
 interface InstanceWithApiDetails extends Instance {
@@ -57,6 +58,7 @@ const chartConfig = {
 
 const TrafficPage: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig, getApiRootUrl, getToken } = useApiConfig();
+  const { toast } = useToast();
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   const { data: allInstancesData, isLoading: isLoadingData, error: fetchErrorGlobal, refetch } = useQuery<
@@ -78,23 +80,21 @@ const TrafficPage: NextPage = () => {
           
           if (!apiRootVal || !tokenVal) {
             console.warn(`TrafficPage: API config "${config.name}" (ID: ${config.id}) is invalid. Skipping.`);
-            // Return an empty array for this promise if config is bad, so Promise.allSettled still works.
-            // Or, you could choose to reject it to mark it as a failure for this specific API.
-            // For simplicity in combining results, an empty array is fine if it's a config issue.
             return []; 
           }
           
           try {
             const data = await nodePassApi.getInstances(apiRootVal, tokenVal);
             return data.map(inst => ({ ...inst, apiId: config.id, apiName: config.name }));
-          } catch (error) {
-            // Log the specific error for this API config
-            console.error(`TrafficPage: Failed to load instances from API "${config.name}" (ID: ${config.id}). Error:`, error instanceof Error ? error.message : String(error));
-            // Important: Do NOT re-throw here if you want the page to show partial data.
-            // Instead, let this promise be 'rejected' in Promise.allSettled.
-            // We will filter out rejected promises or handle them later.
-            // To make Promise.allSettled reflect this as a specific failure, we can make this inner promise reject.
-            return Promise.reject(new Error(`Failed to fetch from ${config.name}: ${error instanceof Error ? error.message : String(error)}`));
+          } catch (error: any) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`TrafficPage: Failed to load instances from API "${config.name}" (ID: ${config.id}). Error:`, errorMessage);
+            toast({
+              title: `加载 "${config.name}" 失败`,
+              description: errorMessage.length > 100 ? errorMessage.substring(0, 97) + "..." : errorMessage,
+              variant: 'destructive',
+            });
+            return [];
           }
         })
       );
@@ -103,12 +103,11 @@ const TrafficPage: NextPage = () => {
         if (result.status === 'fulfilled' && result.value) {
           combinedInstances.push(...result.value);
         } else if (result.status === 'rejected') {
-          // The specific error was already logged in the catch block above.
-          // We are choosing to not let one API failure stop the entire page load.
-          // console.warn(`TrafficPage: One or more API fetches failed. Reason:`, result.reason);
+          console.warn(`TrafficPage: One or more API fetches failed (already handled and toast shown). Reason: ${result.reason?.message || String(result.reason)}`);
         }
       });
-      return combinedInstances;
+      // Filter out the special API Key instance
+      return combinedInstances.filter(inst => inst.id !== '********');
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
     refetchOnMount: 'always',
@@ -145,22 +144,20 @@ const TrafficPage: NextPage = () => {
   if (isLoadingApiConfig) {
     return (
       <AppLayout>
-        <div className="text-center py-10 flex flex-col items-center justify-center h-[calc(100vh-10rem-4rem)]">
+        <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="mt-3">加载API配置...</p>
+          <p className="ml-4 text-lg font-sans">加载主控配置...</p>
         </div>
       </AppLayout>
     );
   }
 
-  // Note: fetchErrorGlobal from useQuery might not be set if we handle rejections within queryFn without re-throwing.
-  // However, if a critical error occurs before Promise.allSettled (e.g., apiConfigsList is bad), it might be set.
   if (fetchErrorGlobal && !isLoadingData) { 
     return (
       <AppLayout>
         <Card className="max-w-md mx-auto mt-10 shadow-lg">
-          <CardHeader><CardTitle className="text-destructive flex items-center justify-center"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
-          <CardContent><p>加载数据失败: {fetchErrorGlobal.message}</p></CardContent>
+          <CardHeader><CardTitle className="text-destructive flex items-center justify-center font-title"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
+          <CardContent><p className="font-sans">加载流量数据失败: {fetchErrorGlobal.message}</p></CardContent>
         </Card>
       </AppLayout>
     );
@@ -170,36 +167,36 @@ const TrafficPage: NextPage = () => {
   return (
     <AppLayout>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">流量统计</h1>
+        <h1 className="text-2xl font-bold font-title">流量统计</h1>
         <div className="flex items-center gap-2">
-          {lastRefreshed && <span className="text-xs text-muted-foreground">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
-          <Button variant="outline" onClick={handleRefresh} disabled={isLoadingData}>
+          {lastRefreshed && <span className="text-xs text-muted-foreground font-sans">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoadingData} className="font-sans">
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`} />
             {isLoadingData ? '刷新中...' : '刷新数据'}
           </Button>
         </div>
       </div>
 
-      {isLoadingData && (
-        <div className="text-center py-10 flex flex-col items-center justify-center h-[calc(100vh-10rem-4rem)]">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="mt-3">加载流量数据...</p>
+      {isLoadingData && !isLoadingApiConfig && (
+        <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
+          <Loader2 className="h-16 w-16 animate-spin text-primary" />
+          <p className="ml-4 text-xl font-sans">加载流量数据...</p>
         </div>
       )}
 
       {!isLoadingData && allInstances.length === 0 && !fetchErrorGlobal && (
-        <Card className="text-center py-10 shadow-lg">
-          <CardHeader><CardTitle>无数据显示</CardTitle></CardHeader>
-          <CardContent><p className="text-muted-foreground">{apiConfigsList.length > 0 ? "未找到任何实例或所有实例流量为0。" : "请先配置API连接。"}</p></CardContent>
+        <Card className="text-center py-10 shadow-lg card-hover-shadow">
+          <CardHeader><CardTitle className="font-title">无数据显示</CardTitle></CardHeader>
+          <CardContent><p className="text-muted-foreground font-sans">{apiConfigsList.length > 0 ? "未找到任何实例或所有实例流量为0。" : "请先配置主控连接。"}</p></CardContent>
         </Card>
       )}
 
       {!isLoadingData && allInstances.length > 0 && (
         <div className="space-y-8">
-          <Card>
+          <Card className="shadow-lg card-hover-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary" />整体流量用量</CardTitle>
-              <CardDescription>所有实例的总流量统计。</CardDescription>
+              <CardTitle className="flex items-center font-title"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-primary" />整体流量用量</CardTitle>
+              <CardDescription className="font-sans mt-1">所有实例的总流量统计。</CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
               {overallTrafficData.length > 0 ? (
@@ -207,11 +204,11 @@ const TrafficPage: NextPage = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={overallTrafficData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatBytes(value)} />
+                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} className="font-sans" />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatBytes(value)} className="font-sans"/>
                       <RechartsTooltip
                         cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
-                        content={<ChartTooltipContent formatter={(value) => formatBytes(value as number)} />}
+                        content={<ChartTooltipContent formatter={(value) => formatBytes(value as number)} className="font-sans"/>}
                       />
                       <Bar dataKey="total" radius={4}>
                         {overallTrafficData.map((entry, index) => (
@@ -222,39 +219,39 @@ const TrafficPage: NextPage = () => {
                   </ResponsiveContainer>
                 </ChartContainer>
               ) : (
-                <p className="text-muted-foreground text-center py-4">无流量数据可用于图表。</p>
+                <p className="text-muted-foreground text-center py-4 font-sans">无流量数据可用于图表。</p>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-lg card-hover-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center"><List className="mr-2 h-5 w-5 text-primary" />各实例流量详情</CardTitle>
-              <CardDescription>每个单独实例的流量统计。</CardDescription>
+              <CardTitle className="flex items-center font-title"><List className="mr-2 h-5 w-5 text-primary" />各实例流量详情</CardTitle>
+              <CardDescription className="font-sans mt-1">每个单独实例的流量统计。</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>API 名称</TableHead>
-                      <TableHead>实例 ID</TableHead>
-                      <TableHead>类型</TableHead>
-                      <TableHead className="text-right">TCP 接收</TableHead>
-                      <TableHead className="text-right">TCP 发送</TableHead>
-                      <TableHead className="text-right">UDP 接收</TableHead>
-                      <TableHead className="text-right">UDP 发送</TableHead>
+                      <TableHead className="font-sans">来源主控</TableHead>
+                      <TableHead className="font-sans">实例 ID</TableHead>
+                      <TableHead className="font-sans">类型</TableHead>
+                      <TableHead className="text-right font-sans">TCP 接收</TableHead>
+                      <TableHead className="text-right font-sans">TCP 发送</TableHead>
+                      <TableHead className="text-right font-sans">UDP 接收</TableHead>
+                      <TableHead className="text-right font-sans">UDP 发送</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {allInstances.map((instance) => (
-                      <TableRow key={instance.id}>
-                        <TableCell className="truncate max-w-[150px]">{instance.apiName}</TableCell>
+                      <TableRow key={`${instance.apiId}-${instance.id}`}>
+                        <TableCell className="truncate max-w-[150px] font-sans">{instance.apiName}</TableCell>
                         <TableCell className="font-mono text-xs truncate max-w-[100px]">{instance.id.substring(0,12)}...</TableCell>
                         <TableCell>
                            <Badge
                             variant={instance.type === 'server' ? 'default' : 'accent'}
-                            className="items-center whitespace-nowrap text-xs"
+                            className="items-center whitespace-nowrap text-xs font-sans"
                           >
                             {instance.type === 'server' ? <Server className="h-3 w-3 mr-1" /> : <Smartphone className="h-3 w-3 mr-1" />}
                             {instance.type === 'server' ? '服务器' : '客户端'}
@@ -278,5 +275,3 @@ const TrafficPage: NextPage = () => {
 };
 
 export default TrafficPage;
-
-    
