@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, Network, BarChartHorizontalBig, Check, Edit3, Trash2 } from 'lucide-react';
+import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, Network, BarChartHorizontalBig, Check } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,9 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation'; // Keep for navigation
+import { useRouter } from 'next/navigation';
 import type { AppLogEntry } from '@/components/nodepass/EventLog';
-
+import { AppLogo } from './AppLogo'; // Import the new logo component
 
 interface HeaderProps {
   onManageApiConfigs: (configToEdit?: NamedApiConfig | null) => void;
@@ -35,7 +35,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
   const { setTheme, theme } = useTheme();
   const { apiConfigsList, activeApiConfig, setActiveApiConfigId } = useApiConfig();
   const { toast } = useToast();
-  const router = useRouter(); // Keep router for navigation
+  const router = useRouter();
 
   const handleSwitchApiConfig = (id: string) => {
     const newActiveConf = apiConfigsList.find(c => c.id === id);
@@ -44,8 +44,8 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
       title: '活动主控已切换',
       description: `已连接到 “${newActiveConf?.name}”。`,
     });
-    // onLog is handled by HomePage's useEffect watching activeApiConfig
-    window.location.href = '/'; // Force full page reload
+    onLog?.(`活动主控已切换至: "${newActiveConf?.name}"`, 'INFO');
+    window.location.href = '/';
   };
 
   return (
@@ -53,7 +53,7 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
       <div className="container mx-auto flex h-16 items-center px-4 sm:px-6 lg:px-8">
         <div className="flex items-center">
           <Link href="/" className="flex items-center" aria-label="主页">
-            <Network className="mr-2 h-6 w-6 text-primary" />
+            <AppLogo className="h-8 w-8 mr-2" /> {/* Use AppLogo here, adjusted size */}
             <h1 className="text-flow-effect text-xl font-title tracking-tight sm:text-2xl">NodePass 管理器</h1>
           </Link>
            {activeApiConfig && (
