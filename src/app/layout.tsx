@@ -28,6 +28,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'NodePass 管理器',
   description: 'NodePass 实例管理。',
+  // icons: [{ rel: 'icon', url: '/logo.svg', type: 'image/svg+xml' }], // Using direct link in head for now
 };
 
 export default function RootLayout({
@@ -37,6 +38,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+      </head>
       <body className={`${montserrat.variable} ${roboto.variable} ${jetbrainsMono.variable} antialiased font-sans`}>
         <QueryProvider>
           <ThemeProvider
