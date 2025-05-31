@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Maximize, LayoutGrid } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, LinkOff } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -225,7 +225,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
@@ -692,17 +692,17 @@ const TopologyPageContent: NextPage = () => {
                 数据刷新: {lastRefreshed.toLocaleTimeString()}
               </span>
             )}
-            <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
-                <LayoutGrid className="mr-1 h-4 w-4" />
-                格式化
-            </Button>
-             <Button variant="outline" onClick={() => fitView({ duration: 600 })} title="自适应视图" size="sm" className="font-sans h-9">
+            <Button variant="outline" onClick={() => fitView({ duration: 600 })} title="自适应视图" size="sm" className="font-sans h-9">
                 <Maximize className="mr-1 h-4 w-4" />
                 自适应
             </Button>
             <Button variant="outline" onClick={() => refetchInstances()} disabled={isLoadingInstances} size="sm" className="font-sans">
               <RefreshCw className={`mr-1 h-4 w-4 ${isLoadingInstances ? 'animate-spin' : ''}`} />
               {isLoadingInstances ? '刷新中' : '刷新数据'}
+            </Button>
+             <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
+                <LayoutGrid className="mr-1 h-4 w-4" />
+                格式化
             </Button>
             <Button variant="destructive" onClick={() => setIsClearCanvasAlertOpen(true)} size="sm" className="font-sans">
               <Eraser className="mr-1 h-4 w-4" />
@@ -721,7 +721,7 @@ const TopologyPageContent: NextPage = () => {
         <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}> 
           <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
             <Card className="shadow-sm flex-shrink-0">
-              <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Settings className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
+              <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><ControllerIcon className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[120px]"> 
                 <div className="space-y-1 p-1">
                   {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground text-center py-1 font-sans">无主控连接。</p>}
@@ -810,7 +810,7 @@ const TopologyPageContent: NextPage = () => {
               zoomOnScroll={true}
               panOnScroll={false}
               panOnDrag={true}
-              preventScrolling={false}
+              preventScrolling={true}
             >
               <Background gap={16} />
             </ReactFlow>
@@ -1052,3 +1052,5 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
+
+    
