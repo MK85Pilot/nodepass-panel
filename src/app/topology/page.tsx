@@ -1,249 +1,139 @@
-
 "use client";
 
-import type { NextPage } from 'next';
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import ReactFlow, {
+  MiniMap,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  Node,
+  Edge,
+  Position,
+  MarkerType,
+  Panel,
+  NodeProps,
+  Handle,
+  Connection,
+  addEdge,
+  ReactFlowProvider,
+  useReactFlow,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
+import { useApiConfig } from '@/hooks/use-api-key';
 import { nodePassApi } from '@/lib/api';
 import type { Instance } from '@/types/nodepass';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Move, Link2, Eye, List, KeyRound, Maximize2 } from 'lucide-react';
-import { InstanceStatusBadge } from '@/components/nodepass/InstanceStatusBadge';
-import { InstanceDetailsModal } from '@/components/nodepass/InstanceDetailsModal';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Link2, UserCircle2, Globe, Settings, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { cn } from "@/lib/utils";
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { InstanceDetailsModal } from '@/components/nodepass/InstanceDetailsModal';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
+// 节点类型定义
+export type NodeData = {
+  label: string;
+  type: 'master' | 'server' | 'client' | 'user' | 'target';
+  apiId?: string;
+  apiName?: string;
+  tunnelAddr?: string;
+  targetAddr?: string;
+  originalInstance?: Instance; // Store original instance data if node is from API
+};
 
-interface InstanceWithApiDetails extends Instance {
-  apiId: string;
-  apiName: string;
-}
-
-interface Position {
-  x: number;
-  y: number;
-}
-
-interface NodeBase {
-  id: string; // This is the instance's local ID
-  type: 'server' | 'client';
-  url: string;
-  status: Instance['status'];
-  apiId: string;
-  apiName: string;
-  position: Position;
-  originalInstance: InstanceWithApiDetails;
-}
-
-interface ServerNode extends NodeBase {
-  type: 'server';
-  serverListeningAddress: string | null;
-  serverForwardsToAddress: string | null;
-}
-
-interface ClientNode extends NodeBase {
-  type: 'client';
-  clientConnectsToServerAddress: string | null;
-  localTargetAddress: string | null;
-  connectedToServerId: string | null;
-}
-
-
-type DraggableNode = ServerNode | ClientNode;
-
-
-interface ConnectionLine {
-  id: string;
-  pathData: string;
-  type: 'intra-api' | 'inter-api';
-}
-
-interface DraggingNodeInfo {
-  id: string; // local ID of the instance being dragged
-  type: DraggableNode['type']; 
-  apiId: string; // apiId of the instance being dragged, to form a global unique ID with 'id'
-  initialMouseX: number;
-  initialMouseY: number;
-  initialNodeX: number;
-  initialNodeY: number;
-}
-
-function parseTunnelAddr(urlString: string): string | null {
-  try {
-    const url = new URL(urlString); 
-    return url.host; 
-  } catch (e) {
-    const schemeSeparator = "://";
-    const schemeIndex = urlString.indexOf(schemeSeparator);
-    if (schemeIndex === -1) return null;
-
-    const restOfString = urlString.substring(schemeIndex + schemeSeparator.length);
-    
-    const pathSeparatorIndex = restOfString.indexOf('/');
-    const querySeparatorIndex = restOfString.indexOf('?');
-    let endOfTunnelAddr = -1;
-
-    if (pathSeparatorIndex !== -1 && querySeparatorIndex !== -1) {
-      endOfTunnelAddr = Math.min(pathSeparatorIndex, querySeparatorIndex);
-    } else if (pathSeparatorIndex !== -1) {
-      endOfTunnelAddr = pathSeparatorIndex;
-    } else if (querySeparatorIndex !== -1) {
-      endOfTunnelAddr = querySeparatorIndex;
+// 自定义节点组件
+const CustomNode = ({ data, id, selected }: NodeProps<NodeData>) => {
+  const getNodeBorderColor = () => {
+    switch (data.type) {
+      case 'master':
+        return 'border-yellow-500';
+      case 'server':
+        return 'border-primary';
+      case 'client':
+        return 'border-accent';
+      case 'user':
+        return 'border-green-500';
+      case 'target':
+        return 'border-purple-500';
+      default:
+        return 'border-border';
     }
-    
-    return endOfTunnelAddr !== -1 ? restOfString.substring(0, endOfTunnelAddr) : restOfString;
-  }
-}
+  };
 
-function parseTargetAddr(urlString: string): string | null {
-  const schemeSeparator = "://";
-  const schemeIndex = urlString.indexOf(schemeSeparator);
-  if (schemeIndex === -1) return null; 
+  const getIcon = () => {
+    const commonClass = "h-5 w-5 mr-2 shrink-0";
+    switch (data.type) {
+      case 'master':
+        return <Settings className={`${commonClass} text-yellow-500`} />;
+      case 'server':
+        return <ServerIcon className={`${commonClass} text-primary`} />;
+      case 'client':
+        return <SmartphoneIcon className={`${commonClass} text-accent`} />;
+      case 'user':
+        return <UserCircle2 className={`${commonClass} text-green-500`} />;
+      case 'target':
+        return <Globe className={`${commonClass} text-purple-500`} />;
+      default:
+        return <Info className={`${commonClass} text-muted-foreground`} />;
+    }
+  };
 
-  const restOfString = urlString.substring(schemeIndex + schemeSeparator.length);
-  const pathSeparatorIndex = restOfString.indexOf('/');
-  if (pathSeparatorIndex === -1) return null; 
+  return (
+    <div
+      className={`shadow-lg rounded-lg bg-card border-2 text-card-foreground hover:shadow-xl transition-shadow duration-200 
+                  ${getNodeBorderColor()} p-3 space-y-1.5 min-w-[200px] text-xs
+                  ${selected ? 'ring-2 ring-offset-2 ring-ring' : ''}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        // Context menu logic can be added here if needed, or managed by ReactFlow
+      }}
+    >
+      <Handle type="target" position={Position.Left} className="!bg-gray-400 !h-4 !w-2 !border-2 !border-card" style={{ left: '-0.6rem' }}/>
+      <div className="flex items-center">
+        {getIcon()}
+        <div className="text-sm font-semibold text-card-foreground truncate" title={data.label}>{data.label}</div>
+      </div>
+      {data.apiName && data.type !== 'master' && (
+        <div className="text-xs text-muted-foreground mt-1">主控: {data.apiName}</div>
+      )}
+      {data.tunnelAddr && (
+        <div className="font-mono text-muted-foreground">监听: {data.tunnelAddr}</div>
+      )}
+      {data.targetAddr && (
+        <div className="font-mono text-green-600 dark:text-green-400 flex items-center">
+          <Link2 className="inline-block h-3 w-3 mr-1.5 shrink-0" />
+          <span>落地: {data.targetAddr}</span>
+        </div>
+      )}
+      <Handle type="source" position={Position.Right} className="!bg-gray-400 !h-4 !w-2 !border-2 !border-card" style={{ right: '-0.6rem' }}/>
+    </div>
+  );
+};
 
-  const targetAndQuery = restOfString.substring(pathSeparatorIndex + 1);
-  const querySeparatorIndex = targetAndQuery.indexOf('?');
-  
-  return querySeparatorIndex !== -1 ? targetAndQuery.substring(0, querySeparatorIndex) : targetAndQuery;
-}
+const nodeTypes = {
+  custom: CustomNode,
+};
 
-
-function splitHostPort(address: string | null): { host: string | null; port: string | null } {
-  if (!address) return { host: null, port: null };
-  const ipv6WithPortMatch = address.match(/^\[(.+)\]:(\d+)$/);
-  if (ipv6WithPortMatch) {
-    return { host: ipv6WithPortMatch[1], port: ipv6WithPortMatch[2] };
-  }
-  const lastColonIndex = address.lastIndexOf(':');
-  if (lastColonIndex === -1 || address.substring(0, lastColonIndex).includes(':')) { 
-    return { host: address, port: null };
-  }
-  const potentialHost = address.substring(0, lastColonIndex);
-  const potentialPort = address.substring(lastColonIndex + 1);
-
-  if (potentialPort && !isNaN(parseInt(potentialPort, 10)) && parseInt(potentialPort, 10).toString() === potentialPort) {
-    return { host: potentialHost, port: potentialPort };
-  }
-  return { host: address, port: null }; 
-}
-
-
-const NODE_WIDTH = 250;
-const NODE_HEIGHT_SERVER = 100; 
-const NODE_HEIGHT_CLIENT = 85; 
-const GRAPH_CLIENT_OFFSET_X = NODE_WIDTH + 50; 
-const GRAPH_CLIENT_SPACING_Y = 20;
-
-
-const TopologyPage: NextPage = () => {
-  const { apiConfigsList, isLoading: isLoadingApiConfigGlobal, getApiRootUrl, getToken, getApiConfigById } = useApiConfig();
+// Main component content
+function TopologyPageContent() {
+  const { apiConfigsList, isLoading: isLoadingApiConfig, getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
-
-  const [allServerInstances, setAllServerInstances] = useState<ServerNode[]>([]);
-  const [allClientInstances, setAllClientInstances] = useState<ClientNode[]>([]);
-
-
-  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table');
-  const [selectedServerForGraph, setSelectedServerForGraph] = useState<ServerNode | null>(null);
-  const [clientsForSelectedServer, setClientsForSelectedServer] = useState<ClientNode[]>([]);
-
-
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const [lines, setLines] = useState<ConnectionLine[]>([]);
-
-  const nodeRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
-  const svgRef = useRef<SVGSVGElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null); 
-
-  const [draggingNodeInfo, setDraggingNodeInfo] = useState<DraggingNodeInfo | null>(null);
-  const didDragRef = useRef<boolean>(false);
-
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
-  const [apiConfigForModal, setApiConfigForModal] = useState<NamedApiConfig | null>(null);
+  const [selectedApiConfigForModal, setSelectedApiConfigForModal] = useState<string | null>(null);
+  const [masterNodesCount, setMasterNodesCount] = useState<number>(0);
 
-
-  const processAllInstanceData = useCallback((fetchedInstances: InstanceWithApiDetails[]) => {
-    const sNodes: ServerNode[] = [];
-    const cNodes: ClientNode[] = [];
-
-    fetchedInstances.forEach(inst => {
-      if (inst.id === '********') { 
-        return;
-      }
-      if (inst.type === 'server') {
-        sNodes.push({
-          id: inst.id,
-          type: 'server',
-          url: inst.url,
-          status: inst.status,
-          apiId: inst.apiId,
-          apiName: inst.apiName,
-          position: { x: 50, y: 50 + sNodes.length * (NODE_HEIGHT_SERVER + GRAPH_CLIENT_SPACING_Y + 20) }, // Increased spacing for servers
-          serverListeningAddress: parseTunnelAddr(inst.url),
-          serverForwardsToAddress: parseTargetAddr(inst.url),
-          originalInstance: inst,
-        });
-      } else if (inst.type === 'client') {
-        cNodes.push({
-          id: inst.id,
-          type: 'client',
-          url: inst.url,
-          status: inst.status,
-          apiId: inst.apiId,
-          apiName: inst.apiName,
-          position: { x: 50 + GRAPH_CLIENT_OFFSET_X, y: 50 }, // Initial client position, will be refined
-          clientConnectsToServerAddress: parseTunnelAddr(inst.url),
-          localTargetAddress: parseTargetAddr(inst.url),
-          connectedToServerId: null, 
-          originalInstance: inst,
-        });
-      }
-    });
-
-    cNodes.forEach(client => {
-      const clientConnAddr = client.clientConnectsToServerAddress;
-      if (!clientConnAddr) return;
-      const { host: clientHostConnectsTo, port: clientPortConnectsTo } = splitHostPort(clientConnAddr);
-
-      for (const server of sNodes) {
-        const serverListenAddr = server.serverListeningAddress;
-        if (!serverListenAddr) continue;
-        const { host: serverHostListensOn, port: serverPortListensOn } = splitHostPort(serverListenAddr);
-
-        if (clientPortConnectsTo && serverPortListensOn && clientPortConnectsTo === serverPortListensOn) {
-          const isServerHostWildcard = serverHostListensOn === '0.0.0.0' || serverHostListensOn === '::' || !serverHostListensOn; 
-          if (isServerHostWildcard || clientHostConnectsTo === serverHostListensOn) {
-            client.connectedToServerId = server.id;
-            break; 
-          }
-        }
-      }
-    });
-
-    setAllServerInstances(sNodes);
-    setAllClientInstances(cNodes);
-  }, []);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const reactFlowInstance = useReactFlow();
 
 
   const { data: allFetchedInstancesData, isLoading: isLoadingData, error: fetchErrorGlobal, refetch } = useQuery<
-    InstanceWithApiDetails[],
+    (Instance & { apiId: string; apiName: string })[], // Ensure apiId and apiName are part of the type
     Error
   >({
     queryKey: ['allInstancesForTopology', apiConfigsList.map(c => c.id).join(',')],
@@ -251,29 +141,29 @@ const TopologyPage: NextPage = () => {
       if (apiConfigsList.length === 0) {
         return [];
       }
-      let combinedInstances: InstanceWithApiDetails[] = [];
+      let combinedInstances: (Instance & { apiId: string; apiName: string })[] = [];
 
       const results = await Promise.allSettled(
         apiConfigsList.map(async (config) => {
           const apiRootVal = getApiRootUrl(config.id);
           const tokenVal = getToken(config.id);
           if (!apiRootVal || !tokenVal) {
-            console.warn(`拓扑页: 主控配置 "${config.name}" (ID: ${config.id}) 无效 (API Root 或 Token 为空)。跳过。`);
+            console.warn(`拓扑页: 主控配置 "${config.name}" (ID: ${config.id}) 无效。跳过。`);
             return [];
           }
           try {
-            console.log(`拓扑页: 正在从主控 "${config.name}" (ID: ${config.id}) 加载实例... URL: ${apiRootVal}`);
             const data = await nodePassApi.getInstances(apiRootVal, tokenVal);
+            // Add apiId and apiName to each instance
             return data.map(inst => ({ ...inst, apiId: config.id, apiName: config.name }));
           } catch (error: any) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error(`拓扑页: 从主控 "${config.name}" (ID: ${config.id}) 加载实例失败。错误:`, errorMessage);
+            console.error(`拓扑页: 从主控 "${config.name}" 加载实例失败。错误:`, errorMessage);
             toast({
               title: `加载 "${config.name}" 失败`,
               description: errorMessage.length > 100 ? errorMessage.substring(0, 97) + "..." : errorMessage,
               variant: 'destructive',
             });
-            return []; 
+            return [];
           }
         })
       );
@@ -281,533 +171,336 @@ const TopologyPage: NextPage = () => {
       results.forEach(result => {
         if (result.status === 'fulfilled' && result.value) {
           combinedInstances.push(...result.value);
-        } else if (result.status === 'rejected') {
-           console.warn(`拓扑页: API请求失败 (已处理): ${result.reason?.message || String(result.reason)}`);
         }
       });
-      return combinedInstances.filter(inst => inst.id !== '********'); 
+      return combinedInstances;
     },
-    enabled: !isLoadingApiConfigGlobal && apiConfigsList.length > 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
-    onSuccess: (data) => {
-      processAllInstanceData(data);
+    enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
+    refetchInterval: 30000, // Increased interval
+    onSuccess: () => {
       setLastRefreshed(new Date());
     },
   });
 
-  const handleRefresh = () => {
-    refetch();
-  };
+  const onConnect = useCallback((params: Connection) => {
+    const sourceNode = nodes.find(n => n.id === params.source);
+    const targetNode = nodes.find(n => n.id === params.target);
 
-  useEffect(() => {
-    if (allFetchedInstancesData) {
-      processAllInstanceData(allFetchedInstancesData.filter(inst => inst.id !== '********'));
-    }
-  }, [allFetchedInstancesData, processAllInstanceData]);
-
-
-  const calculateLines = useCallback(() => {
-    if (viewMode !== 'graph' || !selectedServerForGraph || !svgRef.current || !canvasRef.current) {
-      setLines([]);
+    if (!sourceNode || !targetNode) {
+      console.warn("onConnect: Source or target node not found for connection:", params);
       return;
     }
-  
-    const serverNode = selectedServerForGraph;
-    const connectedClients = clientsForSelectedServer;
-    const newLines: ConnectionLine[] = [];
-  
-    const serverEl = nodeRefs.current.get(`server-${serverNode.apiId}-${serverNode.id}`);
-    if (!serverEl) {
-      setLines([]);
-      return;
-    }
-  
-    const serverRect = serverEl.getBoundingClientRect();
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-  
-    const serverX = serverNode.position.x;
-    const serverY = serverNode.position.y;
-  
-    connectedClients.forEach(client => {
-      const clientEl = nodeRefs.current.get(`client-${client.apiId}-${client.id}`);
-      if (!clientEl) return;
-  
-      const clientRect = clientEl.getBoundingClientRect();
-      const clientX = client.position.x;
-      const clientY = client.position.y;
-  
-      // Anchors on the middle of the right edge of server, and middle of left edge of client
-      const sx_anchor = serverX + NODE_WIDTH; 
-      const sy_anchor = serverY + NODE_HEIGHT_SERVER / 2; 
-      
-      const cx_anchor = clientX; 
-      const cy_anchor = clientY + NODE_HEIGHT_CLIENT / 2; 
 
-      // Control point for the quadratic Bezier curve
-      // This creates a curve that flows outwards from the server then towards the client
-      const controlX = (sx_anchor + cx_anchor) / 2 + (Math.abs(sx_anchor - cx_anchor) * 0.2 * (sx_anchor < cx_anchor ? 1 : -1) ) ;
-      const controlY = (sy_anchor + cy_anchor) / 2 ;
-  
-      const path = `M ${sx_anchor} ${sy_anchor} Q ${controlX} ${controlY}, ${cx_anchor} ${cy_anchor}`;
-  
-      newLines.push({
-        id: `line-${serverNode.apiId}-${serverNode.id}-${client.apiId}-${client.id}`,
-        pathData: path,
-        type: serverNode.apiId === client.apiId ? 'intra-api' : 'inter-api',
+    const isValidConnection = (sourceType: NodeData['type'], targetType: NodeData['type']) => {
+      if (sourceType === 'user' && targetType === 'client') return true;
+      if (sourceType === 'client' && targetType === 'server') return true;
+      if (sourceType === 'server' && targetType === 'target') return true;
+      if (sourceType === 'client' && targetType === 'target') return true;
+      // Disallow master connections via onConnect for now, they are structural.
+      return false;
+    };
+
+    if (!isValidConnection(sourceNode.data.type, targetNode.data.type)) {
+      toast({
+        title: '无效的连接',
+        description: `无法从 ${sourceNode.data.type} 类型连接到 ${targetNode.data.type} 类型。`,
+        variant: 'destructive',
       });
-    });
-    setLines(newLines);
-  }, [selectedServerForGraph, clientsForSelectedServer, viewMode]);
-
-
-  useEffect(() => {
-    if (viewMode === 'graph' && selectedServerForGraph && (allServerInstances.length > 0 || allClientInstances.length > 0)) {
-       calculateLines();
-    } else {
-      setLines([]);
-    }
-  }, [viewMode, selectedServerForGraph, clientsForSelectedServer, calculateLines, draggingNodeInfo, allServerInstances, allClientInstances]);
-
-
-  const setInitialGraphLayout = (server: ServerNode, clients: ClientNode[]) => {
-    const initialServerY = 100;
-    const serverNodeHeight = NODE_HEIGHT_SERVER;
-
-    const positionedClients = clients.map((client, index) => ({
-      ...client,
-      position: {
-        x: 50 + GRAPH_CLIENT_OFFSET_X,
-        y: initialServerY + (index * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y))
-           - (clients.length > 1 ? (((clients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2) : 0)
-           + (serverNodeHeight / 2) - (NODE_HEIGHT_CLIENT / 2),
-      }
-    }));
-
-    const serverY = positionedClients.length > 0
-      ? positionedClients[0].position.y + ((positionedClients.length - 1) * (NODE_HEIGHT_CLIENT + GRAPH_CLIENT_SPACING_Y)) / 2 + (NODE_HEIGHT_CLIENT / 2) - (serverNodeHeight / 2)
-      : initialServerY;
-
-    setSelectedServerForGraph({...server, position: { x: 50, y: serverY }});
-    setClientsForSelectedServer(positionedClients);
-  };
-
-  const handleViewServerTopology = (server: ServerNode) => {
-    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === server.id && c.apiId === server.apiId); // Match server by ID and API ID
-    setInitialGraphLayout(server, relevantClients);
-    setViewMode('graph');
-  };
-  
-  const resetSelectedServerLayout = () => {
-    if (!selectedServerForGraph) return;
-    const originalServerNode = allServerInstances.find(s => s.id === selectedServerForGraph.id && s.apiId === selectedServerForGraph.apiId);
-    if (!originalServerNode) return;
-
-    let relevantClients = allClientInstances.filter(c => c.connectedToServerId === originalServerNode.id && c.apiId === originalServerNode.apiId);
-    setInitialGraphLayout(originalServerNode, relevantClients);
-  };
-
-
-  const handleBackToTable = () => {
-    setViewMode('table');
-    setSelectedServerForGraph(null);
-    setClientsForSelectedServer([]);
-    setLines([]); 
-  };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, nodeId: string, nodeType: DraggableNode['type'], nodeApiId: string) => {
-    didDragRef.current = false; 
-    e.preventDefault(); 
-    e.stopPropagation();
-
-    let nodeToDrag: DraggableNode | undefined;
-    if (nodeType === 'server' && selectedServerForGraph?.id === nodeId && selectedServerForGraph?.apiId === nodeApiId) {
-        nodeToDrag = selectedServerForGraph;
-    } else if (nodeType === 'client') {
-        nodeToDrag = clientsForSelectedServer.find(c => c.id === nodeId && c.apiId === nodeApiId);
+      return;
     }
 
-
-    if (!nodeToDrag || !canvasRef.current) return;
-
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const mouseXInCanvas = e.clientX - canvasRect.left + canvasRef.current.scrollLeft;
-    const mouseYInCanvas = e.clientY - canvasRect.top + canvasRef.current.scrollTop;
-
-    setDraggingNodeInfo({
-      id: nodeId,
-      type: nodeType,
-      apiId: nodeApiId,
-      initialMouseX: mouseXInCanvas,
-      initialMouseY: mouseYInCanvas,
-      initialNodeX: nodeToDrag.position.x,
-      initialNodeY: nodeToDrag.position.y,
-    });
-  };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!draggingNodeInfo || !canvasRef.current || viewMode !== 'graph') return;
-    e.preventDefault();
-    didDragRef.current = true; 
-
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const mouseXInCanvas = e.clientX - canvasRect.left + canvasRef.current.scrollLeft;
-    const mouseYInCanvas = e.clientY - canvasRect.top + canvasRef.current.scrollTop;
-
-    const dx = mouseXInCanvas - draggingNodeInfo.initialMouseX;
-    const dy = mouseYInCanvas - draggingNodeInfo.initialMouseY;
-
-    let newX = draggingNodeInfo.initialNodeX + dx;
-    let newY = draggingNodeInfo.initialNodeY + dy;
-
-    const nodeEl = nodeRefs.current.get(`${draggingNodeInfo.type}-${draggingNodeInfo.apiId}-${draggingNodeInfo.id}`);
-    let nodeWidth = nodeEl?.offsetWidth || NODE_WIDTH; 
-    let nodeHeight = draggingNodeInfo.type === 'client' ? NODE_HEIGHT_CLIENT : NODE_HEIGHT_SERVER;
+    setEdges((eds) =>
+      addEdge(
+        {
+          ...params,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: 'hsl(var(--primary))',
+            width: 20,
+            height: 20,
+          },
+        },
+        eds
+      )
+    );
+  }, [nodes, toast, setEdges]);
 
 
-    newX = Math.max(0, Math.min(newX, canvasRef.current.scrollWidth - nodeWidth));
-    newY = Math.max(0, Math.min(newY, canvasRef.current.scrollHeight - nodeHeight));
-
-    if (draggingNodeInfo.type === 'server' && selectedServerForGraph?.id === draggingNodeInfo.id && selectedServerForGraph?.apiId === draggingNodeInfo.apiId) {
-      setSelectedServerForGraph(prev => prev ? { ...prev, position: { x: newX, y: newY } } : null);
-    } else if (draggingNodeInfo.type === 'client') {
-      setClientsForSelectedServer(prevClients =>
-        prevClients.map(c =>
-          (c.id === draggingNodeInfo.id && c.apiId === draggingNodeInfo.apiId) ? { ...c, position: { x: newX, y: newY } } : c
-        )
-      );
-    }
-  }, [draggingNodeInfo, viewMode, selectedServerForGraph, clientsForSelectedServer]); 
-
-  const handleMouseUp = useCallback(() => {
-    setDraggingNodeInfo(null);
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  useEffect(() => {
-    if (draggingNodeInfo) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [draggingNodeInfo, handleMouseMove, handleMouseUp]);
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
 
-  const openInstanceDetailsModal = (instanceNode: DraggableNode) => {
-    if (didDragRef.current) { 
-        didDragRef.current = false; 
-        return;
-    }
-    setSelectedInstanceForDetails(instanceNode.originalInstance);
-    const config = getApiConfigById(instanceNode.apiId);
-    setApiConfigForModal(config);
-    setIsDetailsModalOpen(true);
-  };
+      const type = event.dataTransfer.getData('application/reactflow-type') as NodeData['type'] | 'master-config';
+      const draggedApiId = event.dataTransfer.getData('application/reactflow-api-id');
+      const draggedApiName = event.dataTransfer.getData('application/reactflow-api-name');
+      
+      if (!type || !reactFlowInstance) return;
 
-  const handleCopyToClipboard = async (textToCopy: string, entity: string) => {
-    if (!navigator.clipboard) {
-      toast({
-        title: '复制失败',
-        description: '浏览器不支持剪贴板。',
-        variant: 'destructive',
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
       });
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      toast({
-        title: '复制成功',
-        description: `${entity} 已复制到剪贴板。`,
-      });
-    } catch (err) {
-      toast({
-        title: '复制失败',
-        description: `无法将 ${entity} 复制到剪贴板。`,
-        variant: 'destructive',
-      });
-      console.error('复制失败: ', err);
-    }
-  };
+      
+      let newNode: Node<NodeData>;
 
-  const renderGraphNode = (node: DraggableNode) => {
-    const isServer = node.type === 'server';
-    const isClient = node.type === 'client';
+      if (type === 'master-config') {
+        const masterId = `master-${draggedApiId}`;
+        if (nodes.some(node => node.id === masterId)) {
+          toast({
+            title: '主控已存在',
+            description: `主控 "${draggedApiName}" 已在画布中。`,
+            variant: 'default',
+          });
+          return;
+        }
 
-    let Icon = ServerIcon;
-    let bgColor = 'bg-primary/10 border-primary/30'; 
-    let title = '服务端实例'; 
-    let nodeHeight = NODE_HEIGHT_SERVER;
+        newNode = {
+          id: masterId,
+          type: 'custom',
+          position,
+          data: {
+            label: draggedApiName || '主控',
+            type: 'master',
+            apiId: draggedApiId,
+            apiName: draggedApiName,
+          },
+        };
+        setMasterNodesCount(prev => prev + 1);
 
-    if (isClient) {
-      Icon = SmartphoneIcon;
-      bgColor = 'bg-accent/10 border-accent/30';
-      title = '客户端实例';
-      nodeHeight = NODE_HEIGHT_CLIENT;
-    }
+         // Automatically add a server for the first master, or a client for subsequent masters
+        const childPosition = { x: position.x + 280, y: position.y };
+        let companionNode: Node<NodeData> | null = null;
+        let edgeToCompanion: Edge | null = null;
 
-    const displayId = node.id.substring(0, 8) + '...';
-    const uniqueNodeRefKey = `${node.type}-${node.apiId}-${node.id}`;
+        if (masterNodesCount === 0) { // This is the first master being added
+            const serverId = `server-for-${draggedApiId}-${Date.now()}`;
+            companionNode = {
+                id: serverId,
+                type: 'custom',
+                position: childPosition,
+                data: {
+                    label: `默认服务端 (${draggedApiName})`,
+                    type: 'server',
+                    apiId: draggedApiId,
+                    apiName: draggedApiName,
+                },
+            };
+            // No automatic edge from master to server
+        } else { // Subsequent masters are assumed to be for clients
+            const clientId = `client-for-${draggedApiId}-${Date.now()}`;
+            companionNode = {
+                id: clientId,
+                type: 'custom',
+                position: childPosition,
+                data: {
+                    label: `默认客户端 (${draggedApiName})`,
+                    type: 'client',
+                    apiId: draggedApiId,
+                    apiName: draggedApiName,
+                },
+            };
+            // Try to connect this new client to an existing server from the first master
+            const firstMaster = nodes.find(n => n.data.type === 'master' && n.data.apiId !== draggedApiId);
+            if (firstMaster) {
+                const firstServerOfFirstMaster = nodes.find(n => n.data.type === 'server' && n.data.apiId === firstMaster.data.apiId);
+                if (firstServerOfFirstMaster && companionNode.data.type === 'client') { // Ensure companion is a client
+                     edgeToCompanion = {
+                        id: `edge-${companionNode.id}-${firstServerOfFirstMaster.id}`,
+                        source: companionNode.id, // client
+                        target: firstServerOfFirstMaster.id, // server
+                        type: 'smoothstep', animated: true, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--primary))', width: 20, height:20 },
+                    };
+                }
+            }
+        }
+        setNodes((nds) => nds.concat(newNode, companionNode ? [companionNode] : []));
+        if (edgeToCompanion) {
+            setEdges((eds) => eds.concat(edgeToCompanion!));
+        }
 
-    return (
-      <Card
-        key={uniqueNodeRefKey}
-        ref={el => nodeRefs.current.set(uniqueNodeRefKey, el)}
-        className={cn(
-          "absolute shadow-lg hover:shadow-xl transition-all p-2 rounded-lg flex flex-col border-2",
-          bgColor,
-        )}
-        style={{
-          left: `${node.position.x}px`,
-          top: `${node.position.y}px`,
-          width: `${NODE_WIDTH}px`, 
-          height: `${nodeHeight}px`, 
-          zIndex: draggingNodeInfo?.id === node.id && draggingNodeInfo?.type === node.type && draggingNodeInfo?.apiId === node.apiId ? 100 : 1,
-          userSelect: 'none', 
-        }}
-        onMouseDown={(e) => handleMouseDown(e, node.id, node.type, node.apiId)}
-        onClick={() => openInstanceDetailsModal(node)}
-      >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 mb-1 flex-shrink-0 cursor-pointer">
-              <Move className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-grab flex-shrink-0" />
-              <Icon className={`h-4 w-4 ${isServer ? 'text-primary' : 'text-accent'} flex-shrink-0`} />
-              <h3 className="font-semibold text-xs truncate font-title" title={node.apiName}>
-                {node.apiName}
-              </h3>
+      } else { // Node from the "Node Types" panel
+        newNode = {
+          id: `${type}-${Date.now()}`,
+          type: 'custom',
+          position,
+          data: {
+            label: `${type.charAt(0).toUpperCase() + type.slice(1)} 节点`,
+            type: type as NodeData['type'], // Ensure type is valid NodeData['type']
+          },
+        };
+        setNodes((nds) => nds.concat(newNode));
+      }
+
+    },
+    [reactFlowInstance, nodes, masterNodesCount, toast, setNodes, setEdges] // Added setEdges
+  );
+
+  const MasterCardsPanel = () => (
+    <Panel position="top-right" className="bg-background/90 p-3 rounded-lg shadow-md border w-52">
+      <h3 className="text-sm font-semibold mb-2 text-foreground">可用主控</h3>
+      <ScrollArea className="h-[180px]">
+        <div className="space-y-2">
+          {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground">未配置主控连接。</p>}
+          {apiConfigsList.map((config) => (
+            <div
+              key={config.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/reactflow-type', 'master-config'); // Special type for master from panel
+                e.dataTransfer.setData('application/reactflow-api-id', config.id);
+                e.dataTransfer.setData('application/reactflow-api-name', config.name);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              className="flex items-center gap-2 p-2 border rounded-md cursor-grab hover:bg-accent/10 active:cursor-grabbing transition-colors"
+            >
+              <Settings className="h-4 w-4 text-yellow-500 shrink-0" />
+              <span className="text-xs font-medium truncate" title={config.name}>{config.name}</span>
             </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs break-all text-xs font-sans">
-            <p>来源主控: {node.apiName} (ID: {node.apiId})</p>
-            <p>{title} ID: {node.id}</p>
-            <p>URL: {node.url}</p>
-          </TooltipContent>
-        </Tooltip>
-        <div className="text-xs space-y-0.5 text-muted-foreground overflow-hidden flex-grow">
-          <div className="flex items-center">
-            <InstanceStatusBadge status={node.status} />
-            <span className="ml-1.5 text-xs font-mono">(ID: {displayId})</span>
-          </div>
-          {isServer && (node as ServerNode).serverListeningAddress && (
-            <p className="truncate font-mono" title={(node as ServerNode).serverListeningAddress!}>监听: {(node as ServerNode).serverListeningAddress}</p>
-          )}
-          {isClient && (node as ClientNode).localTargetAddress && (
-             <p className="truncate text-green-600 dark:text-green-400 font-mono" title={(node as ClientNode).localTargetAddress!}>
-              <Link2 className="inline-block h-3 w-3 mr-1"/>
-              落地: {(node as ClientNode).localTargetAddress}
-            </p>
-          )}
+          ))}
         </div>
-      </Card>
+      </ScrollArea>
+    </Panel>
+  );
+
+  const NodeTypesPanel = () => {
+    const nodeCreationTypes: { type: NodeData['type']; label: string; icon: React.ElementType }[] = [
+      { type: 'server', label: '服务端', icon: ServerIcon },
+      { type: 'client', label: '客户端', icon: SmartphoneIcon },
+      { type: 'user', label: '用户', icon: UserCircle2 },
+      { type: 'target', label: '落地', icon: Globe },
+    ];
+    return (
+    <Panel position="top-left" className="bg-background/90 p-3 rounded-lg shadow-md border w-48">
+      <h3 className="text-sm font-semibold mb-2 text-foreground">节点类型</h3>
+      <div className="space-y-2">
+        {nodeCreationTypes.map(({ type, label, icon: Icon }) => (
+            <div
+              key={type}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/reactflow-type', type);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              className="flex items-center gap-2 p-2 border rounded-md cursor-grab hover:bg-accent/10 active:cursor-grabbing transition-colors"
+            >
+              <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-xs font-medium">{label}</span>
+            </div>
+        ))}
+      </div>
+    </Panel>
     );
   };
+  
+  useEffect(() => {
+    // Update masterNodesCount when nodes change (e.g. a master node is deleted)
+    setMasterNodesCount(nodes.filter(node => node.data.type === 'master').length);
+  }, [nodes]);
 
 
-  if (isLoadingApiConfigGlobal) {
-    return <AppLayout><div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4 text-lg font-sans">加载主控配置...</p></div></AppLayout>;
-  }
-
-  if (fetchErrorGlobal && !isLoadingData) { 
-     return (
-      <AppLayout>
-        <Card className="max-w-md mx-auto mt-10 shadow-lg">
-          <CardHeader><CardTitle className="text-destructive flex items-center justify-center font-title"><AlertTriangle className="h-6 w-6 mr-2" />错误</CardTitle></CardHeader>
-          <CardContent><p className="font-sans">加载拓扑数据失败: {fetchErrorGlobal.message}</p></CardContent>
-        </Card>
-      </AppLayout>
-    );
-  }
-
-  if (isLoadingData && !isLoadingApiConfigGlobal) {
+  if (isLoadingApiConfig) {
     return (
       <AppLayout>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
-          <Loader2 className="h-16 w-16 animate-spin text-primary" />
-          <p className="ml-4 text-xl font-sans">加载拓扑数据...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="ml-4 text-lg font-sans">加载主控配置...</p>
         </div>
       </AppLayout>
     );
   }
-  
-  const tableServerInstances = allServerInstances.map(serverNode => ({
-    ...serverNode,
-    serverListeningAddress: serverNode.serverListeningAddress || 'N/A',
-    serverForwardsToAddress: serverNode.serverForwardsToAddress || 'N/A',
-  }));
-
 
   return (
     <AppLayout>
-      <TooltipProvider delayDuration={300}>
-        <div className="flex flex-col h-full">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑</h1>
-            <div className='flex items-center gap-2'>
-              {viewMode === 'graph' && (
-                <Button variant="outline" onClick={handleBackToTable} size="sm" className="font-sans">
-                  <List className="mr-2 h-4 w-4" />
-                  返回服务端列表
-                </Button>
-              )}
-               <Button 
-                variant="outline" 
-                onClick={resetSelectedServerLayout} 
-                disabled={isLoadingData || viewMode !== 'graph' || !selectedServerForGraph} 
-                size="sm" 
-                className="font-sans"
-               >
-                <Maximize2 className="mr-2 h-4 w-4" />
-                重置布局
-              </Button>
-              {lastRefreshed && <span className="text-xs text-muted-foreground font-sans">刷新: {lastRefreshed.toLocaleTimeString()}</span>}
-              <Button variant="outline" onClick={handleRefresh} disabled={isLoadingData} size="sm" className="font-sans">
-                <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`} />
-                {isLoadingData ? '刷新中...' : '刷新'}
-              </Button>
-            </div>
-          </div>
-
-          {!isLoadingData && tableServerInstances.length === 0 && viewMode === 'table' && (
-             <Card className="text-center py-10 shadow-lg flex-grow flex flex-col justify-center items-center bg-card card-hover-shadow">
-              <CardHeader><CardTitle className="font-title">无数据显示</CardTitle></CardHeader>
-              <CardContent><p className="text-muted-foreground font-sans">{apiConfigsList.length > 0 ? "未找到任何服务端实例。" : "请先配置主控连接。"}</p></CardContent>
-            </Card>
-          )}
-
-          {viewMode === 'table' && !isLoadingData && tableServerInstances.length > 0 && (
-            <div className="border rounded-lg shadow-md overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-sans">来源主控</TableHead>
-                    <TableHead className="font-sans">实例 ID</TableHead>
-                    <TableHead className="font-sans">状态</TableHead>
-                    <TableHead className="font-sans">URL</TableHead>
-                    <TableHead className="font-sans">监听地址</TableHead>
-                    <TableHead className="font-sans">转发地址</TableHead>
-                    <TableHead className="text-right font-sans">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableServerInstances.map((item) => (
-                    <TableRow key={`${item.apiId}-${item.id}`}>
-                       <TableCell className="max-w-[150px] sm:max-w-xs font-sans">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                             <span 
-                              className="cursor-pointer hover:text-primary transition-colors duration-150 truncate block"
-                              onClick={() => handleCopyToClipboard(item.apiName, '来源主控名称')}
-                              title={`点击复制: ${item.apiName}`}
-                            >
-                              {item.apiName}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs break-all text-xs font-sans">
-                            <p className="font-sans">{item.apiName} (ID: {item.apiId})</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell 
-                        className="font-mono text-xs"
-                       >
-                        <span
-                          className="cursor-pointer hover:text-primary transition-colors duration-150"
-                          onClick={() => handleCopyToClipboard(item.id, '实例 ID')}
-                          title={`点击复制: ${item.id}`}
-                        >
-                          {item.id.substring(0,12)}...
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <InstanceStatusBadge status={item.status} />
-                      </TableCell>
-                      <TableCell 
-                        className="font-mono text-xs max-w-xs truncate"
-                       >
-                           <span
-                             className="cursor-pointer hover:text-primary transition-colors duration-150"
-                             onClick={() => handleCopyToClipboard(item.url, 'URL')}
-                             title={`点击复制: ${item.url}`}
-                           >
-                            {item.url}
-                           </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{item.serverListeningAddress}</TableCell>
-                      <TableCell className="font-mono text-xs">{item.serverForwardsToAddress}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="default" size="sm" onClick={() => handleViewServerTopology(item as ServerNode)} className="font-sans">
-                          <Eye className="mr-2 h-4 w-4" /> 查看拓扑
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {viewMode === 'graph' && selectedServerForGraph && (
-            <div
-              ref={canvasRef}
-              id="topology-canvas"
-              className="relative flex-grow border-2 border-dashed border-border/50 rounded-lg p-4 bg-muted/10 overflow-auto min-h-[calc(100vh-22rem)] w-full shadow-inner"
-              style={{ touchAction: 'none' }} 
+      <div className="flex flex-col h-full">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑</h1>
+          <div className="flex items-center gap-2">
+            {lastRefreshed && (
+              <span className="text-xs text-muted-foreground font-sans">
+                数据刷新: {lastRefreshed.toLocaleTimeString()}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isLoadingData}
+              size="sm"
+              className="font-sans"
             >
-              <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                {lines.map(line => (
-                  <path
-                    key={line.id}
-                    d={line.pathData}
-                    stroke={line.type === 'intra-api' ? 'hsl(var(--primary))' : 'hsl(var(--accent))'}
-                    strokeWidth="1.5"
-                    fill="none"
-                    className="opacity-75"
-                  />
-                ))}
-              </svg>
-              
-              {renderGraphNode(selectedServerForGraph)}
-              {clientsForSelectedServer.map(client => renderGraphNode(client))}
-
-              {clientsForSelectedServer.length === 0 && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-muted-foreground p-4 bg-background/80 rounded-md shadow font-sans">
-                    此服务端实例当前没有连接的客户端。
-                </div>
-              )}
-            </div>
-          )}
-
-          <InstanceDetailsModal
-            instance={selectedInstanceForDetails}
-            open={isDetailsModalOpen}
-            onOpenChange={(open) => {
-              setIsDetailsModalOpen(open);
-              if (!open) {
-                setSelectedInstanceForDetails(null); 
-                setApiConfigForModal(null);
-              }
-            }}
-            apiRoot={apiConfigForModal ? getApiRootUrl(apiConfigForModal.id) : null}
-            apiToken={apiConfigForModal ? getToken(apiConfigForModal.id) : null}
-          />
-
-          <div className="mt-8 p-4 bg-muted/30 rounded-lg text-xs text-muted-foreground shadow-sm font-sans">
-            <div className="flex items-center font-semibold mb-2"><Network className="h-4 w-4 mr-2 text-primary shrink-0" />拓扑说明</div>
-            <ul className="list-disc list-inside space-y-1.5 pl-1">
-              <li>默认显示所有来源主控的服务端实例列表。点击 "查看拓扑" 可切换到图形视图，显示选定服务端及其连接的客户端。</li>
-              <li>在图形视图中，服务端和客户端节点均可拖动以调整布局。连接线将从服务端右侧弯曲指向客户端左侧。</li>
-              <li>连接关系基于客户端的 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其连接的服务端地址)与服务端的 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;tunnel_addr&gt;</code> (其监听地址)匹配。</li>
-              <li>客户端“落地”地址指其本地转发目标 <code className="font-mono bg-muted px-1 py-0.5 rounded text-foreground">&lt;target_addr&gt;</code>。</li>
-               <li><span className="inline-block w-3 h-3 rounded-sm bg-primary mr-1.5 align-middle"></span><code className="text-foreground">主色调线</code>: 服务端和客户端属于同一主控配置。</li>
-              <li><span className="inline-block w-3 h-3 rounded-sm bg-accent mr-1.5 align-middle"></span><code className="text-foreground">强调色线</code>: 服务端和客户端属于不同主控配置。</li>
-              <li>点击图形视图中的节点卡片可查看其详细信息。</li>
-            </ul>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingData ? 'animate-spin' : ''}`} />
+              {isLoadingData ? '刷新中...' : '刷新数据'}
+            </Button>
           </div>
         </div>
-      </TooltipProvider>
+        
+        {fetchErrorGlobal && (
+          <Card className="mb-4 border-destructive bg-destructive/10">
+            <CardHeader>
+              <CardTitle className="text-destructive flex items-center text-base">
+                <AlertTriangle size={18} className="mr-2" /> 部分数据加载失败
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-destructive text-sm">
+                获取部分主控的实例数据时发生错误。拓扑图可能不完整。请检查控制台和主控连接。
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+
+        <div className="flex-grow border rounded-lg shadow-md bg-background relative" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 8rem)' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Controls className="fill-foreground stroke-foreground text-foreground" />
+            <MiniMap nodeStrokeWidth={3} zoomable pannable className="bg-background border-border"/>
+            <Background gap={16} color="hsl(var(--border))" />
+            <NodeTypesPanel />
+            <MasterCardsPanel />
+          </ReactFlow>
+        </div>
+
+        <InstanceDetailsModal
+          instance={selectedInstanceForDetails}
+          open={!!selectedInstanceForDetails}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedInstanceForDetails(null);
+              setSelectedApiConfigForModal(null);
+            }
+          }}
+          apiRoot={selectedApiConfigForModal ? getApiRootUrl(selectedApiConfigForModal) : null}
+          apiToken={selectedApiConfigForModal ? getToken(selectedApiConfigForModal) : null}
+        />
+      </div>
     </AppLayout>
   );
-};
+}
 
-export default TopologyPage;
+
+export default function TopologyPage() {
+  return (
+    <ReactFlowProvider>
+      <TopologyPageContent />
+    </ReactFlowProvider>
+  );
+}
