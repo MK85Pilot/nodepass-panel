@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Lock, Unlock, Maximize } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Maximize } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -223,7 +223,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -246,7 +246,6 @@ const TopologyPageContent: NextPage = () => {
   const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
 
   const [selectedChainElements, setSelectedChainElements] = useState<{ nodes: Set<string>, edges: Set<string> } | null>(null);
-  const [isLocked, setIsLocked] = useState(false);
   
   const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], 
@@ -327,7 +326,6 @@ const TopologyPageContent: NextPage = () => {
       event.preventDefault();
       if (!reactFlowWrapper.current) return;
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const type = event.dataTransfer.getData('application/reactflow-nodetype') as TopologyNodeData['type'];
       let label = event.dataTransfer.getData('application/reactflow-label');
       const apiId = event.dataTransfer.getData('application/reactflow-apiid');
@@ -343,21 +341,10 @@ const TopologyPageContent: NextPage = () => {
         y: clientY,
       });
       
-      console.log("Drop Event Data:", {
-        clientX,
-        clientY,
-        boundsLeft: reactFlowBounds.left,
-        boundsTop: reactFlowBounds.top,
-        _calculatedRelativeX: clientX - reactFlowBounds.left, 
-        _calculatedRelativeY: clientY - reactFlowBounds.top, 
-      });
-      console.log("Calculated Flow Position for New Node (pre-center):", position);
-      
       const centeredPosition = {
         x: position.x - NODE_DEFAULT_WIDTH / 2,
         y: position.y - NODE_DEFAULT_HEIGHT / 2,
       };
-      console.log("Calculated Centered Flow Position for New Node:", centeredPosition);
 
       let newNodeData: TopologyNodeData;
       switch (type) {
@@ -573,7 +560,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: { 
-            ...edge.style, // Preserve other potential style attributes
+            ...edge.style, 
             stroke: CHAIN_HIGHLIGHT_COLOR, 
             strokeWidth: 2.5,
           },
@@ -588,7 +575,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: { 
-            ...edge.style, // Preserve other potential style attributes
+            ...edge.style,
             stroke: defaultColors.stroke, 
             strokeWidth: 1.5,
           },
@@ -617,20 +604,6 @@ const TopologyPageContent: NextPage = () => {
     event.dataTransfer.effectAllowed = 'copy';
   };
 
-  const toggleLock = () => {
-    const newLockedState = !isLocked;
-    setIsLocked(newLockedState);
-    if (typeof rfSetInteractive === 'function') {
-      rfSetInteractive(!newLockedState);
-    } else {
-      console.warn('React Flow rfSetInteractive function is not available. Interactivity will update on next render via props.');
-    }
-    toast({
-      title: newLockedState ? "画布已锁定" : "画布已解锁",
-      description: newLockedState ? "平移和缩放已禁用 (滚轮缩放仍可用)。" : "可以平移和通过拖拽缩放。",
-    });
-  };
-
 
   if (isLoadingApiConfig) {
     return (
@@ -654,6 +627,10 @@ const TopologyPageContent: NextPage = () => {
                 数据刷新: {lastRefreshed.toLocaleTimeString()}
               </span>
             )}
+             <Button variant="outline" onClick={() => fitView({ duration: 600 })} title="自适应视图" size="sm" className="font-sans h-9">
+                <Maximize className="mr-1 h-4 w-4" />
+                自适应
+            </Button>
             <Button variant="outline" onClick={() => refetchInstances()} disabled={isLoadingInstances} size="sm" className="font-sans">
               <RefreshCw className={`mr-1 h-4 w-4 ${isLoadingInstances ? 'animate-spin' : ''}`} />
               {isLoadingInstances ? '刷新中' : '刷新数据'}
@@ -703,14 +680,6 @@ const TopologyPageContent: NextPage = () => {
                     </div>
                 ))}
                 </div></ScrollArea></CardContent>
-                 <CardFooter className="p-2 flex justify-end gap-1 border-t">
-                    <Button variant="outline" size="icon" onClick={() => fitView({ duration: 600 })} title="自适应视图" className="h-7 w-7">
-                        <Maximize className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={toggleLock} title={isLocked ? "解锁视图交互" : "锁定视图交互"} className="h-7 w-7">
-                        {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                    </Button>
-                </CardFooter>
             </Card>
 
             <Card className="shadow-sm flex-grow flex flex-col min-h-0"> 
@@ -767,11 +736,6 @@ const TopologyPageContent: NextPage = () => {
               className="bg-card" 
               defaultViewport={initialViewport}
               nodeTypes={nodeTypes} 
-              zoomOnScroll={!isLocked}
-              panOnDrag={!isLocked}
-              nodesDraggable={!isLocked}
-              nodesConnectable={!isLocked}
-              elementsSelectable={!isLocked}
             >
               <Background gap={16} />
             </ReactFlow>
