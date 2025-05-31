@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, CogIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Target, Users, Settings2, UploadCloud } from 'lucide-react'; // Added UploadCloud
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, CogIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Target, Users, Settings2, UploadCloud, Cog } from 'lucide-react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -178,9 +178,9 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
   if (data.type === 'controller') {
     const controllerData = data as ControllerNodeData;
     displayLabel = controllerData.label || '主控'; 
-    subText = controllerData.apiName || '未知API'; 
     if (controllerData.role === 'server') displayLabel += ' (服务)';
     else if (controllerData.role === 'client') displayLabel += ' (客户)';
+    subText = controllerData.apiName || '未知API';
   } else if (data.type === 'client') {
      const clientData = data as ClientNodeData;
      displayLabel = clientData.label;
@@ -453,7 +453,11 @@ const TopologyPageContent: NextPage = () => {
                 }
               }
               
-              const newClientTunnelAddress = `${effectiveServerHost}:${serverPort}`;
+              let formattedHost = effectiveServerHost;
+              if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[')) { // Check for IPv6 and not already bracketed
+                formattedHost = `[${effectiveServerHost}]`;
+              }
+              const newClientTunnelAddress = `${formattedHost}:${serverPort}`;
 
               if (clientData.tunnelAddress !== newClientTunnelAddress) {
                 setNodes((nds) =>
@@ -920,10 +924,7 @@ const TopologyPageContent: NextPage = () => {
       const processedNodeIds = new Set<string>();
 
       apiConfigsList.forEach(conf => {
-          const apiConfig = getApiConfigById(conf.id);
-          if (apiConfig) { 
-              ops[conf.id] = { apiConfig, urlsToCreate: [] };
-          }
+          ops[conf.id] = { apiConfig: conf, urlsToCreate: [] };
       });
       
       const nodesToClearStatus = currentAllNodes
@@ -997,7 +998,7 @@ const TopologyPageContent: NextPage = () => {
                   }
               } else if (managingControllerId && !ops[managingControllerId]) {
                   onAppLog?.(`尝试为节点 "${nodeData.label}" 分配到主控 ${managingControllerId}，但该主控不在ops中。可能是一个已删除或无效的主控配置。`, 'ERROR');
-              } else if (nodeData.type === 'client' && !managingControllerId) { // Check !managingControllerId too
+              } else if (nodeData.type === 'client' && !managingControllerId) { 
                   onAppLog?.(`节点 "${nodeData.label}" (${node.id.substring(0,8)}) 未连接到任何主控或通过受管服务器连接，无法确定创建者。跳过。`, 'WARNING');
               }
           }
@@ -1178,7 +1179,7 @@ const TopologyPageContent: NextPage = () => {
         <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
           <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
             <Card className="shadow-sm flex-shrink-0">
-              <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><CogIcon className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
+              <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Cog className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[120px]"> 
                 <div className="space-y-1 p-1">
                   {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground text-center py-1 font-sans">无主控连接。</p>}
@@ -1186,7 +1187,7 @@ const TopologyPageContent: NextPage = () => {
                     <div key={config.id} draggable onDragStart={(e) => onDragStartPanelItem(e, 'controller', config.name, config.id, config.name)}
                          className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加: "${config.name}" (首个为主控节点, 后续为客户端节点)`}>
-                      <CogIcon className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                      <Cog className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                       <span className="font-medium truncate font-sans">{config.name}</span>
                     </div>
                   ))}
