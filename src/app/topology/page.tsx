@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Link2Off, UploadCloud, Target, Users, Cog } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Cog as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Link2Off, UploadCloud, Target, Users, Cog, Settings2 } from 'lucide-react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -255,7 +255,7 @@ const TopologyPageContent: NextPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
@@ -944,6 +944,22 @@ const TopologyPageContent: NextPage = () => {
       let successCount = 0;
       let errorCount = 0;
 
+      // Efficiently update node statuses before submitting
+      const nodesToUpdateStatus = Object.values(pendingOperations)
+          .flatMap(group => group.urlsToCreate)
+          .map(({ originalNodeId }) => originalNodeId);
+      
+      if (nodesToUpdateStatus.length > 0) {
+          setNodes(nds => 
+              nds.map(n => 
+                  nodesToUpdateStatus.includes(n.id)
+                      ? { ...n, data: { ...n.data, statusInfo: '处理中...' } } 
+                      : n
+              )
+          );
+      }
+
+
       for (const apiIdKey in pendingOperations) {
           const opGroup = pendingOperations[apiIdKey];
           const { apiConfig, urlsToCreate } = opGroup;
@@ -1147,12 +1163,12 @@ const TopologyPageContent: NextPage = () => {
               className="bg-card" // Use card background for canvas
               defaultViewport={initialViewport}
               nodeTypes={nodeTypes}
-              nodesDraggable={true} // Nodes are always draggable
-              nodesConnectable={true} // Nodes are always connectable
-              zoomOnScroll={true} // Zoom on scroll is always enabled
+              nodesDraggable={true} 
+              nodesConnectable={true} 
+              zoomOnScroll={true} 
               panOnScroll={false}
-              panOnDrag={true} // Panning is always enabled
-              preventScrolling={true} // Prevent page scroll when interacting with canvas
+              panOnDrag={true} 
+              preventScrolling={true} 
             >
               <Background gap={16} />
             </ReactFlow>
@@ -1203,7 +1219,7 @@ const TopologyPageContent: NextPage = () => {
             <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
             <DropdownMenuContent align="start" className="w-48 font-sans">
                <DropdownMenuItem onClick={deleteEdgeDirectly} className="text-destructive hover:!text-destructive focus:!text-destructive">
-                <Link2Off className="mr-2 h-4 w-4" />
+                <Unlink className="mr-2 h-4 w-4" />
                 删除链路
               </DropdownMenuItem>
             </DropdownMenuContent>
