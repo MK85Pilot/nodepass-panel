@@ -277,7 +277,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; // Can be same as S->C for bidirectional appearance
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -294,7 +294,7 @@ const TopologyPageContent: NextPage = () => {
           setEdges((eds) => addEdge({ 
             ...params, 
             type: 'smoothstep', 
-            animated: false, // Default to not animated, chain highlight will animate
+            animated: false, 
             markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: edgeColors.markerColor }, 
             style: { strokeWidth: 1.5, stroke: edgeColors.stroke } 
           }, eds));
@@ -384,36 +384,37 @@ const TopologyPageContent: NextPage = () => {
     const currentNodes = getNodes();
     const currentEdges = getFlowEdges();
 
-    // Helper for traversal
     const traverse = (nodeId: string, direction: 'up' | 'down') => {
       const queue: string[] = [nodeId];
-      const visited = new Set<string>();
+      const visitedNodesThisTraversal = new Set<string>(); // Track visited nodes per traversal direction to avoid loops in one direction but allow reconvergence
 
       while (queue.length > 0) {
         const currentId = queue.shift()!;
-        if (visited.has(currentId)) continue;
-        visited.add(currentId);
-        chainNodes.add(currentId);
+        if (visitedNodesThisTraversal.has(currentId)) continue;
+        visitedNodesThisTraversal.add(currentId);
+        chainNodes.add(currentId); // Add to global chain nodes
 
-        const connectedEdges = direction === 'down'
+        const connectedEdgesToProcess = direction === 'down'
           ? currentEdges.filter(edge => edge.source === currentId)
           : currentEdges.filter(edge => edge.target === currentId);
 
-        for (const edge of connectedEdges) {
+        for (const edge of connectedEdgesToProcess) {
           chainEdges.add(edge.id);
           const nextNodeId = direction === 'down' ? edge.target : edge.source;
           const nextNode = currentNodes.find(n => n.id === nextNodeId);
+
           if (nextNode && nextNode.data) {
             let continueTraversal = true;
             if (direction === 'down') {
-              if (nextNode.data.type === 'landing') continueTraversal = false; // Stop downstream at landing
+              if (nextNode.data.type === 'landing') continueTraversal = false;
             } else { // Upstream
-              if (nextNode.data.type === 'controller' || nextNode.data.type === 'user') continueTraversal = false; // Stop upstream at controller/user
+              if (nextNode.data.type === 'controller' || nextNode.data.type === 'user') continueTraversal = false;
             }
-            if (continueTraversal && !visited.has(nextNodeId)) {
+
+            if (continueTraversal && !visitedNodesThisTraversal.has(nextNodeId)) {
               queue.push(nextNodeId);
             } else if (!continueTraversal) {
-               chainNodes.add(nextNodeId); // Add the terminal node
+               chainNodes.add(nextNodeId); // Add the terminal node to the global chain
             }
           }
         }
@@ -489,7 +490,7 @@ const TopologyPageContent: NextPage = () => {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } } // Preserve isChainHighlighted
+            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } } 
             : n
         )
       );
@@ -517,7 +518,7 @@ const TopologyPageContent: NextPage = () => {
         setSelectedNodeForPropsPanel(null);
       }
       if (selectedChainElements?.nodes.has(nodeToDelete.id)) {
-        updateSelectedChain(null); // Clear chain if deleted node was part of it
+        updateSelectedChain(null); 
       }
     }
     setIsDeleteNodeDialogOpen(false);
@@ -537,9 +538,6 @@ const TopologyPageContent: NextPage = () => {
       setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu!.id));
       toast({ title: "链路已删除", description: `ID: ${edgeForContextMenu.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
       if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
-        // Re-evaluate chain if deleted edge was part of it.
-        // This might involve finding the "closest" node in the chain to re-trigger.
-        // For simplicity now, we clear, but a more sophisticated approach might try to re-path.
         updateSelectedChain(null);
       }
     }
@@ -559,27 +557,36 @@ const TopologyPageContent: NextPage = () => {
 
   const processedEdges = useMemo(() => {
     return edges.map(edge => {
-      if (selectedChainElements?.edges.has(edge.id)) {
+      const isHighlighted = selectedChainElements?.edges.has(edge.id);
+
+      if (isHighlighted) {
         return {
           ...edge,
-          style: { ...edge.style, stroke: CHAIN_HIGHLIGHT_COLOR, strokeWidth: 2.5 },
+          style: { 
+            stroke: CHAIN_HIGHLIGHT_COLOR, 
+            strokeWidth: 2.5,
+          },
           markerEnd: { ...(edge.markerEnd as object), color: CHAIN_HIGHLIGHT_COLOR },
           animated: true,
           zIndex: 1000,
         };
+      } else {
+        const sourceNode = getNode(edge.source) as NodePassFlowNodeType | undefined;
+        const targetNode = getNode(edge.target) as NodePassFlowNodeType | undefined;
+        const defaultColors = getEdgeStyle(sourceNode?.data?.type, targetNode?.data?.type);
+        return {
+          ...edge,
+          style: { 
+            stroke: defaultColors.stroke, 
+            strokeWidth: 1.5,
+          },
+          markerEnd: { ...(edge.markerEnd as object), color: defaultColors.markerColor },
+          animated: false,
+          zIndex: 1,
+        };
       }
-      const sourceNode = getNode(edge.source) as NodePassFlowNodeType | undefined;
-      const targetNode = getNode(edge.target) as NodePassFlowNodeType | undefined;
-      const defaultColors = getEdgeStyle(sourceNode?.data?.type, targetNode?.data?.type);
-      return {
-        ...edge,
-        style: { ...edge.style, stroke: defaultColors.stroke, strokeWidth: 1.5 },
-        markerEnd: { ...(edge.markerEnd as object), color: defaultColors.markerColor },
-        animated: false,
-        zIndex: 1,
-      };
     });
-  }, [edges, selectedChainElements, getNode, getEdgeStyle]);
+  }, [edges, selectedChainElements, getNode, getEdgeStyle, CHAIN_HIGHLIGHT_COLOR]);
 
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
