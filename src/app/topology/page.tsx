@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -45,12 +45,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription,
+  AlertDialogDescription as ShadAlertDialogDescription, // Aliased to avoid conflict
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle,
+  AlertDialogTitle as ShadAlertDialogTitle, // Aliased to avoid conflict
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitleFromDialog, DialogDescription as ShadDialogDescriptionFromDialog } from '@/components/ui/dialog'; // Aliased specific imports
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -300,10 +300,13 @@ const TopologyPageContent: NextPage = () => {
 
       const clientX = event.clientX;
       const clientY = event.clientY;
+      
+      const relativeXInWrapper = clientX - reactFlowBounds.left;
+      const relativeYInWrapper = clientY - reactFlowBounds.top;
 
       const position = screenToFlowPosition({
-        x: clientX - reactFlowBounds.left,
-        y: clientY - reactFlowBounds.top,
+        x: relativeXInWrapper,
+        y: relativeYInWrapper,
       });
       
       console.log("Drop Event Data:", {
@@ -311,8 +314,10 @@ const TopologyPageContent: NextPage = () => {
         clientY,
         boundsLeft: reactFlowBounds.left,
         boundsTop: reactFlowBounds.top,
-        relativeXInWrapper: clientX - reactFlowBounds.left,
-        relativeYInWrapper: clientY - reactFlowBounds.top,
+        boundsWidth: reactFlowBounds.width,
+        boundsHeight: reactFlowBounds.height,
+        relativeXInWrapper,
+        relativeYInWrapper,
       });
       console.log("Calculated Flow Position for New Node (pre-center):", position);
       
@@ -368,7 +373,7 @@ const TopologyPageContent: NextPage = () => {
       const newNode: NodePassFlowNodeType = {
         id: getId(type + '_'),
         type: 'custom', 
-        position: centeredPosition, // Use centered position
+        position: centeredPosition, 
         data: newNodeData,
       };
 
@@ -669,11 +674,11 @@ const TopologyPageContent: NextPage = () => {
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <ShadDialogTitle className="font-title">编辑节点属性: {editingNodeProperties?.label}</ShadDialogTitle>
+              <ShadDialogTitleFromDialog className="font-title">编辑节点属性: {editingNodeProperties?.label}</ShadDialogTitleFromDialog>
               {editingNodeProperties?.type === 'landing' && (
-                <DialogDescription className="font-sans text-xs">
+                <ShadDialogDescriptionFromDialog className="font-sans text-xs">
                   对于“落地”节点, “标签 (名称)”字段将作为其标识名称 (例如 `ip:port@标签名称` 中的 `@标签名称` 部分)。
-                </DialogDescription>
+                </ShadDialogDescriptionFromDialog>
               )}
             </DialogHeader>
             {editingNodeProperties && ( 
@@ -873,3 +878,5 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
+
+    
