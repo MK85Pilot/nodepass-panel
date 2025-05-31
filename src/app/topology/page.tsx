@@ -301,12 +301,9 @@ const TopologyPageContent: NextPage = () => {
       const clientX = event.clientX;
       const clientY = event.clientY;
       
-      const relativeXInWrapper = clientX - reactFlowBounds.left;
-      const relativeYInWrapper = clientY - reactFlowBounds.top;
-
       const position = screenToFlowPosition({
-        x: relativeXInWrapper,
-        y: relativeYInWrapper,
+        x: clientX,
+        y: clientY,
       });
       
       console.log("Drop Event Data:", {
@@ -314,10 +311,8 @@ const TopologyPageContent: NextPage = () => {
         clientY,
         boundsLeft: reactFlowBounds.left,
         boundsTop: reactFlowBounds.top,
-        boundsWidth: reactFlowBounds.width,
-        boundsHeight: reactFlowBounds.height,
-        relativeXInWrapper,
-        relativeYInWrapper,
+        _calculatedRelativeX: clientX - reactFlowBounds.left, // For logging/debugging
+        _calculatedRelativeY: clientY - reactFlowBounds.top, // For logging/debugging
       });
       console.log("Calculated Flow Position for New Node (pre-center):", position);
       
@@ -878,5 +873,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
-
-    
