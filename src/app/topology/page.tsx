@@ -14,7 +14,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Node,
-  type Edge, // Added Edge import
+  type Edge,
   type OnConnect,
   type Viewport,
   MarkerType,
@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react'; // Renamed Settings to Settings2Icon for Controller, kept Settings for general, Added LinkOff
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -856,5 +856,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 
 export default TopologyEditorPageWrapper;
 
-
-    
