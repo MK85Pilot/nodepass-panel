@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Maximize } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Maximize, LayoutGrid } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -107,6 +107,9 @@ const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}
 const NODE_DEFAULT_WIDTH = 175;
 const NODE_DEFAULT_HEIGHT = 50;
 const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))';
+
+const TIER_Y_SPACING = 180; 
+const NODE_X_SPACING = 220;
 
 
 const getNodeIcon = (nodeType: TopologyNodeData['type'] | undefined): React.ElementType => {
@@ -218,12 +221,12 @@ const nodeTypes = {
   custom: NodePassFlowNode,
 };
 
-
 const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
+  const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -260,6 +263,13 @@ const TopologyPageContent: NextPage = () => {
     onSuccess: () => setLastRefreshed(new Date()),
   });
 
+  const onAppLog = useCallback((message: string, type: AppLogEntry['type'], details?: Record<string, any> | string) => {
+    setAppLogs(prevLogs => [
+      { timestamp: new Date().toISOString(), message, type, details },
+      ...prevLogs
+    ].slice(0, 100));
+  }, []);
+
   const isValidConnection = useCallback((sourceNode: NodePassFlowNodeType, targetNode: NodePassFlowNodeType): boolean => {
     if (!sourceNode.data || !targetNode.data) return false;
     const sourceType = sourceNode.data.type;
@@ -294,8 +304,8 @@ const TopologyPageContent: NextPage = () => {
 
   const onConnect: OnConnect = useCallback(
     (params) => {
-      const sourceNode = getNode(params.source!) as NodePassFlowNodeType | undefined;
-      const targetNode = getNode(params.target!) as NodePassFlowNodeType | undefined;
+      const sourceNode = rfGetNode(params.source!) as NodePassFlowNodeType | undefined;
+      const targetNode = rfGetNode(params.target!) as NodePassFlowNodeType | undefined;
 
       if (sourceNode && targetNode && sourceNode.data && targetNode.data) {
         if (isValidConnection(sourceNode, targetNode)) {
@@ -313,7 +323,7 @@ const TopologyPageContent: NextPage = () => {
         }
       }
     },
-    [setEdges, getNode, isValidConnection, toast, getEdgeStyle]
+    [setEdges, rfGetNode, isValidConnection, toast, getEdgeStyle]
   );
 
   const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -378,8 +388,8 @@ const TopologyPageContent: NextPage = () => {
 
     const chainNodes = new Set<string>();
     const chainEdges = new Set<string>();
-    const currentNodes = getNodes();
-    const currentEdges = getFlowEdges();
+    const currentNodes = rfGetNodes();
+    const currentEdges = rfGetEdges();
 
     const traverse = (nodeId: string, direction: 'up' | 'down') => {
       const queue: string[] = [nodeId];
@@ -422,7 +432,7 @@ const TopologyPageContent: NextPage = () => {
     traverse(startNodeId, 'up');
 
     setSelectedChainElements({ nodes: chainNodes, edges: chainEdges });
-  }, [getNodes, getFlowEdges]);
+  }, [rfGetNodes, rfGetEdges]);
 
 
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
@@ -542,6 +552,63 @@ const TopologyPageContent: NextPage = () => {
     setEdgeForContextMenu(null);
   };
 
+  const formatLayout = useCallback(() => {
+    const currentNodes = rfGetNodes();
+    if (currentNodes.length === 0) {
+        toast({ title: "画布为空", description: "没有可格式化的节点。" });
+        return;
+    }
+
+    const tierOrder: TopologyNodeData['type'][] = ['controller', 'user', 'client', 'server', 'landing'];
+    const nodesByTier: Record<string, NodePassFlowNodeType[]> = {
+        controller: [], user: [], client: [], server: [], landing: [],
+    };
+
+    currentNodes.forEach(node => {
+        const nodeType = node.data?.type;
+        if (nodeType && nodesByTier[nodeType]) {
+            nodesByTier[nodeType].push(node);
+        }
+    });
+
+    const newNodesLayout: NodePassFlowNodeType[] = [];
+    let currentY = 50; // Initial Y offset
+
+    tierOrder.forEach(tierType => {
+        const tierNodes = nodesByTier[tierType];
+        if (tierNodes.length === 0) return;
+
+        // For controller and user, try to put them on the same visual "tier 0" if both exist
+        if (tierType === 'user' && nodesByTier['controller'].length > 0) {
+            // If controllers exist, users were already processed effectively with controllers or will be.
+            // This logic might need refinement if 'controller' and 'user' should truly share horizontal space.
+            // For now, they are processed sequentially as per tierOrder, creating distinct Y levels if both exist.
+        }
+
+        const tierWidth = (tierNodes.length - 1) * NODE_X_SPACING;
+        let currentX = -tierWidth / 2; 
+
+        tierNodes.forEach(node => {
+            newNodesLayout.push({
+                ...node,
+                position: { x: currentX, y: currentY },
+            });
+            currentX += NODE_X_SPACING;
+        });
+        currentY += TIER_Y_SPACING;
+    });
+
+    setNodes(newNodesLayout); // Use setNodes from useNodesState
+    setTimeout(() => { 
+        fitView({ padding: 0.2, duration: 600 });
+    }, 100);
+
+    toast({ title: "布局已格式化", description: "节点已重新排列。" });
+    onAppLog?.('画布节点已格式化。', 'INFO');
+
+  }, [rfGetNodes, setNodes, fitView, toast, onAppLog]);
+
+
   const processedNodes = useMemo(() => {
     return nodes.map(node => ({
       ...node,
@@ -560,7 +627,6 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: { 
-            ...edge.style, 
             stroke: CHAIN_HIGHLIGHT_COLOR, 
             strokeWidth: 2.5,
           },
@@ -569,13 +635,12 @@ const TopologyPageContent: NextPage = () => {
           zIndex: 1000,
         };
       } else {
-        const sourceNode = getNode(edge.source) as NodePassFlowNodeType | undefined;
-        const targetNode = getNode(edge.target) as NodePassFlowNodeType | undefined;
+        const sourceNode = rfGetNode(edge.source) as NodePassFlowNodeType | undefined;
+        const targetNode = rfGetNode(edge.target) as NodePassFlowNodeType | undefined;
         const defaultColors = getEdgeStyle(sourceNode?.data?.type, targetNode?.data?.type);
         return {
           ...edge,
           style: { 
-            ...edge.style,
             stroke: defaultColors.stroke, 
             strokeWidth: 1.5,
           },
@@ -585,7 +650,7 @@ const TopologyPageContent: NextPage = () => {
         };
       }
     });
-  }, [edges, selectedChainElements, getNode, getEdgeStyle]);
+  }, [edges, selectedChainElements, rfGetNode, getEdgeStyle]);
 
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
@@ -607,7 +672,7 @@ const TopologyPageContent: NextPage = () => {
 
   if (isLoadingApiConfig) {
     return (
-      <AppLayout onLog={(message, type) => console.log(`[AppLayout Log] ${type}: ${message}`)}>
+      <AppLayout onLog={onAppLog}>
         <div className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center h-[calc(100vh-var(--header-height)-var(--footer-height)-4rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
           <p className="ml-4 text-lg font-sans">加载主控配置...</p>
@@ -617,7 +682,7 @@ const TopologyPageContent: NextPage = () => {
   }
   
   return (
-    <AppLayout onLog={(message, type) => console.log(`[AppLayout Log] ${type}: ${message}`)}>
+    <AppLayout onLog={onAppLog}>
       <div className="flex flex-col h-full">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
           <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑</h1>
@@ -627,6 +692,10 @@ const TopologyPageContent: NextPage = () => {
                 数据刷新: {lastRefreshed.toLocaleTimeString()}
               </span>
             )}
+            <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
+                <LayoutGrid className="mr-1 h-4 w-4" />
+                格式化
+            </Button>
              <Button variant="outline" onClick={() => fitView({ duration: 600 })} title="自适应视图" size="sm" className="font-sans h-9">
                 <Maximize className="mr-1 h-4 w-4" />
                 自适应
@@ -735,7 +804,13 @@ const TopologyPageContent: NextPage = () => {
               proOptions={{ hideAttribution: true }}
               className="bg-card" 
               defaultViewport={initialViewport}
-              nodeTypes={nodeTypes} 
+              nodeTypes={nodeTypes}
+              nodesDraggable={true}
+              nodesConnectable={true}
+              zoomOnScroll={true}
+              panOnScroll={false}
+              panOnDrag={true}
+              preventScrolling={false}
             >
               <Background gap={16} />
             </ReactFlow>
@@ -977,4 +1052,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
-
