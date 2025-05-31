@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -31,7 +32,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
       inset && "pl-8",
       className
     )}
-    {...props}
+    {...props} // asChild from Link, if present, will be spread here
   >
     {children}
     <ChevronRight className="ml-auto" />
@@ -87,7 +88,7 @@ const DropdownMenuItem = React.forwardRef<
       inset && "pl-8",
       className
     )}
-    {...props}
+    {...props} // asChild from Link, if present, will be spread here
   />
 ))
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
