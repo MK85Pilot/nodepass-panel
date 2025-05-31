@@ -14,7 +14,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Node,
-  type Edge,
+  type Edge, // Added Edge import
   type OnConnect,
   type Viewport,
   MarkerType,
@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings } from 'lucide-react'; // Renamed Settings to Settings2Icon for Controller, kept Settings for general
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react'; // Renamed Settings to Settings2Icon for Controller, kept Settings for general, Added LinkOff
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,12 +47,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription, // Renamed to avoid conflict
+  AlertDialogDescription as ShadAlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle, // Renamed to avoid conflict
+  AlertDialogTitle as ShadAlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog'; // Renamed to avoid conflict
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -130,7 +130,7 @@ const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undefined): 
 };
 
 const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false): string => {
-    if (selected) return 'border-ring'; // Use ring color for selection border for all types
+    if (selected) return 'border-ring';
     switch (nodeType) {
         case 'controller': return 'border-yellow-500';
         case 'server': return 'border-primary';
@@ -171,7 +171,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     <div
       className={cn(
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
-        "min-w-[150px] max-w-[200px] py-2 px-2.5", // Compact sizing
+        "min-w-[150px] max-w-[200px] py-2 px-2.5", 
         getNodeBorderColorClass(data.type, selected),
         selected && "ring-2 ring-offset-1 ring-ring" 
       )}
@@ -229,6 +229,10 @@ const TopologyPageContent: NextPage = () => {
   
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
+
+  const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
+  const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
   
   const { data: allFetchedInstancesData, isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], 
@@ -355,11 +359,13 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
     setNodeForContextMenu(null); 
+    setEdgeForContextMenu(null);
   }, []);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeForPropsPanel(null);
     setNodeForContextMenu(null); 
+    setEdgeForContextMenu(null);
   }, []);
   
   const clearCanvas = () => {
@@ -367,6 +373,7 @@ const TopologyPageContent: NextPage = () => {
     setEdges([]);
     setSelectedNodeForPropsPanel(null);
     setNodeForContextMenu(null);
+    setEdgeForContextMenu(null);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
     setIsClearCanvasAlertOpen(false);
   };
@@ -377,6 +384,18 @@ const TopologyPageContent: NextPage = () => {
       setSelectedNodeForPropsPanel(node); 
       setNodeForContextMenu(node);
       setContextMenuPosition({ x: event.clientX, y: event.clientY });
+      setEdgeForContextMenu(null); // Clear edge context menu if node context menu is opened
+    },
+    []
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      setEdgeForContextMenu(edge);
+      setEdgeContextMenuPosition({ x: event.clientX, y: event.clientY });
+      setNodeForContextMenu(null); // Clear node context menu
+      setSelectedNodeForPropsPanel(null); // Clear node selection in props panel
     },
     []
   );
@@ -427,6 +446,24 @@ const TopologyPageContent: NextPage = () => {
     setIsDeleteNodeDialogOpen(false);
     setNodeToDelete(null);
   };
+
+  const openDeleteEdgeDialog = () => {
+    if (edgeForContextMenu) {
+      setIsDeleteEdgeDialogOpen(true);
+    }
+    setEdgeForContextMenu(null);
+    setEdgeContextMenuPosition(null);
+  };
+
+  const confirmDeleteEdge = () => {
+    if (edgeForContextMenu) {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu!.id));
+      toast({ title: "链路已删除", description: `ID: ${edgeForContextMenu.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
+    }
+    setIsDeleteEdgeDialogOpen(false);
+    // edgeForContextMenu is already cleared by openDeleteEdgeDialog or will be by pane click
+  };
+
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
     { type: 'server', title: '服务端', icon: ServerIcon },
@@ -547,7 +584,7 @@ const TopologyPageContent: NextPage = () => {
                         <p><span className="font-semibold">端口:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingPort || 'N/A'}</span></p>
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {(selectedNodeForPropsPanel.data as UserNodeData).description || 'N/A'}</p>}
-                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。</p>
+                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点/链路可编辑或删除。</p>
                   </div>
                 ) : ( <p className="text-xs text-muted-foreground text-center py-3 font-sans">未选择节点。</p> )}
               </ScrollArea></CardContent>
@@ -564,6 +601,7 @@ const TopologyPageContent: NextPage = () => {
               onNodeClick={handleNodeClick}
               onPaneClick={handlePaneClick}
               onNodeContextMenu={handleNodeContextMenu}
+              onEdgeContextMenu={handleEdgeContextMenu}
               fitView
               fitViewOptions={{ padding: 0.2, minZoom: 0.5, maxZoom: 2.5 }}
               proOptions={{ hideAttribution: true }}
@@ -599,6 +637,18 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
+        {edgeForContextMenu && edgeContextMenuPosition && (
+          <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => { if (!isOpen) setEdgeForContextMenu(null); }}>
+            <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
+            <DropdownMenuContent align="start" className="w-48 font-sans">
+              <DropdownMenuItem onClick={openDeleteEdgeDialog} className="text-destructive hover:!text-destructive focus:!text-destructive">
+                <LinkOff className="mr-2 h-4 w-4" />
+                删除链路
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -615,7 +665,7 @@ const TopologyPageContent: NextPage = () => {
                 <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
                 <Input
                   id="node-label-input"
-                  value={editingNodeProperties.label}
+                  value={editingNodeProperties.label || ''}
                   onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, label: e.target.value }) : null)}
                   className="font-sans"
                   autoFocus
@@ -746,6 +796,32 @@ const TopologyPageContent: NextPage = () => {
             </AlertDialogContent>
         </AlertDialog>
 
+        <AlertDialog open={isDeleteEdgeDialogOpen} onOpenChange={(isOpen) => {
+          setIsDeleteEdgeDialogOpen(isOpen);
+          if (!isOpen) {
+            setEdgeForContextMenu(null); // Clear the specific edge from context if dialog is closed
+          }
+        }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <ShadAlertDialogTitle className="font-title">确认删除链路</ShadAlertDialogTitle>
+              <ShadAlertDialogDescription className="font-sans">
+                您确定要删除此连接链路吗？ (ID: {edgeForContextMenu?.id?.substring(0,15)}...) 此操作无法撤销。
+              </ShadAlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setIsDeleteEdgeDialogOpen(false); setEdgeForContextMenu(null); }} className="font-sans">取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteEdge}
+                className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
+              >
+                <LinkOff className="mr-2 h-4 w-4"/> 删除链路
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+
         <AlertDialog open={isClearCanvasAlertOpen} onOpenChange={setIsClearCanvasAlertOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -780,3 +856,5 @@ const TopologyEditorPageWrapper: NextPage = () => {
 
 export default TopologyEditorPageWrapper;
 
+
+    
