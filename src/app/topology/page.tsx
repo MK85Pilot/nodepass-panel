@@ -23,16 +23,19 @@ import {
 import 'reactflow/dist/style.css';
 
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
+import { useApiConfig, type NamedApiConfig, type MasterLogLevel, type MasterTlsMode } from '@/hooks/use-api-key';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Link2Off } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Link2Off, UploadCloud } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { AppLogEntry } from '@/components/nodepass/EventLog';
+import { nodePassApi } from '@/lib/api';
+import type { CreateInstanceRequest } from '@/types/nodepass';
+import { createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +54,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitleFromDialog, DialogDescription as ShadDialogDescriptionFromDialog } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 
 
@@ -62,6 +66,7 @@ interface BaseNodeData {
   apiId?: string;
   apiName?: string;
   isChainHighlighted?: boolean;
+  statusInfo?: string; // For submission status
 }
 
 export interface ControllerNodeData extends BaseNodeData {
@@ -71,18 +76,20 @@ export interface ControllerNodeData extends BaseNodeData {
 }
 export interface ServerNodeData extends BaseNodeData {
   type: 'server';
+  instanceType: 'server'; // For URL building consistency
   tunnelAddress: string;
   targetAddress: string;
-  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
-  tlsMode: 'master' | '0' | '1' | '2';
+  logLevel: MasterLogLevel;
+  tlsMode: MasterTlsMode;
   crtPath?: string;
   keyPath?: string;
 }
 export interface ClientNodeData extends BaseNodeData {
   type: 'client';
+  instanceType: 'client'; // For URL building consistency
   tunnelAddress: string;
   targetAddress: string;
-  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  logLevel: MasterLogLevel;
 }
 export interface LandingNodeData extends BaseNodeData {
   type: 'landing';
@@ -134,9 +141,12 @@ const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undefined): 
     }
 };
 
-const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false, isChainHighlighted: boolean = false): string => {
+const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false, isChainHighlighted: boolean = false, statusInfo?: string): string => {
     if (selected) return 'border-ring ring-2 ring-ring';
+    if (statusInfo?.includes('失败')) return 'border-destructive ring-2 ring-destructive/70';
+    if (statusInfo?.includes('已提交')) return 'border-green-500 ring-2 ring-green-400/70';
     if (isChainHighlighted) return 'border-green-500 ring-2 ring-green-400/70';
+
     switch (nodeType) {
         case 'controller': return 'border-yellow-500';
         case 'server': return 'border-primary';
@@ -178,7 +188,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
       className={cn(
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
         "min-w-[120px] max-w-[160px] py-1 px-2",
-        getNodeBorderColorClass(data.type, selected, data.isChainHighlighted)
+        getNodeBorderColorClass(data.type, selected, data.isChainHighlighted, data.statusInfo)
       )}
     >
       <div className="flex items-center text-[11px] font-medium mb-0.5">
@@ -186,6 +196,8 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
         <span className="truncate" title={data.label}>{data.label}</span>
       </div>
       {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
+      {data.statusInfo && <div className="text-[8px] font-semibold mt-0.5 w-full text-center" style={{ color: data.statusInfo.includes('失败') ? 'hsl(var(--destructive))' : 'hsl(var(--chart-2))' }}>{data.statusInfo}</div>}
+
 
       {(data.type === 'controller' || data.type === 'user') && (
          <Handle type="source" position={Position.Right} id="output"
@@ -221,9 +233,13 @@ const nodeTypes = {
   custom: NodePassFlowNode,
 };
 
+type PendingOperations = Record<string, { apiConfig: NamedApiConfig; urlsToCreate: Array<{ originalNodeId: string; url: string }> }>;
+
+
 const TopologyPageContent: NextPage = () => {
-  const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
+  const { apiConfigsList, isLoading: isLoadingApiConfig, getApiConfigById, getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
@@ -250,13 +266,17 @@ const TopologyPageContent: NextPage = () => {
 
   const [selectedChainElements, setSelectedChainElements] = useState<{ nodes: Set<string>, edges: Set<string> } | null>(null);
 
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [pendingOperations, setPendingOperations] = useState<PendingOperations>({});
+  const [isSubmittingTopology, setIsSubmittingTopology] = useState(false);
+
+
   const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[],
     Error
   >({
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
-      console.log("Triggering placeholder fetch for topology page data refresh trigger.");
       return [];
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
@@ -350,37 +370,24 @@ const TopologyPageContent: NextPage = () => {
         x: clientX,
         y: clientY,
       });
-
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-      console.log("Drop Event Data:", {
-        clientX,
-        clientY,
-        boundsLeft: reactFlowBounds.left,
-        boundsTop: reactFlowBounds.top,
-        _calculatedRelativeX: clientX - reactFlowBounds.left, // For logging/debugging
-        _calculatedRelativeY: clientY - reactFlowBounds.top, // For logging/debugging
-      });
-      console.log("Calculated Flow Position for New Node (pre-center):", position);
-
-
+      
       const centeredPosition = {
         x: position.x - NODE_DEFAULT_WIDTH / 2,
         y: position.y - NODE_DEFAULT_HEIGHT / 2,
       };
-       console.log("Calculated Centered Flow Position for New Node:", centeredPosition);
 
       let newNodeData: TopologyNodeData;
       switch (type) {
         case 'controller':
-          newNodeData = { label: apiName || label || '主控', type: 'controller', apiId: apiId || '', apiName: apiName || '未知API' }; break;
+          newNodeData = { label: apiName || label || '主控', type: 'controller', apiId: apiId || '', apiName: apiName || '未知API', statusInfo: '' }; break;
         case 'server':
-          newNodeData = { label: label || '服务端', type: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '' }; break;
+          newNodeData = { label: label || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' }; break;
         case 'client':
-          newNodeData = { label: label || '客户端', type: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info' }; break;
+          newNodeData = { label: label || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' }; break;
         case 'landing':
-          newNodeData = { label: label || '落地', type: 'landing', landingIp: '', landingPort: '' }; break;
+          newNodeData = { label: label || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' }; break;
         case 'user':
-          newNodeData = { label: label || '用户源', type: 'user', description: '' }; break;
+          newNodeData = { label: label || '用户源', type: 'user', description: '', statusInfo: '' }; break;
         default: console.warn("Unknown node type dropped:", type); return;
       }
 
@@ -483,6 +490,24 @@ const TopologyPageContent: NextPage = () => {
     },
     []
   );
+  
+  const deleteEdgeDirectly = () => {
+    if (edgeForContextMenu) {
+      const edgeLabel = `从 ${rfGetNode(edgeForContextMenu.source)?.data?.label || '未知源'} 到 ${rfGetNode(edgeForContextMenu.target)?.data?.label || '未知目标'} (ID: ${edgeForContextMenu.id.substring(0,8)}...)`;
+      setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu.id));
+      toast({
+        title: "链路已删除",
+        description: `链路 "${edgeLabel}" 已被删除。`,
+        variant: "destructive",
+      });
+      if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
+        updateSelectedChain(null);
+      }
+      onAppLog?.(`链路 "${edgeLabel}" 已删除。`, 'SUCCESS');
+    }
+    setEdgeForContextMenu(null); // Close context menu
+  };
+
 
   const handleEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
@@ -495,23 +520,6 @@ const TopologyPageContent: NextPage = () => {
     },
     [updateSelectedChain]
   );
-
-  const deleteEdgeFromContextMenu = () => {
-    if (edgeForContextMenu) {
-      const edgeLabel = `从 ${rfGetNode(edgeForContextMenu.source)?.data?.label || '未知源'} 到 ${rfGetNode(edgeForContextMenu.target)?.data?.label || '未知目标'} (ID: ${edgeForContextMenu.id.substring(0,8)}...)`;
-      setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu.id));
-      toast({
-        title: "链路已删除",
-        description: `链路 "${edgeLabel}" 已被删除。`,
-        variant: "destructive",
-      });
-      if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
-        updateSelectedChain(null);
-      }
-    }
-    setEdgeForContextMenu(null); 
-  };
-
 
   const openEditPropertiesDialog = () => {
     if (nodeForContextMenu && nodeForContextMenu.data) {
@@ -528,7 +536,7 @@ const TopologyPageContent: NextPage = () => {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } }
+            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted, statusInfo: n.data.statusInfo } } // Preserve statusInfo
             : n
         )
       );
@@ -675,6 +683,217 @@ const TopologyPageContent: NextPage = () => {
     event.dataTransfer.effectAllowed = 'copy';
   };
 
+  function buildNodePassUrlFromNode(
+      instanceNode: Node<ServerNodeData | ClientNodeData | TopologyNodeData>, // Make it more generic to accept from map
+      allNodesInner: Node<TopologyNodeData>[],
+      allEdgesInner: Edge[]
+  ): string | null {
+      const { data } = instanceNode;
+      if (!data || !data.type || data.type === 'landing' || data.type === 'user' || data.type === 'controller') return null;
+      
+      const typedData = data as ServerNodeData | ClientNodeData;
+      if (!typedData.instanceType || !typedData.tunnelAddress || !typedData.targetAddress) return null;
+
+      let actualTargetAddress = typedData.targetAddress;
+
+      const landingEdge = allEdgesInner.find(edge => 
+          edge.source === instanceNode.id && 
+          allNodesInner.find(n => n.id === edge.target)?.data?.type === 'landing'
+      );
+
+      if (landingEdge) {
+          const landingNode = allNodesInner.find(n => n.id === landingEdge.target) as Node<LandingNodeData> | undefined;
+          if (landingNode?.data.landingIp && landingNode.data.landingPort) {
+              actualTargetAddress = `${landingNode.data.landingIp}:${landingNode.data.landingPort}`;
+          }
+      }
+      
+      let url = `${typedData.instanceType}://${typedData.tunnelAddress}/${actualTargetAddress}`;
+      const queryParams = new URLSearchParams();
+
+      if (typedData.logLevel && typedData.logLevel !== "master") {
+          queryParams.append('log', typedData.logLevel);
+      }
+
+      if (typedData.instanceType === 'server') {
+          const serverData = typedData as ServerNodeData; // Already known to be server
+          if (serverData.tlsMode && serverData.tlsMode !== "master") {
+              queryParams.append('tls', serverData.tlsMode);
+              if (serverData.tlsMode === '2') {
+                  if (serverData.crtPath && serverData.crtPath.trim() !== '') queryParams.append('crt', serverData.crtPath.trim());
+                  if (serverData.keyPath && serverData.keyPath.trim() !== '') queryParams.append('key', serverData.keyPath.trim());
+              }
+          }
+      }
+      const queryString = queryParams.toString();
+      return queryString ? `${url}?${queryString}` : url;
+  }
+
+
+  const handleSubmitTopology = () => {
+      const currentAllNodes = rfGetNodes();
+      const currentAllEdges = rfGetEdges();
+      const ops: PendingOperations = {};
+
+      const controllerNodesList = currentAllNodes.filter(n => n.data?.type === 'controller') as Node<ControllerNodeData>[];
+
+      for (const controllerNode of controllerNodesList) {
+          if (!controllerNode.data.apiId || !controllerNode.data.apiName) continue;
+
+          const apiConfig = getApiConfigById(controllerNode.data.apiId);
+          if (!apiConfig) {
+              toast({ title: "配置错误", description: `未找到主控 "${controllerNode.data.apiName}" 的配置。跳过此主控的操作。`, variant: "destructive" });
+              onAppLog?.(`尝试提交拓扑: 主控 "${controllerNode.data.apiName}" (ID: ${controllerNode.data.apiId}) 配置未找到。`, 'ERROR');
+              continue;
+          }
+          if (!ops[controllerNode.data.apiId]) {
+              ops[controllerNode.data.apiId] = { apiConfig, urlsToCreate: [] };
+          }
+          
+          // Reset statusInfo for nodes under this controller before generating operations
+          currentAllNodes.forEach(node => {
+              if (node.data && node.data.statusInfo) {
+                  setNodes(nds => nds.map(n => n.id === node.id ? {...n, data: {...n.data, statusInfo: ''}} : n));
+              }
+          });
+
+
+          currentAllEdges.forEach(edge => {
+              if (edge.source === controllerNode.id) {
+                  const targetNode = currentAllNodes.find(n => n.id === edge.target);
+                  if (targetNode && targetNode.data && (targetNode.data.type === 'server' || targetNode.data.type === 'client')) {
+                      const url = buildNodePassUrlFromNode(targetNode as Node<ServerNodeData | ClientNodeData>, currentAllNodes, currentAllEdges);
+                      if (url && !ops[controllerNode.data.apiId].urlsToCreate.some(op => op.originalNodeId === targetNode.id)) {
+                          ops[controllerNode.data.apiId].urlsToCreate.push({ originalNodeId: targetNode.id, url });
+                      }
+                  }
+              }
+          });
+      }
+      
+      const clientNodesList = currentAllNodes.filter(n => n.data?.type === 'client') as Node<ClientNodeData>[];
+      for (const clientNode of clientNodesList) {
+          const alreadyProcessed = Object.values(ops).some(opGroup => opGroup.urlsToCreate.some(op => op.originalNodeId === clientNode.id));
+          if (alreadyProcessed) continue;
+
+          const connectedServerEdges = currentAllEdges.filter(edge => edge.source === clientNode.id && currentAllNodes.find(n => n.id === edge.target)?.data?.type === 'server');
+          
+          for (const edgeToServer of connectedServerEdges) {
+              const serverNodeId = edgeToServer.target;
+              let clientAdded = false;
+              for (const apiId in ops) {
+                  if (ops[apiId].urlsToCreate.some(op => op.originalNodeId === serverNodeId)) {
+                      const url = buildNodePassUrlFromNode(clientNode, currentAllNodes, currentAllEdges);
+                      if (url && !ops[apiId].urlsToCreate.some(op => op.originalNodeId === clientNode.id)) {
+                          ops[apiId].urlsToCreate.push({ originalNodeId: clientNode.id, url });
+                          clientAdded = true;
+                      }
+                      break; 
+                  }
+              }
+              if (clientAdded) break; 
+          }
+      }
+      
+      const totalUrls = Object.values(ops).reduce((sum, group) => sum + group.urlsToCreate.length, 0);
+      if (totalUrls === 0) {
+          toast({ title: "无需提交", description: "未在画布中检测到可创建的实例链路。" });
+          onAppLog?.('尝试提交拓扑: 无可创建的实例。', 'INFO');
+          return;
+      }
+
+      setPendingOperations(ops);
+      setIsSubmitModalOpen(true);
+      onAppLog?.(`准备提交拓扑: ${totalUrls} 个实例待创建。`, 'INFO', ops);
+  };
+
+  const createInstanceMutation = useMutation({
+      mutationFn: (params: { data: CreateInstanceRequest, apiRoot: string, token: string, originalNodeId: string, apiName: string }) => {
+          const validatedApiData = createInstanceApiSchema.parse(params.data);
+          return nodePassApi.createInstance(validatedApiData, params.apiRoot, params.token);
+      },
+      onSuccess: (createdInstance, variables) => {
+          const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
+          toast({
+              title: `实例已创建 (${variables.apiName})`,
+              description: `画布节点 ${variables.originalNodeId.substring(0,8)}... (URL: ${shortUrl}) -> API实例ID: ${createdInstance.id.substring(0,8)}...`,
+          });
+          onAppLog?.(`画布实例 ${variables.originalNodeId.substring(0,8)}... 创建成功 (主控: ${variables.apiName}) -> ${createdInstance.type} ${createdInstance.id.substring(0,8)}... (URL: ${shortUrl})`, 'SUCCESS');
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === variables.originalNodeId
+                ? { ...n, data: { ...n.data, statusInfo: `已提交 (ID: ${createdInstance.id.substring(0,8)}...)` } }
+                : n
+            )
+          );
+      },
+      onError: (error: any, variables) => {
+          const shortUrl = variables.data.url.length > 40 ? variables.data.url.substring(0,37) + "..." : variables.data.url;
+          toast({
+              title: `创建实例 ${variables.originalNodeId.substring(0,8)}... 出错 (${variables.apiName})`,
+              description: `创建 (URL: ${shortUrl}) 失败: ${error.message || '未知错误。'}`,
+              variant: 'destructive',
+          });
+          onAppLog?.(`画布实例 ${variables.originalNodeId.substring(0,8)}... 创建失败 (主控: ${variables.apiName}, URL: ${shortUrl}) - ${error.message || '未知错误'}`, 'ERROR');
+           setNodes((nds) =>
+            nds.map((n) =>
+              n.id === variables.originalNodeId
+                ? { ...n, data: { ...n.data, statusInfo: `提交失败` } }
+                : n
+            )
+          );
+      },
+  });
+
+
+  const handleConfirmSubmitTopology = async () => {
+      setIsSubmittingTopology(true);
+      const allSubmissionPromises: Promise<any>[] = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const apiIdKey in pendingOperations) {
+          const opGroup = pendingOperations[apiIdKey];
+          const { apiConfig, urlsToCreate } = opGroup;
+          const currentApiRoot = getApiRootUrl(apiConfig.id);
+          const currentToken = getToken(apiConfig.id);
+
+          if (!currentApiRoot || !currentToken) {
+              toast({ title: "错误", description: `主控 "${apiConfig.name}" 配置无效，跳过此主控的所有操作。`, variant: "destructive" });
+              onAppLog?.(`提交拓扑时主控 "${apiConfig.name}" 配置无效，跳过。`, 'ERROR');
+              errorCount += urlsToCreate.length; 
+              urlsToCreate.forEach(({ originalNodeId }) => {
+                  setNodes((nds) => nds.map((n) => n.id === originalNodeId ? { ...n, data: { ...n.data, statusInfo: '主控配置错误' } } : n ));
+              });
+              continue;
+          }
+
+          for (const { originalNodeId, url } of urlsToCreate) {
+              const promise = createInstanceMutation.mutateAsync({ data: { url }, apiRoot: currentApiRoot, token: currentToken, originalNodeId, apiName: apiConfig.name })
+                  .then(() => { successCount++; })
+                  .catch(() => { errorCount++; }); // Errors are handled by mutation's onError
+              allSubmissionPromises.push(promise);
+          }
+      }
+
+      await Promise.allSettled(allSubmissionPromises);
+
+      setIsSubmittingTopology(false);
+      setPendingOperations({});
+      setIsSubmitModalOpen(false);
+
+      toast({
+          title: "拓扑提交处理完成",
+          description: `${successCount} 个实例创建成功, ${errorCount} 个实例创建失败或被跳过。`,
+          variant: errorCount > 0 ? "destructive" : "default",
+          duration: errorCount > 0 ? 8000 : 5000,
+      });
+      onAppLog?.(`拓扑提交处理完成: ${successCount} 成功, ${errorCount} 失败/跳过。`, errorCount > 0 ? 'ERROR' : 'SUCCESS');
+
+      queryClient.invalidateQueries({ queryKey: ['instances'] }); 
+      queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic'] });
+  };
+
 
   if (isLoadingApiConfig) {
     return (
@@ -699,16 +918,18 @@ const TopologyPageContent: NextPage = () => {
               </span>
             )}
             <Button variant="outline" onClick={() => fitView({ duration: 600 })} title="自适应视图" size="sm" className="font-sans h-9">
-                <Maximize className="mr-1 h-4 w-4" />
-                自适应
+                <Maximize className="mr-1 h-4 w-4" />自适应
             </Button>
-             <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
-                <LayoutGrid className="mr-1 h-4 w-4" />
-                格式化
+            <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
+                <LayoutGrid className="mr-1 h-4 w-4" />格式化
             </Button>
             <Button variant="outline" onClick={() => refetchInstances()} disabled={isLoadingInstances} size="sm" className="font-sans">
               <RefreshCw className={`mr-1 h-4 w-4 ${isLoadingInstances ? 'animate-spin' : ''}`} />
               {isLoadingInstances ? '刷新中' : '刷新数据'}
+            </Button>
+            <Button variant="default" onClick={handleSubmitTopology} size="sm" className="font-sans bg-green-600 hover:bg-green-700 text-white">
+              <UploadCloud className="mr-1 h-4 w-4" />
+              提交拓扑
             </Button>
             <Button variant="destructive" onClick={() => setIsClearCanvasAlertOpen(true)} size="sm" className="font-sans">
               <Eraser className="mr-1 h-4 w-4" />
@@ -755,6 +976,9 @@ const TopologyPageContent: NextPage = () => {
                     </div>
                 ))}
                 </div></ScrollArea></CardContent>
+                 <CardFooter className="p-1.5 border-t">
+                    {/* Footer for future buttons like lock view if re-added */}
+                 </CardFooter>
             </Card>
 
             <Card className="shadow-sm flex-grow flex flex-col min-h-0">
@@ -770,6 +994,7 @@ const TopologyPageContent: NextPage = () => {
                     <p><span className="font-semibold">ID:</span> <span className="font-mono">{selectedNodeForPropsPanel.id}</span></p>
                     <p><span className="font-semibold">类型:</span> <span className="font-mono capitalize">{selectedNodeForPropsPanel.data.type}</span></p>
                     <p><span className="font-semibold">标签:</span> {selectedNodeForPropsPanel.data.label}</p>
+                    {selectedNodeForPropsPanel.data.statusInfo && <p><span className="font-semibold">提交状态:</span> <span style={{ color: selectedNodeForPropsPanel.data.statusInfo.includes('失败') ? 'hsl(var(--destructive))' : 'hsl(var(--chart-2))' }}>{selectedNodeForPropsPanel.data.statusInfo}</span></p>}
                     {selectedNodeForPropsPanel.data.type === 'controller' && <p><span className="font-semibold">API:</span> {(selectedNodeForPropsPanel.data as ControllerNodeData).apiName}</p>}
                     {selectedNodeForPropsPanel.data.type === 'server' && <>
                         <p><span className="font-semibold">隧道:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ServerNodeData).tunnelAddress}</span></p>
@@ -843,7 +1068,7 @@ const TopologyPageContent: NextPage = () => {
           <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => !isOpen && setEdgeForContextMenu(null)}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
             <DropdownMenuContent align="start" className="w-48 font-sans">
-              <DropdownMenuItem onClick={deleteEdgeFromContextMenu} className="text-destructive hover:!text-destructive focus:!text-destructive">
+              <DropdownMenuItem onClick={deleteEdgeDirectly} className="text-destructive hover:!text-destructive focus:!text-destructive">
                 <Link2Off className="mr-2 h-4 w-4" />
                 删除链路
               </DropdownMenuItem>
@@ -1018,6 +1243,60 @@ const TopologyPageContent: NextPage = () => {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={isSubmitModalOpen} onOpenChange={setIsSubmitModalOpen}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <ShadDialogTitleFromDialog className="font-title flex items-center">
+                        <UploadCloud className="mr-2 h-5 w-5 text-primary"/>确认提交拓扑
+                    </ShadDialogTitleFromDialog>
+                    <ShadDialogDescriptionFromDialog className="font-sans">
+                        将根据以下分组在相应的主控上创建实例。请确认操作。
+                    </ShadDialogDescriptionFromDialog>
+                </DialogHeader>
+                <ScrollArea className="max-h-[60vh] pr-4">
+                    {Object.keys(pendingOperations).length === 0 ? (
+                        <p className="text-muted-foreground text-sm font-sans py-4 text-center">无可创建的操作。</p>
+                    ) : (
+                        <Accordion type="multiple" defaultValue={Object.keys(pendingOperations)} className="w-full">
+                            {Object.entries(pendingOperations).map(([apiId, opGroup]) => (
+                                <AccordionItem value={apiId} key={apiId}>
+                                    <AccordionTrigger className="font-sans text-base hover:no-underline">
+                                        主控: {opGroup.apiConfig.name} ({opGroup.urlsToCreate.length} 个实例)
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                        <ul className="list-disc pl-5 space-y-1 text-xs font-mono">
+                                            {opGroup.urlsToCreate.map(op => (
+                                                <li key={op.originalNodeId} className="break-all" title={`源画布节点ID: ${op.originalNodeId}`}>
+                                                    {op.url}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    )}
+                </ScrollArea>
+                <DialogFooter className="font-sans pt-4">
+                    <DialogClose asChild>
+                        <Button variant="outline" disabled={isSubmittingTopology}>取消</Button>
+                    </DialogClose>
+                    <Button 
+                        onClick={handleConfirmSubmitTopology} 
+                        disabled={isSubmittingTopology || Object.keys(pendingOperations).length === 0}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                        {isSubmittingTopology ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> 提交中...</>
+                        ) : (
+                            "确认提交"
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
       </div>
     </AppLayout>
   );
@@ -1032,6 +1311,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
-
-
-    

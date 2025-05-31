@@ -1,3 +1,4 @@
+
 import { LGraphNode, LiteGraph, Vector2, LLink, IContextMenuOptions, INodeInputSlot, INodeOutputSlot, WidgetCallback, SlotShape } from 'litegraph.js';
 import { ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2, Cog } from 'lucide-react';
 
@@ -27,6 +28,7 @@ export class NodePassBaseNode extends LGraphNode {
 
     this.properties = {
         type: (this.constructor as any).category?.split("/")[1]?.toLowerCase() || 'unknown',
+        statusInfo: '', // Initialize statusInfo
         ...(this.properties || {}) 
     };
     
@@ -56,9 +58,17 @@ export class NodePassBaseNode extends LGraphNode {
     super.onDrawBackground?.(ctx, graphcanvas, canvas, pos); 
 
     if (this.flags.collapsed) return;
+    
+    let borderColor = this.currentBorderColor;
+    if (this.properties.statusInfo?.includes('失败')) {
+        borderColor = "hsl(0 100% 60%)"; // Destructive color
+    } else if (this.properties.statusInfo?.includes('已提交')) {
+        borderColor = "hsl(120 70% 50%)"; // Success color
+    }
 
-    if (!this.selected && this.currentBorderColor !== "transparent") {
-        ctx.strokeStyle = this.currentBorderColor;
+
+    if (!this.selected && borderColor !== "transparent") {
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1.5; 
         const cornerRadius = 6; 
         ctx.beginPath();
@@ -82,29 +92,36 @@ export class NodePassBaseNode extends LGraphNode {
     if (this.flags.collapsed) return;
 
     const typeText = (this.constructor as any).nodeCategoryText || this.type.split('/').pop()?.toUpperCase() || 'NODE';
+    const hasApiName = !!this.data?.apiName;
+    const hasStatusInfo = !!this.properties.statusInfo;
+
+    let availableHeightForText = this.size[1] - 4; // Initial bottom padding
+    
+    if (hasStatusInfo) {
+        const statusText = this.properties.statusInfo as string;
+        ctx.fillStyle = statusText.includes("失败") ? "hsl(0 100% 70%)" : "hsl(120 60% 60%)";
+        ctx.font = "italic bold 8px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(statusText, this.size[0] / 2, availableHeightForText - 2);
+        availableHeightForText -= 10; // Height of status text + small margin
+    }
+    
     ctx.fillStyle = this.currentTypeColor;
     ctx.font = "bold 9px Arial";
     ctx.textAlign = "left";
-    ctx.fillText(typeText, 6, this.size[1] - 6);
+    const typeTextY = hasStatusInfo ? availableHeightForText - 2 : this.size[1] - 6;
+    ctx.fillText(typeText, 6, typeTextY);
 
-    if (this.data?.apiName) {
+
+    if (hasApiName) {
         const apiNameText = `API: ${this.data.apiName}`;
         ctx.fillStyle = this.currentFgColor; 
         ctx.font = "italic 8px Arial";
         ctx.textAlign = "right";
-        // Check if there's enough space, otherwise might overlap with typeText
         const typeTextWidth = ctx.measureText(typeText).width;
         if (this.size[0] - 6 - typeTextWidth > ctx.measureText(apiNameText).width + 5) {
-             ctx.fillText(apiNameText, this.size[0] - 6, this.size[1] - 6);
+             ctx.fillText(apiNameText, this.size[0] - 6, typeTextY); // Align with typeText Y
         }
-    }
-
-    // Status info from properties (e.g., "submitted")
-    if (this.properties.statusInfo) {
-        ctx.fillStyle = this.properties.statusInfo === "提交失败" ? "hsl(0 100% 70%)" : "hsl(120 60% 60%)";
-        ctx.font = "italic bold 9px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(this.properties.statusInfo as string, this.size[0] / 2, this.size[1] - 6);
     }
   }
 
@@ -112,10 +129,9 @@ export class NodePassBaseNode extends LGraphNode {
     if (this.title && this.flags.show_title !== false) {
         ctx.fillStyle = this.currentTitleColor;
         const currentFont = NodePassBaseNode.title_text_font || ((this.constructor as any).title_text_font) || "bold 14px Arial";
-        ctx.font = currentFont; // Ensure font is set before measureText
+        ctx.font = currentFont; 
         const title_width = ctx.measureText(this.title).width;
-        // Adjust title x position based on font to approximately center it.
-        // LiteGraph.NODE_TITLE_HEIGHT is typically 20 or 22.
+        
         const title_y_offset = LiteGraph.NODE_TITLE_HEIGHT * 0.7; 
         const x = Math.max(5, (this.size[0] - title_width) * 0.5); 
         ctx.fillText(this.title, x, title_y_offset);
@@ -133,6 +149,7 @@ export class ControllerNode extends NodePassBaseNode {
   static constructor_properties = {
     apiConfigName: { type: "string", label: "API配置名称", default: "", description: "此主控关联的API配置名 (只读)。" },
     apiConfigId: { type: "string", label: "API配置ID", default: "", description: "关联的API配置ID (只读)。" },
+    ...NodePassBaseNode.constructor_properties,
   };
   
   constructor(title?: string) {
@@ -175,6 +192,7 @@ export class ServerNode extends NodePassBaseNode {
     tlsMode: { type: "enum", label: "TLS模式", default: "master", options: [{value: "master", label:"主控默认"}, {value:"0", label:"0: 无"}, {value:"1", label:"1: 自签"}, {value:"2", label:"2: 自定义"}], description: "服务端TLS配置。" },
     crt: { type: "string", label: "证书CRT (TLS 2)", default: "", placeholder: "/path/cert.pem", description: "自定义证书路径。" },
     key: { type: "string", label: "密钥KEY (TLS 2)", default: "", placeholder: "/path/key.pem", description: "自定义密钥路径。" },
+    ...NodePassBaseNode.constructor_properties,
   };
   
   constructor(title?: string) {
@@ -202,6 +220,7 @@ export class ClientNode extends NodePassBaseNode {
     tunnelAddress: { type: "string", label: "服务端隧道", default: "server.host:10001", placeholder: "server.host:PORT", description: "连接的SVR控制通道。" },
     targetAddress: { type: "string", label: "本地转发", default: "127.0.0.1:8000", placeholder: "127.0.0.1:PORT", description: "本地应用监听地址。" },
     logLevel: { type: "enum", label: "日志级别", default: "master", options: ["master", "debug", "info", "warn", "error", "fatal"], description: "'master': 主控默认。" },
+    ...NodePassBaseNode.constructor_properties,
   };
 
   constructor(title?: string) {
@@ -226,6 +245,7 @@ export class LandingNode extends NodePassBaseNode {
   
   static constructor_properties = {
       targetAddress: { type: "string", label: "目标服务", default: "final.service.com:80", placeholder: "最终目标服务 (可选)" },
+      ...NodePassBaseNode.constructor_properties,
   };
 
   constructor(title?: string) {
@@ -249,6 +269,7 @@ export class UserNode extends NodePassBaseNode {
 
   static constructor_properties = {
       description: { type: "string", label: "描述", default: "用户或流量起点" },
+      ...NodePassBaseNode.constructor_properties,
   };
 
   constructor(title?: string) {
