@@ -12,6 +12,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Edge,
+  type OnConnect,
   MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -21,7 +22,7 @@ import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, AlertTriangle, Edit3, Trash2, Unlink, Target, Users, Settings2 } from 'lucide-react';
+import { Loader2, AlertTriangle, Edit3, Trash2, Unlink, Target, Users, Settings2, Maximize, LayoutGrid, RefreshCw, UploadCloud, Eraser } from 'lucide-react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { AppLogEntry } from '@/components/nodepass/EventLog';
@@ -59,7 +60,7 @@ import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import { SubmitTopologyDialog } from './components/dialogs/SubmitTopologyDialog';
 
 import type {
-  TopologyNodeData, NodePassFlowNodeType, PendingOperations, DraggableNodeType,
+  TopologyNodeData, NodePassFlowNodeType, PendingOperations,
   ControllerNodeData, ServerNodeData, ClientNodeData, LandingNodeData, UserNodeData
 } from './lib/topology-types';
 import { initialViewport, NODE_DEFAULT_WIDTH, NODE_DEFAULT_HEIGHT, CHAIN_HIGHLIGHT_COLOR, TIER_Y_SPACING, NODE_X_SPACING } from './lib/topology-types';
@@ -233,43 +234,50 @@ const TopologyPageContent: NextPage = () => {
       event.preventDefault();
       if (!reactFlowWrapper.current) return;
 
-      const draggedNodeType = event.dataTransfer.getData('application/reactflow-nodetype') as TopologyNodeData['type'];
+      const draggedNodeTypeFromPanel = event.dataTransfer.getData('application/reactflow-nodetype') as TopologyNodeData['type'];
       let initialLabel = event.dataTransfer.getData('application/reactflow-label');
       const draggedApiId = event.dataTransfer.getData('application/reactflow-apiid');
       const draggedApiName = event.dataTransfer.getData('application/reactflow-apiname');
 
-      if (typeof draggedNodeType === 'undefined' || !draggedNodeType) return;
+      if (typeof draggedNodeTypeFromPanel === 'undefined' || !draggedNodeTypeFromPanel) return;
 
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const centeredPosition = { x: position.x - NODE_DEFAULT_WIDTH / 2, y: position.y - NODE_DEFAULT_HEIGHT / 2 };
 
       let newNodeData: TopologyNodeData;
+      let actualNodeTypeForData: TopologyNodeData['type'] = draggedNodeTypeFromPanel;
 
-      if (draggedNodeType === 'controller') {
+      if (draggedNodeTypeFromPanel === 'controller') {
         const existingControllerNodes = rfGetNodes().filter(n => n.data?.type === 'controller');
         if (existingControllerNodes.length === 0) {
+          // This is the first *controller type* node
+          actualNodeTypeForData = 'controller';
           newNodeData = {
             label: draggedApiName || initialLabel || '主控', type: 'controller',
             apiId: draggedApiId || '', apiName: draggedApiName || '未知API', role: 'server', statusInfo: ''
           } as ControllerNodeData;
         } else {
+          // Subsequent controller drag, should become a client
+          actualNodeTypeForData = 'client';
           newNodeData = {
-            label: `${draggedApiName || '未命名主控'} Client`, type: 'client', instanceType: 'client',
+            label: `${draggedApiName || '主控'} Client`, type: 'client', instanceType: 'client',
             tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info',
             managingApiId: draggedApiId, managingApiName: draggedApiName, statusInfo: ''
           } as ClientNodeData;
         }
       } else {
-        switch (draggedNodeType) {
+        // This handles dragging generic components like Server, Client, Landing, User
+        actualNodeTypeForData = draggedNodeTypeFromPanel;
+        switch (draggedNodeTypeFromPanel) {
           case 'server': newNodeData = { label: initialLabel || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' } as ServerNodeData; break;
           case 'client': newNodeData = { label: initialLabel || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' } as ClientNodeData; break;
           case 'landing': newNodeData = { label: initialLabel || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' } as LandingNodeData; break;
           case 'user': newNodeData = { label: initialLabel || '用户源', type: 'user', description: '', statusInfo: '' } as UserNodeData; break;
-          default: console.warn("Unknown node type dropped:", draggedNodeType); return;
+          default: console.warn("Unknown node type dropped from panel:", draggedNodeTypeFromPanel); return;
         }
       }
 
-      const newNode: NodePassFlowNodeType = { id: getId(newNodeData.type + '_'), type: 'custom', position: centeredPosition, data: newNodeData };
+      const newNode: NodePassFlowNodeType = { id: getId(actualNodeTypeForData + '_'), type: 'custom', position: centeredPosition, data: newNodeData };
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
       onAppLog?.(`节点 "${newNode.data.label}" (${newNode.id.substring(0,8)}) 已添加到画布。类型: ${newNode.data.type}`, 'INFO');
@@ -459,23 +467,32 @@ const TopologyPageContent: NextPage = () => {
     apiConfigsList.forEach(conf => { ops[conf.id] = { apiConfig: conf, urlsToCreate: [] }; });
     const processedNodeIds = new Set<string>();
 
-    const nodesToClearStatus = currentAllNodes.filter(node => (node.data?.type === 'server' || node.data?.type === 'client') && node.data?.statusInfo).map(node => node.id);
-    if (nodesToClearStatus.length > 0) {
-      setNodes(nds => nds.map(n => nodesToClearStatus.includes(n.id) ? { ...n, data: { ...n.data, statusInfo: '' } } : n));
+    const nodesToClearStatusIds = currentAllNodes
+        .filter(node => (node.data?.type === 'server' || node.data?.type === 'client') && node.data?.statusInfo)
+        .map(node => node.id);
+
+    if (nodesToClearStatusIds.length > 0) {
+        setNodes(nds => nds.map(n => nodesToClearStatusIds.includes(n.id) ? { ...n, data: { ...n.data, statusInfo: '' } } : n));
     }
+
 
     currentAllNodes.forEach(node => {
       if ((node.data?.type === 'server' || node.data?.type === 'client') && !processedNodeIds.has(node.id)) {
         let managingControllerId: string | null = null;
         const nodeData = node.data as ClientNodeData | ServerNodeData;
 
+        // Priority 1: Direct link from a 'controller' node on canvas
         const controllerEdge = currentAllEdges.find(edge => edge.target === node.id && rfGetNode(edge.source)?.data?.type === 'controller');
         if (controllerEdge) {
           const controllerNode = rfGetNode(controllerEdge.source) as Node<ControllerNodeData> | undefined;
           if (controllerNode?.data?.apiId) managingControllerId = controllerNode.data.apiId;
-        } else if (nodeData.type === 'client' && (nodeData as ClientNodeData).managingApiId) {
+        } 
+        // Priority 2: Client node created from a controller drag (has managingApiId)
+        else if (nodeData.type === 'client' && (nodeData as ClientNodeData).managingApiId) {
           managingControllerId = (nodeData as ClientNodeData).managingApiId!;
-        } else if (nodeData.type === 'client') { // Implicitly managed client via server
+        } 
+        // Priority 3: Implicitly managed client (connected to a server that is managed)
+        else if (nodeData.type === 'client') { 
           const connectedServerEdge = currentAllEdges.find(edge =>
             (edge.source === node.id && rfGetNode(edge.target)?.data?.type === 'server') ||
             (edge.target === node.id && rfGetNode(edge.source)?.data?.type === 'server')
@@ -484,6 +501,7 @@ const TopologyPageContent: NextPage = () => {
             const serverNodeId = rfGetNode(connectedServerEdge.source)?.data?.type === 'server' ? connectedServerEdge.source : connectedServerEdge.target;
             const serverNode = rfGetNode(serverNodeId) as Node<ServerNodeData> | undefined;
             if (serverNode?.data) {
+              // Check if this server has a direct controller link
               const serverControllerEdge = currentAllEdges.find(edge => edge.target === serverNode.id && rfGetNode(edge.source)?.data?.type === 'controller');
               if (serverControllerEdge) {
                 const controllerNode = rfGetNode(serverControllerEdge.source) as Node<ControllerNodeData> | undefined;
