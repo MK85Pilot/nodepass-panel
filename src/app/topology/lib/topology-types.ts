@@ -57,8 +57,8 @@ export const NODE_DEFAULT_HEIGHT = 40; // Actual height will vary
 export const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))'; // Example, can be themed
 
 // Auto-layout constants
-export const TIER_Y_SPACING = 180;
-export const NODE_X_SPACING = 220;
+export const TIER_Y_SPACING = 240; // Increased from 180
+export const NODE_X_SPACING = 280; // Increased from 220
 
 
 export interface PendingOperationDetail {
