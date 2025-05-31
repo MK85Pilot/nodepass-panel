@@ -34,7 +34,7 @@ export const DraggablePanels: React.FC<DraggablePanelsProps> = ({
   onDragStartPanelItem,
 }) => {
   return (
-    <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col">
+    <div className="w-60 flex-shrink-0 space-y-3 flex flex-col">
       <Card className="shadow-sm flex-shrink-0">
         <CardHeader className="py-2.5 px-3">
           <CardTitle className="text-sm font-title flex items-center">

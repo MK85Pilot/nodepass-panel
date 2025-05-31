@@ -200,7 +200,8 @@ const TopologyPageContent: NextPage = () => {
               }
 
               let formattedHost = effectiveServerHost;
-              if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[')) { 
+              // Ensure IPv6 is bracketed if it contains a colon and is not already bracketed
+              if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[') && !effectiveServerHost.endsWith(']')) { 
                 formattedHost = `[${effectiveServerHost}]`;
               }
               const newClientTunnelAddress = formattedHost ? `${formattedHost}:${serverPort}` : `:${serverPort}`;
@@ -263,8 +264,9 @@ const TopologyPageContent: NextPage = () => {
             apiId: draggedApiId, apiName: draggedApiName, role: 'server', statusInfo: ''
           } as ControllerNodeData;
         } else {
-          actualNodeTypeForData = 'client'; // It becomes a client node data-wise
-          // uses NODE_DEFAULT_WIDTH/HEIGHT for client
+          actualNodeTypeForData = 'client'; 
+          nodeWidth = NODE_DEFAULT_WIDTH; 
+          nodeHeight = NODE_DEFAULT_HEIGHT;
           newNodeData = {
             label: `${draggedApiName} Client`, type: 'client', instanceType: 'client',
             tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info',
@@ -275,15 +277,19 @@ const TopologyPageContent: NextPage = () => {
         actualNodeTypeForData = draggedNodeTypeFromPanel;
         switch (draggedNodeTypeFromPanel) {
           case 'server': 
+            nodeWidth = NODE_DEFAULT_WIDTH; nodeHeight = NODE_DEFAULT_HEIGHT;
             newNodeData = { label: initialLabel || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' } as ServerNodeData; 
             break;
           case 'client': 
+            nodeWidth = NODE_DEFAULT_WIDTH; nodeHeight = NODE_DEFAULT_HEIGHT;
             newNodeData = { label: initialLabel || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' } as ClientNodeData; 
             break;
           case 'landing': 
+            nodeWidth = NODE_DEFAULT_WIDTH; nodeHeight = NODE_DEFAULT_HEIGHT;
             newNodeData = { label: initialLabel || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' } as LandingNodeData; 
             break;
           case 'user': 
+            nodeWidth = NODE_DEFAULT_WIDTH; nodeHeight = NODE_DEFAULT_HEIGHT;
             newNodeData = { label: initialLabel || '用户源', type: 'user', description: '', statusInfo: '' } as UserNodeData; 
             break;
           default: console.warn("Unknown node type dropped from panel:", draggedNodeTypeFromPanel); return;
@@ -296,8 +302,8 @@ const TopologyPageContent: NextPage = () => {
         type: 'custom', 
         position: centeredPosition, 
         data: newNodeData,
-        width: nodeWidth, // Set explicit width
-        height: nodeHeight, // Set explicit height
+        width: nodeWidth, 
+        height: nodeHeight, 
       };
 
       setNodes((nds) => nds.concat(newNode));
@@ -647,8 +653,8 @@ const TopologyPageContent: NextPage = () => {
           </div>
         )}
 
-        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
-          <div className="flex flex-col space-y-4">
+        <div className="flex-grow flex flex-row gap-4 overflow-hidden">
+          <div className="w-60 flex-shrink-0 flex flex-col gap-4">
             <DraggablePanels apiConfigsList={apiConfigsList} onDragStartPanelItem={onDragStartPanelItem} />
             <PropertiesDisplayPanel selectedNode={selectedNodeForPropsPanel} />
           </div>
