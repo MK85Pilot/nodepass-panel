@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, LinkOff, Lock, Unlock } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -225,7 +225,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
@@ -631,6 +631,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: {
+            ...edge.style, // Preserve other style properties if any
             stroke: CHAIN_HIGHLIGHT_COLOR,
             strokeWidth: 2.5,
           },
@@ -645,6 +646,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: {
+             ...edge.style, // Preserve other style properties if any
             stroke: defaultColors.stroke,
             strokeWidth: 1.5,
           },
@@ -1003,7 +1005,7 @@ const TopologyPageContent: NextPage = () => {
                 onClick={confirmDeleteEdge}
                 className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
               >
-                <LinkOff className="mr-2 h-4 w-4"/> 删除链路
+                <Unlink className="mr-2 h-4 w-4"/> 删除链路
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
