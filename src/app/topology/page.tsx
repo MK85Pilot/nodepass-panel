@@ -47,12 +47,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription,
+  AlertDialogDescription as ShadAlertDialogDescription, // Renamed to avoid conflict
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle,
+  AlertDialogTitle as ShadAlertDialogTitle, // Renamed to avoid conflict
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog'; // Aliased DialogTitle
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -227,8 +227,8 @@ const TopologyPageContent: NextPage = () => {
   const [isEditPropertiesDialogOpen, setIsEditPropertiesDialogOpen] = useState(false);
   const [editingNodeProperties, setEditingNodeProperties] = useState<TopologyNodeData | null>(null);
   
-  const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
+  const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
 
   const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
   const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -649,6 +649,7 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
+        {/* Edit Node Properties Dialog */}
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
