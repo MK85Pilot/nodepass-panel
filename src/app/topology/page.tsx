@@ -104,8 +104,8 @@ const initialEdges: Edge[] = [];
 let nodeIdCounter = 0;
 const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}`;
 
-const NODE_DEFAULT_WIDTH = 175;
-const NODE_DEFAULT_HEIGHT = 50;
+const NODE_DEFAULT_WIDTH = 140;
+const NODE_DEFAULT_HEIGHT = 40;
 const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))';
 
 const TIER_Y_SPACING = 180;
@@ -177,7 +177,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     <div
       className={cn(
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
-        "min-w-[150px] max-w-[200px] py-2 px-2.5",
+        "min-w-[120px] max-w-[160px] py-1 px-2",
         getNodeBorderColorClass(data.type, selected, data.isChainHighlighted)
       )}
     >
@@ -243,7 +243,7 @@ const TopologyPageContent: NextPage = () => {
 
   const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
-
+  
   const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
   const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
 
@@ -451,8 +451,8 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
     updateSelectedChain(node.id);
-    setNodeForContextMenu(null); // Close node context menu
-    setEdgeForContextMenu(null); // Close edge context menu
+    setNodeForContextMenu(null); 
+    setEdgeForContextMenu(null); 
   }, [updateSelectedChain]);
 
   const handlePaneClick = useCallback(() => {
@@ -508,7 +508,7 @@ const TopologyPageContent: NextPage = () => {
         updateSelectedChain(null);
       }
     }
-    setEdgeForContextMenu(null); // Close context menu
+    setEdgeForContextMenu(null); 
   };
 
 
@@ -1032,3 +1032,5 @@ const TopologyEditorPageWrapper: NextPage = () => {
 
 export default TopologyEditorPageWrapper;
 
+
+    
