@@ -151,7 +151,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
   let subText = '未配置';
   switch (data.type) {
     case 'controller':
-      subText = data.apiName || '未指定API';
+      subText = (data as ControllerNodeData).apiName || '未指定API';
       break;
     case 'server':
       subText = (data as ServerNodeData).tunnelAddress || '未配置隧道';
