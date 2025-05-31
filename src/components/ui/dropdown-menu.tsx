@@ -23,8 +23,9 @@ const DropdownMenuSubTrigger = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean
+    asChild?: boolean;
   }
->(({ className, inset, children, ...props }, ref) => (
+>(({ className, inset, children, asChild, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
@@ -32,7 +33,8 @@ const DropdownMenuSubTrigger = React.forwardRef<
       inset && "pl-8",
       className
     )}
-    {...props} // asChild from Link, if present, will be spread here
+    asChild={asChild}
+    {...props}
   >
     {children}
     <ChevronRight className="ml-auto" />
@@ -78,9 +80,10 @@ DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean
+    inset?: boolean;
+    asChild?: boolean;
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, inset, children, asChild, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
@@ -88,8 +91,11 @@ const DropdownMenuItem = React.forwardRef<
       inset && "pl-8",
       className
     )}
-    {...props} // asChild from Link, if present, will be spread here
-  />
+    asChild={asChild}
+    {...props}
+  >
+    {children}
+  </DropdownMenuPrimitive.Item>
 ))
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
 
