@@ -45,12 +45,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription, // Aliased to avoid conflict
+  AlertDialogDescription as ShadAlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle, // Aliased to avoid conflict
+  AlertDialogTitle as ShadAlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitleFromDialog, DialogDescription as ShadDialogDescriptionFromDialog } from '@/components/ui/dialog'; // Aliased specific imports
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitleFromDialog, DialogDescription as ShadDialogDescriptionFromDialog } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -60,8 +60,9 @@ const initialViewport: Viewport = { x: 0, y: 0, zoom: 1.2 };
 interface BaseNodeData {
   label: string;
   type: 'controller' | 'server' | 'client' | 'landing' | 'user';
-  apiId?: string; // For controller tracking
-  apiName?: string; // For controller tracking
+  apiId?: string;
+  apiName?: string;
+  isChainHighlighted?: boolean; // Added for chain highlighting
 }
 
 export interface ControllerNodeData extends BaseNodeData {
@@ -104,9 +105,9 @@ const initialEdges: Edge[] = [];
 let nodeIdCounter = 0;
 const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}`;
 
-// Estimated default dimensions for centering newly dropped nodes
 const NODE_DEFAULT_WIDTH = 175;
 const NODE_DEFAULT_HEIGHT = 50;
+const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))'; // Example: A reddish hue
 
 
 const getNodeIcon = (nodeType: TopologyNodeData['type'] | undefined): React.ElementType => {
@@ -131,8 +132,9 @@ const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undefined): 
     }
 };
 
-const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false): string => {
-    if (selected) return 'border-ring';
+const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false, isChainHighlighted: boolean = false): string => {
+    if (selected) return 'border-ring ring-2 ring-ring'; // Primary selection highlight
+    if (isChainHighlighted) return 'border-green-500 ring-2 ring-green-400/70'; // Chain highlight if not selected
     switch (nodeType) {
         case 'controller': return 'border-yellow-500';
         case 'server': return 'border-primary';
@@ -173,9 +175,8 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     <div
       className={cn(
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
-        "min-w-[150px] max-w-[200px] py-2 px-2.5", 
-        getNodeBorderColorClass(data.type, selected),
-        selected && "ring-2 ring-offset-1 ring-ring" 
+        "min-w-[150px] max-w-[200px] py-2 px-2.5",
+        getNodeBorderColorClass(data.type, selected, data.isChainHighlighted)
       )}
     >
       <div className="flex items-center text-[11px] font-medium mb-0.5">
@@ -210,11 +211,10 @@ const nodeTypes = {
 
 
 const TopologyPageContent: NextPage = () => {
-  const { apiConfigsList, isLoading: isLoadingApiConfig, getApiRootUrl, getToken } = useApiConfig();
+  const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getNode } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -235,8 +235,10 @@ const TopologyPageContent: NextPage = () => {
   const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
   const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
+
+  const [selectedChainElements, setSelectedChainElements] = useState<{ nodes: Set<string>, edges: Set<string> } | null>(null);
   
-  const { data: allFetchedInstancesData, isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
+  const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], 
     Error
   >({
@@ -263,23 +265,23 @@ const TopologyPageContent: NextPage = () => {
     return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
 
-  const getEdgeStyle = (sourceType: TopologyNodeData['type'] | undefined, targetType: TopologyNodeData['type'] | undefined): { stroke: string; markerColor: string } => {
-    let strokeColor = 'hsl(var(--muted-foreground))'; // Default color
+  const getEdgeStyle = useCallback((sourceType: TopologyNodeData['type'] | undefined, targetType: TopologyNodeData['type'] | undefined): { stroke: string; markerColor: string } => {
+    let strokeColor = 'hsl(var(--muted-foreground))';
   
     if (sourceType === 'controller') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--primary))';      // Controller to Server (Blue)
-      else if (targetType === 'client') strokeColor = 'hsl(var(--accent))'; // Controller to Client (Cyan)
+      if (targetType === 'server') strokeColor = 'hsl(var(--primary))';
+      else if (targetType === 'client') strokeColor = 'hsl(var(--accent))';
     } else if (sourceType === 'user') {
-      if (targetType === 'client') strokeColor = 'hsl(var(--chart-1))';      // User to Client (Coral-ish)
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-1))';
     } else if (sourceType === 'server') {
-      if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';      // Server to Client (Teal-ish)
-      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))'; // Server to Landing (Orange-ish)
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';      // Client to Server (Teal-ish, same as S->C)
-      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))'; // Client to Landing (Pink-ish)
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
-  };
+  }, []);
 
   const onConnect: OnConnect = useCallback(
     (params) => {
@@ -292,7 +294,7 @@ const TopologyPageContent: NextPage = () => {
           setEdges((eds) => addEdge({ 
             ...params, 
             type: 'smoothstep', 
-            animated: true, 
+            animated: false, // Default to not animated, chain highlight will animate
             markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: edgeColors.markerColor }, 
             style: { strokeWidth: 1.5, stroke: edgeColors.stroke } 
           }, eds));
@@ -302,7 +304,7 @@ const TopologyPageContent: NextPage = () => {
         }
       }
     },
-    [setEdges, getNode, isValidConnection, toast, getEdgeStyle] // Added getEdgeStyle to dependencies if it's defined outside, or ensure it's stable if defined inside
+    [setEdges, getNode, isValidConnection, toast, getEdgeStyle]
   );
 
   const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -347,78 +349,103 @@ const TopologyPageContent: NextPage = () => {
       };
       console.log("Calculated Centered Flow Position for New Node:", centeredPosition);
 
-
       let newNodeData: TopologyNodeData;
-
       switch (type) {
         case 'controller':
-          newNodeData = {
-            label: apiName || label || '主控',
-            type: 'controller',
-            apiId: apiId || '',
-            apiName: apiName || '未知API',
-          };
-          break;
+          newNodeData = { label: apiName || label || '主控', type: 'controller', apiId: apiId || '', apiName: apiName || '未知API' }; break;
         case 'server':
-          newNodeData = {
-            label: label || '服务端', type: 'server',
-            tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080',
-            logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '',
-          };
-          break;
+          newNodeData = { label: label || '服务端', type: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '' }; break;
         case 'client':
-          newNodeData = {
-            label: label || '客户端', type: 'client',
-            tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000',
-            logLevel: 'info',
-          };
-          break;
+          newNodeData = { label: label || '客户端', type: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info' }; break;
         case 'landing':
-          newNodeData = {
-            label: label || '落地', type: 'landing',
-            landingIp: '', landingPort: '',
-          };
-          break;
+          newNodeData = { label: label || '落地', type: 'landing', landingIp: '', landingPort: '' }; break;
         case 'user':
-          newNodeData = {
-            label: label || '用户源', type: 'user',
-            description: '',
-          };
-          break;
-        default:
-          console.warn("Unknown node type dropped:", type);
-          return;
+          newNodeData = { label: label || '用户源', type: 'user', description: '' }; break;
+        default: console.warn("Unknown node type dropped:", type); return;
       }
 
       const newNode: NodePassFlowNodeType = {
-        id: getId(type + '_'),
-        type: 'custom', 
-        position: centeredPosition, 
-        data: newNodeData,
+        id: getId(type + '_'), type: 'custom', position: centeredPosition, data: newNodeData,
       };
-
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
     },
     [screenToFlowPosition, setNodes, toast] 
   );
 
+  const updateSelectedChain = useCallback((startNodeId: string | null) => {
+    if (!startNodeId) {
+      setSelectedChainElements(null);
+      return;
+    }
+
+    const chainNodes = new Set<string>();
+    const chainEdges = new Set<string>();
+    const currentNodes = getNodes();
+    const currentEdges = getFlowEdges();
+
+    // Helper for traversal
+    const traverse = (nodeId: string, direction: 'up' | 'down') => {
+      const queue: string[] = [nodeId];
+      const visited = new Set<string>();
+
+      while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        if (visited.has(currentId)) continue;
+        visited.add(currentId);
+        chainNodes.add(currentId);
+
+        const connectedEdges = direction === 'down'
+          ? currentEdges.filter(edge => edge.source === currentId)
+          : currentEdges.filter(edge => edge.target === currentId);
+
+        for (const edge of connectedEdges) {
+          chainEdges.add(edge.id);
+          const nextNodeId = direction === 'down' ? edge.target : edge.source;
+          const nextNode = currentNodes.find(n => n.id === nextNodeId);
+          if (nextNode && nextNode.data) {
+            let continueTraversal = true;
+            if (direction === 'down') {
+              if (nextNode.data.type === 'landing') continueTraversal = false; // Stop downstream at landing
+            } else { // Upstream
+              if (nextNode.data.type === 'controller' || nextNode.data.type === 'user') continueTraversal = false; // Stop upstream at controller/user
+            }
+            if (continueTraversal && !visited.has(nextNodeId)) {
+              queue.push(nextNodeId);
+            } else if (!continueTraversal) {
+               chainNodes.add(nextNodeId); // Add the terminal node
+            }
+          }
+        }
+      }
+    };
+
+    traverse(startNodeId, 'down');
+    traverse(startNodeId, 'up');
+
+    setSelectedChainElements({ nodes: chainNodes, edges: chainEdges });
+  }, [getNodes, getFlowEdges]);
+
+
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
+    updateSelectedChain(node.id);
     setNodeForContextMenu(null); 
     setEdgeForContextMenu(null); 
-  }, []);
+  }, [updateSelectedChain]);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeForPropsPanel(null);
+    updateSelectedChain(null);
     setNodeForContextMenu(null); 
     setEdgeForContextMenu(null); 
-  }, []);
+  }, [updateSelectedChain]);
   
   const clearCanvas = () => {
     setNodes([]);
     setEdges([]);
     setSelectedNodeForPropsPanel(null);
+    updateSelectedChain(null);
     setNodeForContextMenu(null);
     setEdgeForContextMenu(null);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
@@ -462,7 +489,7 @@ const TopologyPageContent: NextPage = () => {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties } } 
+            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } } // Preserve isChainHighlighted
             : n
         )
       );
@@ -489,6 +516,9 @@ const TopologyPageContent: NextPage = () => {
       if (selectedNodeForPropsPanel?.id === nodeToDelete.id) {
         setSelectedNodeForPropsPanel(null);
       }
+      if (selectedChainElements?.nodes.has(nodeToDelete.id)) {
+        updateSelectedChain(null); // Clear chain if deleted node was part of it
+      }
     }
     setIsDeleteNodeDialogOpen(false);
     setNodeToDelete(null); 
@@ -506,10 +536,50 @@ const TopologyPageContent: NextPage = () => {
     if (edgeForContextMenu) {
       setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu!.id));
       toast({ title: "链路已删除", description: `ID: ${edgeForContextMenu.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
+      if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
+        // Re-evaluate chain if deleted edge was part of it.
+        // This might involve finding the "closest" node in the chain to re-trigger.
+        // For simplicity now, we clear, but a more sophisticated approach might try to re-path.
+        updateSelectedChain(null);
+      }
     }
     setIsDeleteEdgeDialogOpen(false);
     setEdgeForContextMenu(null);
   };
+
+  const processedNodes = useMemo(() => {
+    return nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        isChainHighlighted: selectedChainElements?.nodes.has(node.id) || false,
+      }
+    }));
+  }, [nodes, selectedChainElements]);
+
+  const processedEdges = useMemo(() => {
+    return edges.map(edge => {
+      if (selectedChainElements?.edges.has(edge.id)) {
+        return {
+          ...edge,
+          style: { ...edge.style, stroke: CHAIN_HIGHLIGHT_COLOR, strokeWidth: 2.5 },
+          markerEnd: { ...(edge.markerEnd as object), color: CHAIN_HIGHLIGHT_COLOR },
+          animated: true,
+          zIndex: 1000,
+        };
+      }
+      const sourceNode = getNode(edge.source) as NodePassFlowNodeType | undefined;
+      const targetNode = getNode(edge.target) as NodePassFlowNodeType | undefined;
+      const defaultColors = getEdgeStyle(sourceNode?.data?.type, targetNode?.data?.type);
+      return {
+        ...edge,
+        style: { ...edge.style, stroke: defaultColors.stroke, strokeWidth: 1.5 },
+        markerEnd: { ...(edge.markerEnd as object), color: defaultColors.markerColor },
+        animated: false,
+        zIndex: 1,
+      };
+    });
+  }, [edges, selectedChainElements, getNode, getEdgeStyle]);
 
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
@@ -641,8 +711,8 @@ const TopologyPageContent: NextPage = () => {
 
           <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
-              nodes={nodes}
-              edges={edges}
+              nodes={processedNodes}
+              edges={processedEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
