@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Link2Off } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -225,7 +225,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
@@ -244,6 +244,8 @@ const TopologyPageContent: NextPage = () => {
   const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
 
+  const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
+  const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
   const [edgeTargetedForDeletion, setEdgeTargetedForDeletion] = useState<Edge | null>(null);
   const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
 
@@ -451,17 +453,15 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
     updateSelectedChain(node.id);
-    setNodeForContextMenu(null);
-    setEdgeTargetedForDeletion(null);
-    setIsDeleteEdgeDialogOpen(false);
+    setNodeForContextMenu(null); // Close node context menu
+    setEdgeForContextMenu(null); // Close edge context menu
   }, [updateSelectedChain]);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeForPropsPanel(null);
     updateSelectedChain(null);
-    setNodeForContextMenu(null);
-    setEdgeTargetedForDeletion(null); // Clear edge targeted for deletion
-    setIsDeleteEdgeDialogOpen(false); // Close edge deletion dialog
+    setNodeForContextMenu(null); // Close node context menu
+    setEdgeForContextMenu(null); // Close edge context menu
   }, [updateSelectedChain]);
 
   const clearCanvas = () => {
@@ -470,8 +470,7 @@ const TopologyPageContent: NextPage = () => {
     setSelectedNodeForPropsPanel(null);
     updateSelectedChain(null);
     setNodeForContextMenu(null);
-    setEdgeTargetedForDeletion(null);
-    setIsDeleteEdgeDialogOpen(false);
+    setEdgeForContextMenu(null);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
     setIsClearCanvasAlertOpen(false);
   };
@@ -482,23 +481,30 @@ const TopologyPageContent: NextPage = () => {
       setSelectedNodeForPropsPanel(node);
       setNodeForContextMenu(node);
       setContextMenuPosition({ x: event.clientX, y: event.clientY });
-      setEdgeTargetedForDeletion(null); // Ensure edge deletion dialog isn't triggered by right-click
-      setIsDeleteEdgeDialogOpen(false);
+      setEdgeForContextMenu(null); // Close edge context menu if open
     },
     []
   );
 
-  const handleEdgeClick = useCallback(
+  const handleEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
-      event.stopPropagation(); // Prevent pane click from immediately closing if dialog opens
-      setEdgeTargetedForDeletion(edge);
-      setIsDeleteEdgeDialogOpen(true);
-      setNodeForContextMenu(null); // Deselect any node
+      event.preventDefault();
+      setEdgeForContextMenu(edge);
+      setEdgeContextMenuPosition({ x: event.clientX, y: event.clientY });
+      setNodeForContextMenu(null); // Close node context menu if open
       setSelectedNodeForPropsPanel(null); // Clear property panel
       updateSelectedChain(null); // Clear chain highlight
     },
-    [updateSelectedChain, setIsDeleteEdgeDialogOpen, setEdgeTargetedForDeletion, setNodeForContextMenu, setSelectedNodeForPropsPanel]
+    [updateSelectedChain]
   );
+
+  const openDeleteEdgeDialogFromContextMenu = () => {
+    if (edgeForContextMenu) {
+      setEdgeTargetedForDeletion(edgeForContextMenu);
+      setIsDeleteEdgeDialogOpen(true);
+    }
+    setEdgeForContextMenu(null); // Close context menu
+  };
 
 
   const openEditPropertiesDialog = () => {
@@ -631,7 +637,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: {
-            ...edge.style, // Preserve other style properties if any
+            ...edge.style,
             stroke: CHAIN_HIGHLIGHT_COLOR,
             strokeWidth: 2.5,
           },
@@ -646,7 +652,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: {
-             ...edge.style, // Preserve other style properties if any
+             ...edge.style,
             stroke: defaultColors.stroke,
             strokeWidth: 1.5,
           },
@@ -787,7 +793,7 @@ const TopologyPageContent: NextPage = () => {
                         <p><span className="font-semibold">端口:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingPort || 'N/A'}</span></p>
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {(selectedNodeForPropsPanel.data as UserNodeData).description || 'N/A'}</p>}
-                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。点击链路可删除。</p>
+                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。右键点击链路可删除。</p>
                   </div>
                 ) : ( <p className="text-xs text-muted-foreground text-center py-3 font-sans">未选择节点。</p> )}
               </ScrollArea></CardContent>
@@ -804,7 +810,7 @@ const TopologyPageContent: NextPage = () => {
               onNodeClick={handleNodeClick}
               onPaneClick={handlePaneClick}
               onNodeContextMenu={handleNodeContextMenu}
-              onEdgeClick={handleEdgeClick}
+              onEdgeContextMenu={handleEdgeContextMenu}
               fitView
               fitViewOptions={{ padding: 0.2, minZoom: 0.5, maxZoom: 2.5 }}
               proOptions={{ hideAttribution: true }}
@@ -838,6 +844,19 @@ const TopologyPageContent: NextPage = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        {edgeForContextMenu && edgeContextMenuPosition && (
+          <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => !isOpen && setEdgeForContextMenu(null)}>
+            <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
+            <DropdownMenuContent align="start" className="w-48 font-sans">
+              <DropdownMenuItem onClick={openDeleteEdgeDialogFromContextMenu} className="text-destructive hover:!text-destructive focus:!text-destructive">
+                <Link2Off className="mr-2 h-4 w-4" />
+                删除链路
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
 
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
@@ -989,7 +1008,7 @@ const TopologyPageContent: NextPage = () => {
         <AlertDialog open={isDeleteEdgeDialogOpen} onOpenChange={(isOpen) => {
           setIsDeleteEdgeDialogOpen(isOpen);
           if (!isOpen) {
-            setEdgeTargetedForDeletion(null);
+            setEdgeTargetedForDeletion(null); // Clear when dialog closes
           }
         }}>
           <AlertDialogContent>
