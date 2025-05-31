@@ -52,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog'; // Added DialogContent
+import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -143,6 +143,10 @@ const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined,
 
 
 const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ data, selected }) => {
+  if (!data) {
+    // Fallback for undefined data, common during MiniMap initial render or if data is somehow missing
+    return <div className="w-20 h-10 bg-muted rounded text-xs flex items-center justify-center">Loading...</div>;
+  }
   const Icon = getNodeIcon(data.type);
   
   let subText = '未配置';
@@ -529,7 +533,7 @@ const TopologyPageContent: NextPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-2.5 flex-grow overflow-y-auto"><ScrollArea className="h-full pr-1">
-                {selectedNodeForPropsPanel ? (
+                {selectedNodeForPropsPanel && selectedNodeForPropsPanel.data ? (
                   <div className="space-y-1.5 text-xs">
                     <p><span className="font-semibold">ID:</span> <span className="font-mono">{selectedNodeForPropsPanel.id}</span></p>
                     <p><span className="font-semibold">类型:</span> <span className="font-mono capitalize">{selectedNodeForPropsPanel.data.type}</span></p>
@@ -576,7 +580,12 @@ const TopologyPageContent: NextPage = () => {
               nodeTypes={nodeTypes} // Register custom node types
             >
               <Controls />
-              <MiniMap nodeComponent={NodePassFlowNode} zoomable pannable nodeColor={(n) => getNodeBorderColorClass(n.data.type).split('-')[1] || 'gray'} />
+              <MiniMap 
+                nodeComponent={NodePassFlowNode} 
+                zoomable 
+                pannable 
+                nodeColor={(n) => n.data ? (getNodeBorderColorClass(n.data.type).split('-')[1] || 'gray') : 'gray'} 
+              />
               <Background gap={16} />
             </ReactFlow>
           </div>
@@ -603,7 +612,7 @@ const TopologyPageContent: NextPage = () => {
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <AlertDialogHeader> {/* Using AlertDialogHeader for consistent styling, though it's a Dialog */}
-              <AlertDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data.label}</AlertDialogTitle>
+              <AlertDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</AlertDialogTitle>
             </AlertDialogHeader>
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
@@ -617,7 +626,7 @@ const TopologyPageContent: NextPage = () => {
                 />
               </div>
 
-              {nodeForContextMenu?.data.type === 'server' && (
+              {nodeForContextMenu?.data?.type === 'server' && (
                 <>
                   <div className="space-y-1">
                     <Label htmlFor="server-tunnel" className="font-sans">隧道监听地址</Label>
@@ -662,7 +671,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
-              {nodeForContextMenu?.data.type === 'client' && (
+              {nodeForContextMenu?.data?.type === 'client' && (
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="client-tunnel" className="font-sans">服务端隧道地址</Label>
@@ -685,7 +694,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
-              {nodeForContextMenu?.data.type === 'landing' && (
+              {nodeForContextMenu?.data?.type === 'landing' && (
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="landing-ip" className="font-sans">IP 地址</Label>
@@ -698,7 +707,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
-              {nodeForContextMenu?.data.type === 'user' && (
+              {nodeForContextMenu?.data?.type === 'user' && (
                  <div className="space-y-1">
                     <Label htmlFor="user-desc" className="font-sans">描述</Label>
                     <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, description: e.target.value }))} className="font-sans text-sm" placeholder="用户流量描述"/>
@@ -722,7 +731,7 @@ const TopologyPageContent: NextPage = () => {
                 <AlertDialogHeader>
                     <AlertDialogTitle className="font-title">确认删除节点</AlertDialogTitle>
                     <AlertDialogDescription className="font-sans">
-                        您确定要删除节点 “{nodeForContextMenu?.data.label}” 及其所有连接吗？此操作无法撤销。
+                        您确定要删除节点 “{nodeForContextMenu?.data?.label}” 及其所有连接吗？此操作无法撤销。
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -771,6 +780,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
-
-
-    
