@@ -7,7 +7,6 @@ import {
   ReactFlow,
   Controls,
   Background,
-  // MiniMap, // Removed MiniMap import
   useNodesState,
   useEdgesState,
   addEdge,
@@ -26,7 +25,6 @@ import 'reactflow/dist/style.css';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-// nodePassApi import removed as submit functionality is not yet re-implemented for React Flow
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -106,6 +104,10 @@ const initialEdges: Edge[] = [];
 let nodeIdCounter = 0;
 const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}`;
 
+// Estimated default dimensions for centering newly dropped nodes
+const NODE_DEFAULT_WIDTH = 175;
+const NODE_DEFAULT_HEIGHT = 50;
+
 
 const getNodeIcon = (nodeType: TopologyNodeData['type'] | undefined): React.ElementType => {
     switch (nodeType) {
@@ -144,7 +146,7 @@ const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined,
 
 const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ data, selected }) => {
   if (!data) {
-    return <div className="w-20 h-10 bg-muted rounded text-xs flex items-center justify-center">Loading...</div>;
+    return <div className="w-20 h-10 bg-muted rounded text-xs flex items-center justify-center">数据错误</div>;
   }
   const Icon = getNodeIcon(data.type);
   
@@ -206,8 +208,6 @@ const nodeTypes = {
   custom: NodePassFlowNode,
 };
 
-// Removed getMiniMapNodeColor function
-
 
 const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig, getApiRootUrl, getToken } = useApiConfig();
@@ -243,11 +243,6 @@ const TopologyPageContent: NextPage = () => {
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
       console.log("Triggering placeholder fetch for topology page data refresh trigger.");
-      // This query is a placeholder and doesn't directly populate the graph.
-      // Actual instance data integration for graph population would require a more complex mapping.
-      // For now, it just serves to trigger a 'lastRefreshed' timestamp.
-      // To simulate data being fetched, you could return apiConfigsList or mock data.
-      console.log("Fetched instances data (for reference, not direct graph population):", allFetchedInstancesData);
       return []; 
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
@@ -259,13 +254,11 @@ const TopologyPageContent: NextPage = () => {
     const sourceType = sourceNode.data.type;
     const targetType = targetNode.data.type;
 
-    // Define valid connections: source type -> array of valid target types
     const validConnections: Record<string, string[]> = {
       'controller': ['server', 'client'],
-      'user': ['client'], // User can connect to Client
-      'client': ['server', 'landing'], // Client can connect to Server or Landing
-      'server': ['client', 'landing'], // Server can connect to Client or Landing
-      // Landing nodes typically don't have outputs in this model
+      'user': ['client'], 
+      'client': ['server', 'landing'], 
+      'server': ['client', 'landing'], 
     };
     return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
@@ -321,7 +314,14 @@ const TopologyPageContent: NextPage = () => {
         relativeXInWrapper: clientX - reactFlowBounds.left,
         relativeYInWrapper: clientY - reactFlowBounds.top,
       });
-      console.log("Calculated Flow Position for New Node:", position);
+      console.log("Calculated Flow Position for New Node (pre-center):", position);
+      
+      const centeredPosition = {
+        x: position.x - NODE_DEFAULT_WIDTH / 2,
+        y: position.y - NODE_DEFAULT_HEIGHT / 2,
+      };
+      console.log("Calculated Centered Flow Position for New Node:", centeredPosition);
+
 
       let newNodeData: TopologyNodeData;
 
@@ -368,7 +368,7 @@ const TopologyPageContent: NextPage = () => {
       const newNode: NodePassFlowNodeType = {
         id: getId(type + '_'),
         type: 'custom', 
-        position,
+        position: centeredPosition, // Use centered position
         data: newNodeData,
       };
 
@@ -460,7 +460,7 @@ const TopologyPageContent: NextPage = () => {
     if (nodeToDelete) {
       setNodes((nds) => nds.filter((n) => n.id !== nodeToDelete.id));
       setEdges((eds) => eds.filter((e) => e.source !== nodeToDelete.id && e.target !== nodeToDelete.id));
-      toast({ title: "节点已删除", description: `节点 "${nodeToDelete.data.label}" 已被删除。`, variant: "destructive" });
+      toast({ title: "节点已删除", description: `节点 "${nodeToDelete.data?.label}" 已被删除。`, variant: "destructive" });
       if (selectedNodeForPropsPanel?.id === nodeToDelete.id) {
         setSelectedNodeForPropsPanel(null);
       }
@@ -483,10 +483,10 @@ const TopologyPageContent: NextPage = () => {
       toast({ title: "链路已删除", description: `ID: ${edgeForContextMenu.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
     }
     setIsDeleteEdgeDialogOpen(false);
+    setEdgeForContextMenu(null);
   };
 
 
-  // Sidebar panel items for dragging nodes
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
     { type: 'server', title: '服务端', icon: ServerIcon },
     { type: 'client', title: '客户端', icon: SmartphoneIcon },
@@ -545,9 +545,7 @@ const TopologyPageContent: NextPage = () => {
         )}
 
         <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}> 
-          {/* Sidebar Panel */}
           <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
-            {/* Configured Masters Panel */}
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Settings className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[120px]"> 
@@ -564,7 +562,6 @@ const TopologyPageContent: NextPage = () => {
                 </div></ScrollArea></CardContent>
             </Card>
             
-            {/* Components Panel */}
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Network className="mr-1.5 h-4 w-4 text-primary"/>组件面板</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> 
@@ -580,12 +577,11 @@ const TopologyPageContent: NextPage = () => {
                 </div></ScrollArea></CardContent>
             </Card>
 
-            {/* Node Properties Panel */}
             <Card className="shadow-sm flex-grow flex flex-col min-h-0"> 
               <CardHeader className="py-2.5 px-3 flex-shrink-0">
                 <CardTitle className="text-sm font-title flex items-center"><Info className="mr-1.5 h-4 w-4 text-blue-500"/>节点属性</CardTitle>
                 <CardDescription className="text-xs font-sans mt-0.5 truncate">
-                  {selectedNodeForPropsPanel ? `编辑: ${selectedNodeForPropsPanel.data.label} (ID: ${selectedNodeForPropsPanel.id.substring(0,8)}...)` : "点击节点查看属性。"}
+                  {selectedNodeForPropsPanel ? `编辑: ${selectedNodeForPropsPanel.data?.label} (ID: ${selectedNodeForPropsPanel.id.substring(0,8)}...)` : "点击节点查看属性。"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-2.5 flex-grow overflow-y-auto"><ScrollArea className="h-full pr-1">
@@ -618,7 +614,6 @@ const TopologyPageContent: NextPage = () => {
             </Card>
           </div>
 
-          {/* React Flow Canvas */}
           <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
               nodes={nodes}
@@ -633,18 +628,16 @@ const TopologyPageContent: NextPage = () => {
               fitView
               fitViewOptions={{ padding: 0.2, minZoom: 0.5, maxZoom: 2.5 }}
               proOptions={{ hideAttribution: true }}
-              className="bg-background" 
+              className="bg-card" 
               defaultViewport={initialViewport}
               nodeTypes={nodeTypes} 
             >
               <Controls />
-              {/* MiniMap removed */}
               <Background gap={16} />
             </ReactFlow>
           </div>
         </div>
         
-        {/* Node Context Menu */}
         {nodeForContextMenu && contextMenuPosition && (
           <DropdownMenu open={!!nodeForContextMenu} onOpenChange={(isOpen) => !isOpen && setNodeForContextMenu(null)}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenuPosition.x, top: contextMenuPosition.y }} />
@@ -661,7 +654,6 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
-        {/* Edge Context Menu */}
         {edgeForContextMenu && edgeContextMenuPosition && (
           <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => { if (!isOpen) setEdgeForContextMenu(null); }}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
@@ -674,7 +666,6 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
-        {/* Edit Node Properties Dialog */}
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -789,7 +780,7 @@ const TopologyPageContent: NextPage = () => {
             )}
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="outline" className="font-sans">取消</Button>
+                <Button type="button" variant="outline" className="font-sans" onClick={() => setEditingNodeProperties(null)}>取消</Button>
               </DialogClose>
               <Button onClick={handleSaveNodeProperties} className="font-sans" disabled={!editingNodeProperties}>保存更改</Button>
             </DialogFooter>
@@ -797,7 +788,6 @@ const TopologyPageContent: NextPage = () => {
         </Dialog>
 
 
-        {/* Delete Node Confirmation Dialog */}
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={(isOpen) => {
             setIsDeleteNodeDialogOpen(isOpen);
             if (!isOpen) {
@@ -823,11 +813,11 @@ const TopologyPageContent: NextPage = () => {
             </AlertDialogContent>
         </AlertDialog>
 
-        {/* Delete Edge Confirmation Dialog */}
         <AlertDialog open={isDeleteEdgeDialogOpen} onOpenChange={(isOpen) => {
           setIsDeleteEdgeDialogOpen(isOpen);
           if (!isOpen) {
             setEdgeForContextMenu(null); 
+            setEdgeContextMenuPosition(null);
           }
         }}>
           <AlertDialogContent>
@@ -838,7 +828,7 @@ const TopologyPageContent: NextPage = () => {
               </ShadAlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsDeleteEdgeDialogOpen(false); setEdgeForContextMenu(null); }} className="font-sans">取消</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setIsDeleteEdgeDialogOpen(false); setEdgeForContextMenu(null); setEdgeContextMenuPosition(null); }} className="font-sans">取消</AlertDialogCancel>
               <AlertDialogAction
                 onClick={confirmDeleteEdge}
                 className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
@@ -850,7 +840,6 @@ const TopologyPageContent: NextPage = () => {
         </AlertDialog>
 
 
-        {/* Clear Canvas Confirmation Dialog */}
         <AlertDialog open={isClearCanvasAlertOpen} onOpenChange={setIsClearCanvasAlertOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
