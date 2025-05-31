@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, LinkOff } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, LinkOff, Lock, Unlock } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -108,7 +108,7 @@ const NODE_DEFAULT_WIDTH = 175;
 const NODE_DEFAULT_HEIGHT = 50;
 const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))';
 
-const TIER_Y_SPACING = 180; 
+const TIER_Y_SPACING = 180;
 const NODE_X_SPACING = 220;
 
 
@@ -153,7 +153,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     return <div className="w-20 h-10 bg-muted rounded text-xs flex items-center justify-center">数据错误</div>;
   }
   const Icon = getNodeIcon(data.type);
-  
+
   let subText = '未配置';
   switch (data.type) {
     case 'controller':
@@ -186,29 +186,29 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
         <span className="truncate" title={data.label}>{data.label}</span>
       </div>
       {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
-      
+
       {(data.type === 'controller' || data.type === 'user') && (
-         <Handle type="source" position={Position.Right} id="output" 
+         <Handle type="source" position={Position.Right} id="output"
            className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-primary hover:!border-primary-foreground transition-all cursor-grab shadow-md"
            style={{ right: '5px', top: '50%', transform: 'translateY(-50%)' }} />
       )}
       {(data.type === 'server' || data.type === 'client' || data.type === 'landing') && (
-         <Handle type="target" position={Position.Left} id="input" 
+         <Handle type="target" position={Position.Left} id="input"
             className="!w-5 !h-5 !rounded-full !bg-transparent !border-0"
             style={{ left: '-10px' }} />
       )}
       {data.type === 'server' && (
         <>
-          <Handle type="source" position={Position.Right} id="s_to_c_output" 
+          <Handle type="source" position={Position.Right} id="s_to_c_output"
             className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-accent hover:!border-accent-foreground transition-all cursor-grab shadow-md"
             style={{ right: '5px', top: 'calc(50% - 7px)', transform: 'translateY(-50%)' }} />
-          <Handle type="source" position={Position.Bottom} id="s_to_l_output" 
+          <Handle type="source" position={Position.Bottom} id="s_to_l_output"
             className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-purple-500 hover:!border-purple-300 transition-all cursor-grab shadow-md"
             style={{ bottom: '5px', left: '50%', transform: 'translateX(-50%)' }}/>
         </>
       )}
       {data.type === 'client' && (
-        <Handle type="source" position={Position.Right} id="c_to_l_output" 
+        <Handle type="source" position={Position.Right} id="c_to_l_output"
             className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-purple-500 hover:!border-purple-300 transition-all cursor-grab shadow-md"
             style={{ right: '5px', top: '50%', transform: 'translateY(-50%)' }} />
       )}
@@ -225,39 +225,39 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  
+
   const [selectedNodeForPropsPanel, setSelectedNodeForPropsPanel] = useState<NodePassFlowNodeType | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [isClearCanvasAlertOpen, setIsClearCanvasAlertOpen] = useState(false);
 
   const [nodeForContextMenu, setNodeForContextMenu] = useState<NodePassFlowNodeType | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  
+
   const [isEditPropertiesDialogOpen, setIsEditPropertiesDialogOpen] = useState(false);
   const [editingNodeProperties, setEditingNodeProperties] = useState<TopologyNodeData | null>(null);
-  
+
   const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
 
-  const [edgeForContextMenu, setEdgeForContextMenu] = useState<Edge | null>(null);
-  const [edgeContextMenuPosition, setEdgeContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [edgeTargetedForDeletion, setEdgeTargetedForDeletion] = useState<Edge | null>(null);
   const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
 
+
   const [selectedChainElements, setSelectedChainElements] = useState<{ nodes: Set<string>, edges: Set<string> } | null>(null);
-  
+
   const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
-    any[], 
+    any[],
     Error
   >({
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
       console.log("Triggering placeholder fetch for topology page data refresh trigger.");
-      return []; 
+      return [];
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
     onSuccess: () => setLastRefreshed(new Date()),
@@ -277,16 +277,16 @@ const TopologyPageContent: NextPage = () => {
 
     const validConnections: Record<string, string[]> = {
       'controller': ['server', 'client'],
-      'user': ['client'], 
-      'client': ['server', 'landing'], 
-      'server': ['client', 'landing'], 
+      'user': ['client'],
+      'client': ['server', 'landing'],
+      'server': ['client', 'landing'],
     };
     return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
 
   const getEdgeStyle = useCallback((sourceType: TopologyNodeData['type'] | undefined, targetType: TopologyNodeData['type'] | undefined): { stroke: string; markerColor: string } => {
     let strokeColor = 'hsl(var(--muted-foreground))';
-  
+
     if (sourceType === 'controller') {
       if (targetType === 'server') strokeColor = 'hsl(var(--primary))';
       else if (targetType === 'client') strokeColor = 'hsl(var(--accent))';
@@ -296,7 +296,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; 
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -310,12 +310,12 @@ const TopologyPageContent: NextPage = () => {
       if (sourceNode && targetNode && sourceNode.data && targetNode.data) {
         if (isValidConnection(sourceNode, targetNode)) {
           const edgeColors = getEdgeStyle(sourceNode.data.type, targetNode.data.type);
-          setEdges((eds) => addEdge({ 
-            ...params, 
-            type: 'smoothstep', 
-            animated: false, 
-            markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: edgeColors.markerColor }, 
-            style: { strokeWidth: 1.5, stroke: edgeColors.stroke } 
+          setEdges((eds) => addEdge({
+            ...params,
+            type: 'smoothstep',
+            animated: false,
+            markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: edgeColors.markerColor },
+            style: { strokeWidth: 1.5, stroke: edgeColors.stroke }
           }, eds));
           toast({ title: "连接已创建", description: `节点 "${sourceNode.data.label}" 已连接到 "${targetNode.data.label}"。` });
         } else {
@@ -345,16 +345,29 @@ const TopologyPageContent: NextPage = () => {
 
       const clientX = event.clientX;
       const clientY = event.clientY;
-      
+
       const position = screenToFlowPosition({
         x: clientX,
         y: clientY,
       });
-      
+
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      console.log("Drop Event Data:", {
+        clientX,
+        clientY,
+        boundsLeft: reactFlowBounds.left,
+        boundsTop: reactFlowBounds.top,
+        _calculatedRelativeX: clientX - reactFlowBounds.left, // For logging/debugging
+        _calculatedRelativeY: clientY - reactFlowBounds.top, // For logging/debugging
+      });
+      console.log("Calculated Flow Position for New Node (pre-center):", position);
+
+
       const centeredPosition = {
         x: position.x - NODE_DEFAULT_WIDTH / 2,
         y: position.y - NODE_DEFAULT_HEIGHT / 2,
       };
+       console.log("Calculated Centered Flow Position for New Node:", centeredPosition);
 
       let newNodeData: TopologyNodeData;
       switch (type) {
@@ -377,7 +390,7 @@ const TopologyPageContent: NextPage = () => {
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
     },
-    [screenToFlowPosition, setNodes, toast] 
+    [screenToFlowPosition, setNodes, toast]
   );
 
   const updateSelectedChain = useCallback((startNodeId: string | null) => {
@@ -393,13 +406,13 @@ const TopologyPageContent: NextPage = () => {
 
     const traverse = (nodeId: string, direction: 'up' | 'down') => {
       const queue: string[] = [nodeId];
-      const visitedNodesThisTraversal = new Set<string>(); 
+      const visitedNodesThisTraversal = new Set<string>();
 
       while (queue.length > 0) {
         const currentId = queue.shift()!;
         if (visitedNodesThisTraversal.has(currentId)) continue;
         visitedNodesThisTraversal.add(currentId);
-        chainNodes.add(currentId); 
+        chainNodes.add(currentId);
 
         const connectedEdgesToProcess = direction === 'down'
           ? currentEdges.filter(edge => edge.source === currentId)
@@ -414,14 +427,14 @@ const TopologyPageContent: NextPage = () => {
             let continueTraversal = true;
             if (direction === 'down') {
               if (nextNode.data.type === 'landing') continueTraversal = false;
-            } else { 
+            } else {
               if (nextNode.data.type === 'controller' || nextNode.data.type === 'user') continueTraversal = false;
             }
 
             if (continueTraversal && !visitedNodesThisTraversal.has(nextNodeId)) {
               queue.push(nextNodeId);
             } else if (!continueTraversal) {
-               chainNodes.add(nextNodeId); 
+               chainNodes.add(nextNodeId);
             }
           }
         }
@@ -438,24 +451,27 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
     updateSelectedChain(node.id);
-    setNodeForContextMenu(null); 
-    setEdgeForContextMenu(null); 
+    setNodeForContextMenu(null);
+    setEdgeTargetedForDeletion(null);
+    setIsDeleteEdgeDialogOpen(false);
   }, [updateSelectedChain]);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeForPropsPanel(null);
     updateSelectedChain(null);
-    setNodeForContextMenu(null); 
-    setEdgeForContextMenu(null); 
+    setNodeForContextMenu(null);
+    setEdgeTargetedForDeletion(null); // Clear edge targeted for deletion
+    setIsDeleteEdgeDialogOpen(false); // Close edge deletion dialog
   }, [updateSelectedChain]);
-  
+
   const clearCanvas = () => {
     setNodes([]);
     setEdges([]);
     setSelectedNodeForPropsPanel(null);
     updateSelectedChain(null);
     setNodeForContextMenu(null);
-    setEdgeForContextMenu(null);
+    setEdgeTargetedForDeletion(null);
+    setIsDeleteEdgeDialogOpen(false);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
     setIsClearCanvasAlertOpen(false);
   };
@@ -463,56 +479,59 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: NodePassFlowNodeType) => {
       event.preventDefault();
-      setSelectedNodeForPropsPanel(node); 
+      setSelectedNodeForPropsPanel(node);
       setNodeForContextMenu(node);
       setContextMenuPosition({ x: event.clientX, y: event.clientY });
-      setEdgeForContextMenu(null); 
+      setEdgeTargetedForDeletion(null); // Ensure edge deletion dialog isn't triggered by right-click
+      setIsDeleteEdgeDialogOpen(false);
     },
     []
   );
 
-  const handleEdgeContextMenu = useCallback(
+  const handleEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
-      event.preventDefault();
-      setEdgeForContextMenu(edge);
-      setEdgeContextMenuPosition({ x: event.clientX, y: event.clientY });
-      setNodeForContextMenu(null); 
-      setSelectedNodeForPropsPanel(null); 
+      event.stopPropagation(); // Prevent pane click from immediately closing if dialog opens
+      setEdgeTargetedForDeletion(edge);
+      setIsDeleteEdgeDialogOpen(true);
+      setNodeForContextMenu(null); // Deselect any node
+      setSelectedNodeForPropsPanel(null); // Clear property panel
+      updateSelectedChain(null); // Clear chain highlight
     },
-    []
+    [updateSelectedChain, setIsDeleteEdgeDialogOpen, setEdgeTargetedForDeletion, setNodeForContextMenu, setSelectedNodeForPropsPanel]
   );
+
 
   const openEditPropertiesDialog = () => {
     if (nodeForContextMenu && nodeForContextMenu.data) {
-      setEditingNodeProperties({ ...nodeForContextMenu.data }); 
+      setEditingNodeProperties({ ...nodeForContextMenu.data });
       setIsEditPropertiesDialogOpen(true);
     }
     setNodeForContextMenu(null);
     setContextMenuPosition(null);
   };
-  
+
   const handleSaveNodeProperties = () => {
     if (nodeForContextMenu && editingNodeProperties) {
-      const newLabel = editingNodeProperties.label; 
+      const newLabel = editingNodeProperties.label;
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } } 
+            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted } }
             : n
         )
       );
       toast({ title: "属性已更新", description: `节点 "${newLabel}" 的属性已更改。` });
     }
     setIsEditPropertiesDialogOpen(false);
-    setEditingNodeProperties(null); 
+    setEditingNodeProperties(null);
   };
-  
+
   const openDeleteNodeDialog = () => {
     if (nodeForContextMenu) {
-      setNodeToDelete(nodeForContextMenu); 
-      setIsDeleteNodeDialogOpen(true); 
+      setNodeToDelete(nodeForContextMenu);
+      setIsDeleteNodeDialogOpen(true);
     }
-    setNodeForContextMenu(null); 
+    setNodeForContextMenu(null);
     setContextMenuPosition(null);
   };
 
@@ -525,31 +544,23 @@ const TopologyPageContent: NextPage = () => {
         setSelectedNodeForPropsPanel(null);
       }
       if (selectedChainElements?.nodes.has(nodeToDelete.id)) {
-        updateSelectedChain(null); 
+        updateSelectedChain(null);
       }
     }
     setIsDeleteNodeDialogOpen(false);
-    setNodeToDelete(null); 
-  };
-
-  const openDeleteEdgeDialog = () => {
-    if (edgeForContextMenu) {
-      setIsDeleteEdgeDialogOpen(true);
-    }
-    setEdgeForContextMenu(null);
-    setEdgeContextMenuPosition(null);
+    setNodeToDelete(null);
   };
 
   const confirmDeleteEdge = () => {
-    if (edgeForContextMenu) {
-      setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu!.id));
-      toast({ title: "链路已删除", description: `ID: ${edgeForContextMenu.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
-      if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
+    if (edgeTargetedForDeletion) {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeTargetedForDeletion!.id));
+      toast({ title: "链路已删除", description: `ID: ${edgeTargetedForDeletion.id.substring(0,15)}... 的链路已被删除。`, variant: "destructive"});
+      if (selectedChainElements?.edges.has(edgeTargetedForDeletion.id)) {
         updateSelectedChain(null);
       }
     }
     setIsDeleteEdgeDialogOpen(false);
-    setEdgeForContextMenu(null);
+    setEdgeTargetedForDeletion(null);
   };
 
   const formatLayout = useCallback(() => {
@@ -572,21 +583,14 @@ const TopologyPageContent: NextPage = () => {
     });
 
     const newNodesLayout: NodePassFlowNodeType[] = [];
-    let currentY = 50; // Initial Y offset
+    let currentY = 50;
 
     tierOrder.forEach(tierType => {
         const tierNodes = nodesByTier[tierType];
         if (tierNodes.length === 0) return;
 
-        // For controller and user, try to put them on the same visual "tier 0" if both exist
-        if (tierType === 'user' && nodesByTier['controller'].length > 0) {
-            // If controllers exist, users were already processed effectively with controllers or will be.
-            // This logic might need refinement if 'controller' and 'user' should truly share horizontal space.
-            // For now, they are processed sequentially as per tierOrder, creating distinct Y levels if both exist.
-        }
-
         const tierWidth = (tierNodes.length - 1) * NODE_X_SPACING;
-        let currentX = -tierWidth / 2; 
+        let currentX = -tierWidth / 2;
 
         tierNodes.forEach(node => {
             newNodesLayout.push({
@@ -598,8 +602,8 @@ const TopologyPageContent: NextPage = () => {
         currentY += TIER_Y_SPACING;
     });
 
-    setNodes(newNodesLayout); // Use setNodes from useNodesState
-    setTimeout(() => { 
+    setNodes(newNodesLayout);
+    setTimeout(() => {
         fitView({ padding: 0.2, duration: 600 });
     }, 100);
 
@@ -626,8 +630,8 @@ const TopologyPageContent: NextPage = () => {
       if (isHighlighted) {
         return {
           ...edge,
-          style: { 
-            stroke: CHAIN_HIGHLIGHT_COLOR, 
+          style: {
+            stroke: CHAIN_HIGHLIGHT_COLOR,
             strokeWidth: 2.5,
           },
           markerEnd: { ...(edge.markerEnd as object), color: CHAIN_HIGHLIGHT_COLOR },
@@ -640,8 +644,8 @@ const TopologyPageContent: NextPage = () => {
         const defaultColors = getEdgeStyle(sourceNode?.data?.type, targetNode?.data?.type);
         return {
           ...edge,
-          style: { 
-            stroke: defaultColors.stroke, 
+          style: {
+            stroke: defaultColors.stroke,
             strokeWidth: 1.5,
           },
           markerEnd: { ...(edge.markerEnd as object), color: defaultColors.markerColor },
@@ -658,7 +662,7 @@ const TopologyPageContent: NextPage = () => {
     { type: 'client', title: '客户端', icon: SmartphoneIcon },
     { type: 'landing', title: '落地', icon: Globe },
     { type: 'user', title: '用户源', icon: UserCircle2 },
-    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon }, 
+    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon },
   ];
 
   const onDragStartPanelItem = (event: React.DragEvent<HTMLDivElement>, nodeType: TopologyNodeData['type'], label?: string, apiId?: string, apiName?: string) => {
@@ -680,7 +684,7 @@ const TopologyPageContent: NextPage = () => {
       </AppLayout>
     );
   }
-  
+
   return (
     <AppLayout onLog={onAppLog}>
       <div className="flex flex-col h-full">
@@ -696,13 +700,13 @@ const TopologyPageContent: NextPage = () => {
                 <Maximize className="mr-1 h-4 w-4" />
                 自适应
             </Button>
-            <Button variant="outline" onClick={() => refetchInstances()} disabled={isLoadingInstances} size="sm" className="font-sans">
-              <RefreshCw className={`mr-1 h-4 w-4 ${isLoadingInstances ? 'animate-spin' : ''}`} />
-              {isLoadingInstances ? '刷新中' : '刷新数据'}
-            </Button>
              <Button variant="outline" onClick={formatLayout} size="sm" className="font-sans h-9">
                 <LayoutGrid className="mr-1 h-4 w-4" />
                 格式化
+            </Button>
+            <Button variant="outline" onClick={() => refetchInstances()} disabled={isLoadingInstances} size="sm" className="font-sans">
+              <RefreshCw className={`mr-1 h-4 w-4 ${isLoadingInstances ? 'animate-spin' : ''}`} />
+              {isLoadingInstances ? '刷新中' : '刷新数据'}
             </Button>
             <Button variant="destructive" onClick={() => setIsClearCanvasAlertOpen(true)} size="sm" className="font-sans">
               <Eraser className="mr-1 h-4 w-4" />
@@ -718,11 +722,11 @@ const TopologyPageContent: NextPage = () => {
           </Card>
         )}
 
-        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}> 
-          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
+        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
+          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col">
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><ControllerIcon className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[120px]"> 
+              <CardContent className="p-1.5"><ScrollArea className="h-[120px]">
                 <div className="space-y-1 p-1">
                   {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground text-center py-1 font-sans">无主控连接。</p>}
                   {apiConfigsList.map((config) => (
@@ -735,12 +739,12 @@ const TopologyPageContent: NextPage = () => {
                   ))}
                 </div></ScrollArea></CardContent>
             </Card>
-            
+
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Network className="mr-1.5 h-4 w-4 text-primary"/>组件面板</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> 
+              <CardContent className="p-1.5"><ScrollArea className="h-[160px]">
                 <div className="space-y-1 p-1">
-                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( 
+                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => (
                     <div key={type} draggable onDragStart={(e) => onDragStartPanelItem(e, type, title)}
                          className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加 "${title}"`}>
@@ -751,7 +755,7 @@ const TopologyPageContent: NextPage = () => {
                 </div></ScrollArea></CardContent>
             </Card>
 
-            <Card className="shadow-sm flex-grow flex flex-col min-h-0"> 
+            <Card className="shadow-sm flex-grow flex flex-col min-h-0">
               <CardHeader className="py-2.5 px-3 flex-shrink-0">
                 <CardTitle className="text-sm font-title flex items-center"><Info className="mr-1.5 h-4 w-4 text-blue-500"/>节点属性</CardTitle>
                 <CardDescription className="text-xs font-sans mt-0.5 truncate">
@@ -781,7 +785,7 @@ const TopologyPageContent: NextPage = () => {
                         <p><span className="font-semibold">端口:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingPort || 'N/A'}</span></p>
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {(selectedNodeForPropsPanel.data as UserNodeData).description || 'N/A'}</p>}
-                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点/链路可编辑或删除。</p>
+                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。点击链路可删除。</p>
                   </div>
                 ) : ( <p className="text-xs text-muted-foreground text-center py-3 font-sans">未选择节点。</p> )}
               </ScrollArea></CardContent>
@@ -798,11 +802,11 @@ const TopologyPageContent: NextPage = () => {
               onNodeClick={handleNodeClick}
               onPaneClick={handlePaneClick}
               onNodeContextMenu={handleNodeContextMenu}
-              onEdgeContextMenu={handleEdgeContextMenu}
+              onEdgeClick={handleEdgeClick}
               fitView
               fitViewOptions={{ padding: 0.2, minZoom: 0.5, maxZoom: 2.5 }}
               proOptions={{ hideAttribution: true }}
-              className="bg-card" 
+              className="bg-card"
               defaultViewport={initialViewport}
               nodeTypes={nodeTypes}
               nodesDraggable={true}
@@ -816,7 +820,7 @@ const TopologyPageContent: NextPage = () => {
             </ReactFlow>
           </div>
         </div>
-        
+
         {nodeForContextMenu && contextMenuPosition && (
           <DropdownMenu open={!!nodeForContextMenu} onOpenChange={(isOpen) => !isOpen && setNodeForContextMenu(null)}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenuPosition.x, top: contextMenuPosition.y }} />
@@ -833,18 +837,6 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
-        {edgeForContextMenu && edgeContextMenuPosition && (
-          <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => { if (!isOpen) setEdgeForContextMenu(null); }}>
-            <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
-            <DropdownMenuContent align="start" className="w-48 font-sans">
-              <DropdownMenuItem onClick={openDeleteEdgeDialog} className="text-destructive hover:!text-destructive focus:!text-destructive">
-                <LinkOff className="mr-2 h-4 w-4" />
-                删除链路
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -855,7 +847,7 @@ const TopologyPageContent: NextPage = () => {
                 </ShadDialogDescriptionFromDialog>
               )}
             </DialogHeader>
-            {editingNodeProperties && ( 
+            {editingNodeProperties && (
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
                 <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
@@ -970,7 +962,7 @@ const TopologyPageContent: NextPage = () => {
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={(isOpen) => {
             setIsDeleteNodeDialogOpen(isOpen);
             if (!isOpen) {
-                setNodeToDelete(null); 
+                setNodeToDelete(null);
             }
         }}>
             <AlertDialogContent>
@@ -995,19 +987,18 @@ const TopologyPageContent: NextPage = () => {
         <AlertDialog open={isDeleteEdgeDialogOpen} onOpenChange={(isOpen) => {
           setIsDeleteEdgeDialogOpen(isOpen);
           if (!isOpen) {
-            setEdgeForContextMenu(null); 
-            setEdgeContextMenuPosition(null);
+            setEdgeTargetedForDeletion(null);
           }
         }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <ShadAlertDialogTitle className="font-title">确认删除链路</ShadAlertDialogTitle>
               <ShadAlertDialogDescription className="font-sans">
-                您确定要删除此连接链路吗？ (ID: {edgeForContextMenu?.id?.substring(0,15)}...) 此操作无法撤销。
+                您确定要删除此连接链路吗？ (ID: {edgeTargetedForDeletion?.id?.substring(0,15)}...) 此操作无法撤销。
               </ShadAlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setIsDeleteEdgeDialogOpen(false); setEdgeForContextMenu(null); setEdgeContextMenuPosition(null); }} className="font-sans">取消</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setIsDeleteEdgeDialogOpen(false); setEdgeTargetedForDeletion(null); }} className="font-sans">取消</AlertDialogCancel>
               <AlertDialogAction
                 onClick={confirmDeleteEdge}
                 className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
@@ -1052,5 +1043,3 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
-
-    
