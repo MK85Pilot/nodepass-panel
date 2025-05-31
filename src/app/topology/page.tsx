@@ -47,12 +47,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription,
+  AlertDialogDescription as ShadAlertDialogDescription, // Renamed to avoid conflict
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle,
+  AlertDialogTitle as ShadAlertDialogTitle, // Renamed to avoid conflict
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog'; // Renamed to avoid conflict
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -154,16 +154,16 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
       subText = data.apiName || '未指定API';
       break;
     case 'server':
-      subText = data.tunnelAddress || '未配置隧道';
+      subText = (data as ServerNodeData).tunnelAddress || '未配置隧道';
       break;
     case 'client':
-      subText = data.tunnelAddress || '未配置服务端';
+      subText = (data as ClientNodeData).tunnelAddress || '未配置服务端';
       break;
     case 'landing':
-      subText = (data.landingIp && data.landingPort) ? `${data.landingIp}:${data.landingPort}` : '未配置IP/端口';
+      subText = ((data as LandingNodeData).landingIp && (data as LandingNodeData).landingPort) ? `${(data as LandingNodeData).landingIp}:${(data as LandingNodeData).landingPort}` : '未配置IP/端口';
       break;
     case 'user':
-      subText = data.description ? (data.description.length > 25 ? data.description.substring(0, 22) + '...' : data.description) : '未描述';
+      subText = (data as UserNodeData).description ? ((data as UserNodeData).description.length > 25 ? (data as UserNodeData).description.substring(0, 22) + '...' : (data as UserNodeData).description) : '未描述';
       break;
   }
 
@@ -228,6 +228,7 @@ const TopologyPageContent: NextPage = () => {
   const [editingNodeProperties, setEditingNodeProperties] = useState<TopologyNodeData | null>(null);
   
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
+  const [nodeToDelete, setNodeToDelete] = useState<NodePassFlowNodeType | null>(null);
   
   const { data: allFetchedInstancesData, isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], 
@@ -311,7 +312,7 @@ const TopologyPageContent: NextPage = () => {
           newNodeData = {
             label: label || '服务端', type: 'server',
             tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080',
-            logLevel: 'info', tlsMode: '1', 
+            logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '',
           };
           break;
         case 'client':
@@ -382,7 +383,7 @@ const TopologyPageContent: NextPage = () => {
 
   const openEditPropertiesDialog = () => {
     if (nodeForContextMenu && nodeForContextMenu.data) {
-      setEditingNodeProperties({ ...nodeForContextMenu.data }); // Clone the data object
+      setEditingNodeProperties({ ...nodeForContextMenu.data }); 
       setIsEditPropertiesDialogOpen(true);
     }
     setNodeForContextMenu(null);
@@ -391,22 +392,23 @@ const TopologyPageContent: NextPage = () => {
   
   const handleSaveNodeProperties = () => {
     if (nodeForContextMenu && editingNodeProperties) {
-      const newLabel = editingNodeProperties.label; // Capture the label before potential reset
+      const newLabel = editingNodeProperties.label; 
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties } } // Use the entire editingNodeProperties as the new data
+            ? { ...n, data: { ...editingNodeProperties } } 
             : n
         )
       );
       toast({ title: "属性已更新", description: `节点 "${newLabel}" 的属性已更改。` });
     }
     setIsEditPropertiesDialogOpen(false);
-    setEditingNodeProperties(null); // Reset
+    setEditingNodeProperties(null); 
   };
   
   const openDeleteNodeDialog = () => {
     if (nodeForContextMenu) {
+      setNodeToDelete(nodeForContextMenu);
       setIsDeleteNodeDialogOpen(true); 
     }
     setNodeForContextMenu(null);
@@ -414,15 +416,16 @@ const TopologyPageContent: NextPage = () => {
   };
 
   const confirmDeleteNode = () => {
-    if (nodeForContextMenu) {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeForContextMenu.id));
-      setEdges((eds) => eds.filter((e) => e.source !== nodeForContextMenu.id && e.target !== nodeForContextMenu.id));
-      toast({ title: "节点已删除", description: `节点 "${nodeForContextMenu.data.label}" 已被删除。`, variant: "destructive" });
-      if (selectedNodeForPropsPanel?.id === nodeForContextMenu.id) {
+    if (nodeToDelete) {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeToDelete.id));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeToDelete.id && e.target !== nodeToDelete.id));
+      toast({ title: "节点已删除", description: `节点 "${nodeToDelete.data.label}" 已被删除。`, variant: "destructive" });
+      if (selectedNodeForPropsPanel?.id === nodeToDelete.id) {
         setSelectedNodeForPropsPanel(null);
       }
     }
     setIsDeleteNodeDialogOpen(false);
+    setNodeToDelete(null);
   };
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
@@ -527,23 +530,23 @@ const TopologyPageContent: NextPage = () => {
                     <p><span className="font-semibold">ID:</span> <span className="font-mono">{selectedNodeForPropsPanel.id}</span></p>
                     <p><span className="font-semibold">类型:</span> <span className="font-mono capitalize">{selectedNodeForPropsPanel.data.type}</span></p>
                     <p><span className="font-semibold">标签:</span> {selectedNodeForPropsPanel.data.label}</p>
-                    {selectedNodeForPropsPanel.data.type === 'controller' && <p><span className="font-semibold">API:</span> {selectedNodeForPropsPanel.data.apiName}</p>}
+                    {selectedNodeForPropsPanel.data.type === 'controller' && <p><span className="font-semibold">API:</span> {(selectedNodeForPropsPanel.data as ControllerNodeData).apiName}</p>}
                     {selectedNodeForPropsPanel.data.type === 'server' && <>
-                        <p><span className="font-semibold">隧道:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.tunnelAddress}</span></p>
-                        <p><span className="font-semibold">转发:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.targetAddress}</span></p>
-                        <p><span className="font-semibold">日志:</span> {selectedNodeForPropsPanel.data.logLevel}</p>
-                        <p><span className="font-semibold">TLS:</span> {selectedNodeForPropsPanel.data.tlsMode}</p>
+                        <p><span className="font-semibold">隧道:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ServerNodeData).tunnelAddress}</span></p>
+                        <p><span className="font-semibold">转发:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ServerNodeData).targetAddress}</span></p>
+                        <p><span className="font-semibold">日志:</span> {(selectedNodeForPropsPanel.data as ServerNodeData).logLevel}</p>
+                        <p><span className="font-semibold">TLS:</span> {(selectedNodeForPropsPanel.data as ServerNodeData).tlsMode}</p>
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'client' && <>
-                        <p><span className="font-semibold">服务端隧道:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.tunnelAddress}</span></p>
-                        <p><span className="font-semibold">本地转发:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.targetAddress}</span></p>
-                        <p><span className="font-semibold">日志:</span> {selectedNodeForPropsPanel.data.logLevel}</p>
+                        <p><span className="font-semibold">服务端隧道:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ClientNodeData).tunnelAddress}</span></p>
+                        <p><span className="font-semibold">本地转发:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ClientNodeData).targetAddress}</span></p>
+                        <p><span className="font-semibold">日志:</span> {(selectedNodeForPropsPanel.data as ClientNodeData).logLevel}</p>
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'landing' && <>
-                        <p><span className="font-semibold">IP:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.landingIp || 'N/A'}</span></p>
-                        <p><span className="font-semibold">端口:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.landingPort || 'N/A'}</span></p>
+                        <p><span className="font-semibold">IP:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingIp || 'N/A'}</span></p>
+                        <p><span className="font-semibold">端口:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingPort || 'N/A'}</span></p>
                     </>}
-                     {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {selectedNodeForPropsPanel.data.description || 'N/A'}</p>}
+                     {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {(selectedNodeForPropsPanel.data as UserNodeData).description || 'N/A'}</p>}
                     <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。</p>
                   </div>
                 ) : ( <p className="text-xs text-muted-foreground text-center py-3 font-sans">未选择节点。</p> )}
@@ -599,7 +602,7 @@ const TopologyPageContent: NextPage = () => {
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <ShadDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</ShadDialogTitle>
+              <ShadDialogTitle className="font-title">编辑节点属性: {editingNodeProperties?.label}</ShadDialogTitle>
               {editingNodeProperties?.type === 'landing' && (
                 <DialogDescription className="font-sans text-xs">
                   对于“落地”节点, “标签 (名称)”字段将作为其标识名称 (例如 `ip:port@标签名称` 中的 `@标签名称` 部分)。
@@ -623,15 +626,15 @@ const TopologyPageContent: NextPage = () => {
                 <>
                   <div className="space-y-1">
                     <Label htmlFor="server-tunnel" className="font-sans">隧道监听地址</Label>
-                    <Input id="server-tunnel" value={(editingNodeProperties as ServerNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="0.0.0.0:10001"/>
+                    <Input id="server-tunnel" value={(editingNodeProperties as ServerNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) as ServerNodeData : null)} className="font-mono text-sm" placeholder="0.0.0.0:10001"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-target" className="font-sans">流量转发地址</Label>
-                    <Input id="server-target" value={(editingNodeProperties as ServerNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="0.0.0.0:8080"/>
+                    <Input id="server-target" value={(editingNodeProperties as ServerNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) as ServerNodeData : null)} className="font-mono text-sm" placeholder="0.0.0.0:8080"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-log" className="font-sans">日志级别</Label>
-                    <Select value={(editingNodeProperties as ServerNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ServerNodeData['logLevel'] }) : null)}>
+                    <Select value={(editingNodeProperties as ServerNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ServerNodeData['logLevel'] }) as ServerNodeData : null)}>
                       <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -641,7 +644,7 @@ const TopologyPageContent: NextPage = () => {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-tls" className="font-sans">TLS 模式</Label>
-                    <Select value={(editingNodeProperties as ServerNodeData).tlsMode || '1'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, tlsMode: v as ServerNodeData['tlsMode'] }) : null)}>
+                    <Select value={(editingNodeProperties as ServerNodeData).tlsMode || '1'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, tlsMode: v as ServerNodeData['tlsMode'] }) as ServerNodeData : null)}>
                        <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                        <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -653,11 +656,11 @@ const TopologyPageContent: NextPage = () => {
                     <>
                       <div className="space-y-1">
                         <Label htmlFor="server-crt" className="font-sans">证书路径 (crt)</Label>
-                        <Input id="server-crt" value={(editingNodeProperties as ServerNodeData).crtPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, crtPath: e.target.value }) : null)} className="font-mono text-sm" placeholder="/path/to/cert.pem"/>
+                        <Input id="server-crt" value={(editingNodeProperties as ServerNodeData).crtPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, crtPath: e.target.value }) as ServerNodeData : null)} className="font-mono text-sm" placeholder="/path/to/cert.pem"/>
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="server-key" className="font-sans">密钥路径 (key)</Label>
-                        <Input id="server-key" value={(editingNodeProperties as ServerNodeData).keyPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, keyPath: e.target.value }) : null)} className="font-mono text-sm" placeholder="/path/to/key.pem"/>
+                        <Input id="server-key" value={(editingNodeProperties as ServerNodeData).keyPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, keyPath: e.target.value }) as ServerNodeData : null)} className="font-mono text-sm" placeholder="/path/to/key.pem"/>
                       </div>
                     </>
                   )}
@@ -668,15 +671,15 @@ const TopologyPageContent: NextPage = () => {
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="client-tunnel" className="font-sans">服务端隧道地址</Label>
-                    <Input id="client-tunnel" value={(editingNodeProperties as ClientNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="your.server.com:10001"/>
+                    <Input id="client-tunnel" value={(editingNodeProperties as ClientNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) as ClientNodeData : null)} className="font-mono text-sm" placeholder="your.server.com:10001"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="client-target" className="font-sans">本地转发地址</Label>
-                    <Input id="client-target" value={(editingNodeProperties as ClientNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="127.0.0.1:8000"/>
+                    <Input id="client-target" value={(editingNodeProperties as ClientNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) as ClientNodeData : null)} className="font-mono text-sm" placeholder="127.0.0.1:8000"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="client-log" className="font-sans">日志级别</Label>
-                     <Select value={(editingNodeProperties as ClientNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ClientNodeData['logLevel'] }) : null)}>
+                     <Select value={(editingNodeProperties as ClientNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ClientNodeData['logLevel'] }) as ClientNodeData : null)}>
                        <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                        <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -691,11 +694,11 @@ const TopologyPageContent: NextPage = () => {
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="landing-ip" className="font-sans">IP 地址</Label>
-                    <Input id="landing-ip" value={(editingNodeProperties as LandingNodeData).landingIp || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingIp: e.target.value }) : null)} className="font-mono text-sm" placeholder="192.168.1.100"/>
+                    <Input id="landing-ip" value={(editingNodeProperties as LandingNodeData).landingIp || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingIp: e.target.value }) as LandingNodeData : null)} className="font-mono text-sm" placeholder="192.168.1.100"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="landing-port" className="font-sans">端口</Label>
-                    <Input id="landing-port" value={(editingNodeProperties as LandingNodeData).landingPort || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingPort: e.target.value }) : null)} className="font-mono text-sm" placeholder="80"/>
+                    <Input id="landing-port" value={(editingNodeProperties as LandingNodeData).landingPort || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingPort: e.target.value }) as LandingNodeData : null)} className="font-mono text-sm" placeholder="80"/>
                   </div>
                 </>
               )}
@@ -703,7 +706,7 @@ const TopologyPageContent: NextPage = () => {
               {editingNodeProperties.type === 'user' && (
                  <div className="space-y-1">
                     <Label htmlFor="user-desc" className="font-sans">描述</Label>
-                    <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, description: e.target.value }) : null)} className="font-sans text-sm" placeholder="用户流量描述"/>
+                    <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, description: e.target.value }) as UserNodeData : null)} className="font-sans text-sm" placeholder="用户流量描述"/>
                   </div>
               )}
             </div>
@@ -718,16 +721,21 @@ const TopologyPageContent: NextPage = () => {
         </Dialog>
 
 
-        <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={setIsDeleteNodeDialogOpen}>
+        <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={(isOpen) => {
+            setIsDeleteNodeDialogOpen(isOpen);
+            if (!isOpen) {
+                setNodeToDelete(null); 
+            }
+        }}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <ShadAlertDialogTitle className="font-title">确认删除节点</ShadAlertDialogTitle>
                     <ShadAlertDialogDescription className="font-sans">
-                        您确定要删除节点 “{nodeForContextMenu?.data?.label}” 及其所有连接吗？此操作无法撤销。
+                        您确定要删除节点 “{nodeToDelete?.data?.label}” 及其所有连接吗？此操作无法撤销。
                     </ShadAlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => { setIsDeleteNodeDialogOpen(false);}} className="font-sans">取消</AlertDialogCancel>
+                    <AlertDialogCancel onClick={() => { setIsDeleteNodeDialogOpen(false); setNodeToDelete(null);}} className="font-sans">取消</AlertDialogCancel>
                     <AlertDialogAction
                         onClick={confirmDeleteNode}
                         className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
