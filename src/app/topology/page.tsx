@@ -200,7 +200,6 @@ const TopologyPageContent: NextPage = () => {
               }
 
               let formattedHost = effectiveServerHost;
-              // Ensure IPv6 is bracketed if it contains a colon and is not already bracketed
               if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[') && !effectiveServerHost.endsWith(']')) { 
                 formattedHost = `[${effectiveServerHost}]`;
               }
@@ -636,7 +635,7 @@ const TopologyPageContent: NextPage = () => {
 
   return (
     <AppLayout onLog={onAppLog}>
-      <div className="flex flex-col h-full">
+      <div className="flex-grow flex flex-col">
         <TopologyControlBar
           onFitView={() => fitView({ duration: 600 })}
           onFormatLayout={formatLayout}
@@ -659,7 +658,7 @@ const TopologyPageContent: NextPage = () => {
             <PropertiesDisplayPanel selectedNode={selectedNodeForPropsPanel} />
           </div>
 
-          <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
+          <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative" onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
               nodes={processedNodes} edges={processedEdges}
               onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
