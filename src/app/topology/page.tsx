@@ -5,7 +5,6 @@ import type { NextPage } from 'next';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ReactFlow,
-  Controls,
   Background,
   useNodesState,
   useEdgesState,
@@ -26,10 +25,10 @@ import 'reactflow/dist/style.css';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2 as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings, LinkOff, Lock, Unlock, Maximize } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -62,7 +61,7 @@ interface BaseNodeData {
   type: 'controller' | 'server' | 'client' | 'landing' | 'user';
   apiId?: string;
   apiName?: string;
-  isChainHighlighted?: boolean; // Added for chain highlighting
+  isChainHighlighted?: boolean;
 }
 
 export interface ControllerNodeData extends BaseNodeData {
@@ -107,7 +106,7 @@ const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}
 
 const NODE_DEFAULT_WIDTH = 175;
 const NODE_DEFAULT_HEIGHT = 50;
-const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))'; // Example: A reddish hue
+const CHAIN_HIGHLIGHT_COLOR = 'hsl(var(--chart-1))';
 
 
 const getNodeIcon = (nodeType: TopologyNodeData['type'] | undefined): React.ElementType => {
@@ -133,8 +132,8 @@ const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undefined): 
 };
 
 const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false, isChainHighlighted: boolean = false): string => {
-    if (selected) return 'border-ring ring-2 ring-ring'; // Primary selection highlight
-    if (isChainHighlighted) return 'border-green-500 ring-2 ring-green-400/70'; // Chain highlight if not selected
+    if (selected) return 'border-ring ring-2 ring-ring';
+    if (isChainHighlighted) return 'border-green-500 ring-2 ring-green-400/70';
     switch (nodeType) {
         case 'controller': return 'border-yellow-500';
         case 'server': return 'border-primary';
@@ -186,19 +185,29 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
       {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
       
       {(data.type === 'controller' || data.type === 'user') && (
-         <Handle type="source" position={Position.Right} id="output" className="!w-2 !h-2 !bg-primary" />
+         <Handle type="source" position={Position.Right} id="output" 
+           className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-primary hover:!border-primary-foreground transition-all cursor-grab shadow-md"
+           style={{ right: '5px', top: '50%', transform: 'translateY(-50%)' }} />
       )}
       {(data.type === 'server' || data.type === 'client' || data.type === 'landing') && (
-         <Handle type="target" position={Position.Left} id="input" className="!w-2 !h-2 !bg-primary" />
+         <Handle type="target" position={Position.Left} id="input" 
+            className="!w-5 !h-5 !rounded-full !bg-transparent !border-0"
+            style={{ left: '-10px' }} />
       )}
       {data.type === 'server' && (
         <>
-          <Handle type="source" position={Position.Right} id="s_to_c_output" className="!w-2 !h-2 !bg-accent !-translate-y-1" />
-          <Handle type="source" position={Position.Bottom} id="s_to_l_output" className="!w-2 !h-2 !bg-purple-500" />
+          <Handle type="source" position={Position.Right} id="s_to_c_output" 
+            className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-accent hover:!border-accent-foreground transition-all cursor-grab shadow-md"
+            style={{ right: '5px', top: 'calc(50% - 7px)', transform: 'translateY(-50%)' }} />
+          <Handle type="source" position={Position.Bottom} id="s_to_l_output" 
+            className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-purple-500 hover:!border-purple-300 transition-all cursor-grab shadow-md"
+            style={{ bottom: '5px', left: '50%', transform: 'translateX(-50%)' }}/>
         </>
       )}
       {data.type === 'client' && (
-        <Handle type="source" position={Position.Right} id="c_to_l_output" className="!w-2 !h-2 !bg-purple-500" />
+        <Handle type="source" position={Position.Right} id="c_to_l_output" 
+            className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-purple-500 hover:!border-purple-300 transition-all cursor-grab shadow-md"
+            style={{ right: '5px', top: '50%', transform: 'translateY(-50%)' }} />
       )}
     </div>
   );
@@ -214,7 +223,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView, setInteractive } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -237,6 +246,7 @@ const TopologyPageContent: NextPage = () => {
   const [isDeleteEdgeDialogOpen, setIsDeleteEdgeDialogOpen] = useState(false);
 
   const [selectedChainElements, setSelectedChainElements] = useState<{ nodes: Set<string>, edges: Set<string> } | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
   
   const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], 
@@ -277,7 +287,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; // Can be same as S->C for bidirectional appearance
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; 
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -386,13 +396,13 @@ const TopologyPageContent: NextPage = () => {
 
     const traverse = (nodeId: string, direction: 'up' | 'down') => {
       const queue: string[] = [nodeId];
-      const visitedNodesThisTraversal = new Set<string>(); // Track visited nodes per traversal direction to avoid loops in one direction but allow reconvergence
+      const visitedNodesThisTraversal = new Set<string>(); 
 
       while (queue.length > 0) {
         const currentId = queue.shift()!;
         if (visitedNodesThisTraversal.has(currentId)) continue;
         visitedNodesThisTraversal.add(currentId);
-        chainNodes.add(currentId); // Add to global chain nodes
+        chainNodes.add(currentId); 
 
         const connectedEdgesToProcess = direction === 'down'
           ? currentEdges.filter(edge => edge.source === currentId)
@@ -407,14 +417,14 @@ const TopologyPageContent: NextPage = () => {
             let continueTraversal = true;
             if (direction === 'down') {
               if (nextNode.data.type === 'landing') continueTraversal = false;
-            } else { // Upstream
+            } else { 
               if (nextNode.data.type === 'controller' || nextNode.data.type === 'user') continueTraversal = false;
             }
 
             if (continueTraversal && !visitedNodesThisTraversal.has(nextNodeId)) {
               queue.push(nextNodeId);
             } else if (!continueTraversal) {
-               chainNodes.add(nextNodeId); // Add the terminal node to the global chain
+               chainNodes.add(nextNodeId); 
             }
           }
         }
@@ -586,7 +596,7 @@ const TopologyPageContent: NextPage = () => {
         };
       }
     });
-  }, [edges, selectedChainElements, getNode, getEdgeStyle, CHAIN_HIGHLIGHT_COLOR]);
+  }, [edges, selectedChainElements, getNode, getEdgeStyle]);
 
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
@@ -603,6 +613,16 @@ const TopologyPageContent: NextPage = () => {
     if (apiId) event.dataTransfer.setData('application/reactflow-apiid', apiId);
     if (apiName) event.dataTransfer.setData('application/reactflow-apiname', apiName);
     event.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const toggleLock = () => {
+    const newLockedState = !isLocked;
+    setIsLocked(newLockedState);
+    setInteractive(!newLockedState); 
+    toast({
+      title: newLockedState ? "画布已锁定" : "画布已解锁",
+      description: newLockedState ? "平移和缩放已禁用 (滚轮缩放仍可用)。" : "可以平移和通过拖拽缩放。",
+    });
   };
 
 
@@ -677,6 +697,14 @@ const TopologyPageContent: NextPage = () => {
                     </div>
                 ))}
                 </div></ScrollArea></CardContent>
+                 <CardFooter className="p-2 flex justify-end gap-1 border-t">
+                    <Button variant="outline" size="icon" onClick={() => fitView({ duration: 600 })} title="自适应视图" className="h-7 w-7">
+                        <Maximize className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={toggleLock} title={isLocked ? "解锁视图交互" : "锁定视图交互"} className="h-7 w-7">
+                        {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                    </Button>
+                </CardFooter>
             </Card>
 
             <Card className="shadow-sm flex-grow flex flex-col min-h-0"> 
@@ -733,8 +761,12 @@ const TopologyPageContent: NextPage = () => {
               className="bg-card" 
               defaultViewport={initialViewport}
               nodeTypes={nodeTypes} 
+              zoomOnScroll={!isLocked}
+              panOnDrag={!isLocked}
+              nodesDraggable={!isLocked}
+              nodesConnectable={!isLocked}
+              elementsSelectable={!isLocked}
             >
-              <Controls />
               <Background gap={16} />
             </ReactFlow>
           </div>
