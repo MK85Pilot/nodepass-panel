@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, ControllerIcon as CogIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Target, Users, Settings2 } from 'lucide-react'; // Renamed ControllerIcon to CogIcon to avoid conflict
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, CogIcon, Info, Eraser, Maximize, LayoutGrid, Edit3, Trash2, Unlink, Target, Users, Settings2, UploadCloud } from 'lucide-react'; // Added UploadCloud
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -431,18 +431,21 @@ const TopologyPageContent: NextPage = () => {
                   edge.target === sourceNode.id && rfGetNode(edge.source)?.data?.type === 'controller'
                 );
                 if (serverManagingControllerEdge) {
-                  const controllerNodeData = rfGetNode(serverManagingControllerEdge.source)!.data as ControllerNodeData;
-                  if (controllerNodeData && controllerNodeData.apiId) {
-                    const controllerConfig = getApiConfigById(controllerNodeData.apiId);
-                    if (controllerConfig && controllerConfig.apiUrl) {
-                      const controllerApiHost = extractHostname(controllerConfig.apiUrl);
-                      if (controllerApiHost) {
-                        effectiveServerHost = controllerApiHost;
+                  const controllerNode = rfGetNode(serverManagingControllerEdge.source);
+                  if (controllerNode && controllerNode.data && controllerNode.data.type === 'controller') {
+                    const controllerData = controllerNode.data as ControllerNodeData;
+                    if (controllerData.apiId) {
+                      const controllerConfig = getApiConfigById(controllerData.apiId);
+                      if (controllerConfig && controllerConfig.apiUrl) {
+                        const controllerApiHost = extractHostname(controllerConfig.apiUrl);
+                        if (controllerApiHost) {
+                          effectiveServerHost = controllerApiHost;
+                        } else {
+                          onAppLog?.(`无法从主控 "${controllerData.apiName}" 的 API URL (${controllerConfig.apiUrl}) 提取主机名。客户端隧道地址将使用原始服务器主机。`, 'WARNING');
+                        }
                       } else {
-                        onAppLog?.(`无法从主控 "${controllerNodeData.apiName}" 的 API URL (${controllerConfig.apiUrl}) 提取主机名。客户端隧道地址将使用原始服务器主机。`, 'WARNING');
+                        onAppLog?.(`找不到主控 "${controllerData.apiName}" 的配置或 API URL。客户端隧道地址将使用原始服务器主机。`, 'WARNING');
                       }
-                    } else {
-                      onAppLog?.(`找不到主控 "${controllerNodeData.apiName}" 的配置或 API URL。客户端隧道地址将使用原始服务器主机。`, 'WARNING');
                     }
                   }
                 } else {
@@ -918,19 +921,19 @@ const TopologyPageContent: NextPage = () => {
 
       apiConfigsList.forEach(conf => {
           const apiConfig = getApiConfigById(conf.id);
-          if (apiConfig) { // Ensure config exists
+          if (apiConfig) { 
               ops[conf.id] = { apiConfig, urlsToCreate: [] };
           }
       });
       
       const nodesToClearStatus = currentAllNodes
-          .filter(node => node.data?.type === 'server' || node.data?.type === 'client')
+          .filter(node => (node.data?.type === 'server' || node.data?.type === 'client') && node.data?.statusInfo)
           .map(node => node.id);
 
       if (nodesToClearStatus.length > 0) {
         setNodes(nds =>
           nds.map(n =>
-            nodesToClearStatus.includes(n.id) && n.data.statusInfo
+            nodesToClearStatus.includes(n.id)
               ? { ...n, data: { ...n.data, statusInfo: '' } }
               : n
           )
@@ -943,18 +946,23 @@ const TopologyPageContent: NextPage = () => {
               if (processedNodeIds.has(node.id)) return; 
 
               let managingControllerId: string | null = null;
+              const nodeData = node.data as ClientNodeData | ServerNodeData;
 
               const controllerEdge = currentAllEdges.find(edge => 
                   edge.target === node.id && 
                   rfGetNode(edge.source)?.data?.type === 'controller'
               );
+
               if (controllerEdge) {
-                  managingControllerId = (rfGetNode(controllerEdge.source)!.data as ControllerNodeData).apiId;
+                  const controllerNode = rfGetNode(controllerEdge.source);
+                  if (controllerNode && controllerNode.data && controllerNode.data.type === 'controller') {
+                    managingControllerId = (controllerNode.data as ControllerNodeData).apiId;
+                  }
               } 
-              else if (node.data.type === 'client' && (node.data as ClientNodeData).managingApiId) {
-                  managingControllerId = (node.data as ClientNodeData).managingApiId!;
+              else if (nodeData.type === 'client' && (nodeData as ClientNodeData).managingApiId) {
+                  managingControllerId = (nodeData as ClientNodeData).managingApiId!;
               }
-              else if (node.data.type === 'client') {
+              else if (nodeData.type === 'client') { // Implicitly managed client via server
                   const connectedServerEdge = currentAllEdges.find(edge => 
                       (edge.source === node.id && rfGetNode(edge.target)?.data?.type === 'server') ||
                       (edge.target === node.id && rfGetNode(edge.source)?.data?.type === 'server')
@@ -962,13 +970,16 @@ const TopologyPageContent: NextPage = () => {
                   if (connectedServerEdge) {
                       const serverNodeId = rfGetNode(connectedServerEdge.source)?.data?.type === 'server' ? connectedServerEdge.source : connectedServerEdge.target;
                       const serverNode = rfGetNode(serverNodeId);
-                      if (serverNode) {
+                      if (serverNode && serverNode.data && serverNode.data.type === 'server') {
                           const serverControllerEdge = currentAllEdges.find(edge => 
                               edge.target === serverNode.id && 
                               rfGetNode(edge.source)?.data?.type === 'controller'
                           );
                           if (serverControllerEdge) {
-                              managingControllerId = (rfGetNode(serverControllerEdge.source)!.data as ControllerNodeData).apiId;
+                            const controllerNode = rfGetNode(serverControllerEdge.source);
+                            if (controllerNode && controllerNode.data && controllerNode.data.type === 'controller') {
+                                managingControllerId = (controllerNode.data as ControllerNodeData).apiId;
+                            }
                           }
                       }
                   }
@@ -982,12 +993,12 @@ const TopologyPageContent: NextPage = () => {
                          processedNodeIds.add(node.id);
                       }
                   } else {
-                       onAppLog?.(`无法为节点 "${node.data.label}" (${node.id.substring(0,8)}) 生成URL。跳过创建。`, 'WARNING');
+                       onAppLog?.(`无法为节点 "${nodeData.label}" (${node.id.substring(0,8)}) 生成URL。跳过创建。`, 'WARNING');
                   }
               } else if (managingControllerId && !ops[managingControllerId]) {
-                  onAppLog?.(`尝试为节点 "${node.data.label}" 分配到主控 ${managingControllerId}，但该主控不在ops中。可能是一个已删除或无效的主控配置。`, 'ERROR');
-              } else if (node.data.type === 'client' && !(node.data as ClientNodeData).managingApiId) {
-                  onAppLog?.(`节点 "${node.data.label}" (${node.id.substring(0,8)}) 未连接到任何主控，无法确定创建者。跳过。`, 'WARNING');
+                  onAppLog?.(`尝试为节点 "${nodeData.label}" 分配到主控 ${managingControllerId}，但该主控不在ops中。可能是一个已删除或无效的主控配置。`, 'ERROR');
+              } else if (nodeData.type === 'client' && !managingControllerId) { // Check !managingControllerId too
+                  onAppLog?.(`节点 "${nodeData.label}" (${node.id.substring(0,8)}) 未连接到任何主控或通过受管服务器连接，无法确定创建者。跳过。`, 'WARNING');
               }
           }
       });
