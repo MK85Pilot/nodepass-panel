@@ -86,12 +86,12 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                 <span>添加新主控</span>
               </DropdownMenuItem>
 
-              <Link href="/connections" asChild>
-                <DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/connections">
                   <ListTree className="mr-2 h-4 w-4" />
                   <span>管理所有主控</span>
-                </DropdownMenuItem>
-              </Link>
+                </Link>
+              </DropdownMenuItem>
 
               {apiConfigsList.length > 0 && (
                 <DropdownMenuSub>
@@ -118,18 +118,18 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>可视化与分析</DropdownMenuLabel>
-               <Link href="/topology" asChild>
-                <DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/topology">
                   <Network className="mr-2 h-4 w-4" />
                   <span>连接拓扑图</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/traffic" asChild>
-                <DropdownMenuItem>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/traffic">
                   <BarChartHorizontalBig className="mr-2 h-4 w-4" />
                   <span>流量统计</span>
-                </DropdownMenuItem>
-              </Link>
+                </Link>
+              </DropdownMenuItem>
 
               {hasActiveApiConfig && onClearActiveConfig && (
                  <>
