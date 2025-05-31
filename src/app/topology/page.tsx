@@ -47,12 +47,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription as ShadAlertDialogDescription, // Renamed to avoid conflict
+  AlertDialogDescription as ShadAlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle as ShadAlertDialogTitle, // Renamed to avoid conflict
+  AlertDialogTitle as ShadAlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog'; // Aliased DialogTitle
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -240,6 +240,9 @@ const TopologyPageContent: NextPage = () => {
   >({
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
+      // This query is a placeholder and doesn't directly populate the graph.
+      // Actual instance data integration for graph population would require a more complex mapping.
+      // For now, it just serves to trigger a 'lastRefreshed' timestamp.
       console.log("Fetched instances data (for reference, not direct graph population):", allFetchedInstancesData);
       return []; 
     },
@@ -252,11 +255,13 @@ const TopologyPageContent: NextPage = () => {
     const sourceType = sourceNode.data.type;
     const targetType = targetNode.data.type;
 
+    // Define valid connections: source type -> array of valid target types
     const validConnections: Record<string, string[]> = {
       'controller': ['server', 'client'],
-      'user': ['client'],
-      'client': ['server', 'landing'],
-      'server': ['client', 'landing'],
+      'user': ['client'], // User can connect to Client
+      'client': ['server', 'landing'], // Client can connect to Server or Landing
+      'server': ['client', 'landing'], // Server can connect to Client or Landing
+      // Landing nodes typically don't have outputs in this model
     };
     return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
@@ -339,13 +344,14 @@ const TopologyPageContent: NextPage = () => {
           };
           break;
         default:
+          // Should not happen if types are correctly handled
           console.warn("Unknown node type dropped:", type);
           return;
       }
 
       const newNode: NodePassFlowNodeType = {
         id: getId(type + '_'),
-        type: 'custom', 
+        type: 'custom', // Ensure custom nodes are used
         position,
         data: newNodeData,
       };
@@ -353,19 +359,19 @@ const TopologyPageContent: NextPage = () => {
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
     },
-    [screenToFlowPosition, setNodes, toast] 
+    [screenToFlowPosition, setNodes, toast] // screenToFlowPosition must be stable
   );
 
   const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
     setSelectedNodeForPropsPanel(node);
-    setNodeForContextMenu(null); 
-    setEdgeForContextMenu(null);
+    setNodeForContextMenu(null); // Clear node context menu on regular click
+    setEdgeForContextMenu(null); // Clear edge context menu
   }, []);
 
   const handlePaneClick = useCallback(() => {
     setSelectedNodeForPropsPanel(null);
-    setNodeForContextMenu(null); 
-    setEdgeForContextMenu(null);
+    setNodeForContextMenu(null); // Clear node context menu on pane click
+    setEdgeForContextMenu(null); // Clear edge context menu
   }, []);
   
   const clearCanvas = () => {
@@ -381,7 +387,7 @@ const TopologyPageContent: NextPage = () => {
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: NodePassFlowNodeType) => {
       event.preventDefault();
-      setSelectedNodeForPropsPanel(node); 
+      setSelectedNodeForPropsPanel(node); // Also select the node in props panel
       setNodeForContextMenu(node);
       setContextMenuPosition({ x: event.clientX, y: event.clientY });
       setEdgeForContextMenu(null); // Clear edge context menu if node context menu is opened
@@ -402,6 +408,7 @@ const TopologyPageContent: NextPage = () => {
 
   const openEditPropertiesDialog = () => {
     if (nodeForContextMenu && nodeForContextMenu.data) {
+      // Clone the data to avoid direct mutation if not intended by further state updates
       setEditingNodeProperties({ ...nodeForContextMenu.data }); 
       setIsEditPropertiesDialogOpen(true);
     }
@@ -411,26 +418,26 @@ const TopologyPageContent: NextPage = () => {
   
   const handleSaveNodeProperties = () => {
     if (nodeForContextMenu && editingNodeProperties) {
-      const newLabel = editingNodeProperties.label; 
+      const newLabel = editingNodeProperties.label; // Assuming label is always present
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties } } 
+            ? { ...n, data: { ...editingNodeProperties } } // Spread the complete editingNodeProperties
             : n
         )
       );
       toast({ title: "属性已更新", description: `节点 "${newLabel}" 的属性已更改。` });
     }
     setIsEditPropertiesDialogOpen(false);
-    setEditingNodeProperties(null); 
+    setEditingNodeProperties(null); // Clear editing state
   };
   
   const openDeleteNodeDialog = () => {
     if (nodeForContextMenu) {
-      setNodeToDelete(nodeForContextMenu);
+      setNodeToDelete(nodeForContextMenu); // Use the new state for the node to be deleted
       setIsDeleteNodeDialogOpen(true); 
     }
-    setNodeForContextMenu(null);
+    setNodeForContextMenu(null); // Clear context menu state
     setContextMenuPosition(null);
   };
 
@@ -444,7 +451,7 @@ const TopologyPageContent: NextPage = () => {
       }
     }
     setIsDeleteNodeDialogOpen(false);
-    setNodeToDelete(null);
+    setNodeToDelete(null); // Clear the node to delete
   };
 
   const openDeleteEdgeDialog = () => {
@@ -465,12 +472,13 @@ const TopologyPageContent: NextPage = () => {
   };
 
 
+  // Sidebar panel items for dragging nodes
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
     { type: 'server', title: '服务端', icon: ServerIcon },
     { type: 'client', title: '客户端', icon: SmartphoneIcon },
     { type: 'landing', title: '落地', icon: Globe },
     { type: 'user', title: '用户源', icon: UserCircle2 },
-    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon },
+    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon }, // For generic controller if needed
   ];
 
   const onDragStartPanelItem = (event: React.DragEvent<HTMLDivElement>, nodeType: TopologyNodeData['type'], label?: string, apiId?: string, apiName?: string) => {
@@ -480,6 +488,7 @@ const TopologyPageContent: NextPage = () => {
     if (apiName) event.dataTransfer.setData('application/reactflow-apiname', apiName);
     event.dataTransfer.effectAllowed = 'copy';
   };
+
 
   if (isLoadingApiConfig) {
     return (
@@ -521,11 +530,13 @@ const TopologyPageContent: NextPage = () => {
           </Card>
         )}
 
-        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
-          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
+        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}> {/* Adjusted height */}
+          {/* Sidebar Panel */}
+          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> {/* Ensure panel does not overflow viewport */}
+            {/* Configured Masters Panel */}
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Settings className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[120px]">
+              <CardContent className="p-1.5"><ScrollArea className="h-[120px]"> {/* Fixed height for scroll */}
                 <div className="space-y-1 p-1">
                   {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground text-center py-1 font-sans">无主控连接。</p>}
                   {apiConfigsList.map((config) => (
@@ -539,11 +550,12 @@ const TopologyPageContent: NextPage = () => {
                 </div></ScrollArea></CardContent>
             </Card>
             
+            {/* Components Panel */}
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Network className="mr-1.5 h-4 w-4 text-primary"/>组件面板</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> 
+              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> {/* Fixed height for scroll */}
                 <div className="space-y-1 p-1">
-                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( 
+                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( // Exclude generic controller from this list
                     <div key={type} draggable onDragStart={(e) => onDragStartPanelItem(e, type, title)}
                          className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加 "${title}"`}>
@@ -554,7 +566,8 @@ const TopologyPageContent: NextPage = () => {
                 </div></ScrollArea></CardContent>
             </Card>
 
-            <Card className="shadow-sm flex-grow flex flex-col min-h-0">
+            {/* Node Properties Panel */}
+            <Card className="shadow-sm flex-grow flex flex-col min-h-0"> {/* flex-grow and min-h-0 for remaining space */}
               <CardHeader className="py-2.5 px-3 flex-shrink-0">
                 <CardTitle className="text-sm font-title flex items-center"><Info className="mr-1.5 h-4 w-4 text-blue-500"/>节点属性</CardTitle>
                 <CardDescription className="text-xs font-sans mt-0.5 truncate">
@@ -567,6 +580,7 @@ const TopologyPageContent: NextPage = () => {
                     <p><span className="font-semibold">ID:</span> <span className="font-mono">{selectedNodeForPropsPanel.id}</span></p>
                     <p><span className="font-semibold">类型:</span> <span className="font-mono capitalize">{selectedNodeForPropsPanel.data.type}</span></p>
                     <p><span className="font-semibold">标签:</span> {selectedNodeForPropsPanel.data.label}</p>
+                    {/* Type-specific details */}
                     {selectedNodeForPropsPanel.data.type === 'controller' && <p><span className="font-semibold">API:</span> {(selectedNodeForPropsPanel.data as ControllerNodeData).apiName}</p>}
                     {selectedNodeForPropsPanel.data.type === 'server' && <>
                         <p><span className="font-semibold">隧道:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ServerNodeData).tunnelAddress}</span></p>
@@ -591,6 +605,7 @@ const TopologyPageContent: NextPage = () => {
             </Card>
           </div>
 
+          {/* React Flow Canvas */}
           <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
               nodes={nodes}
@@ -605,9 +620,9 @@ const TopologyPageContent: NextPage = () => {
               fitView
               fitViewOptions={{ padding: 0.2, minZoom: 0.5, maxZoom: 2.5 }}
               proOptions={{ hideAttribution: true }}
-              className="bg-background"
+              className="bg-background" // Ensure this has a background for the flow area
               defaultViewport={initialViewport}
-              nodeTypes={nodeTypes} 
+              nodeTypes={nodeTypes} // Register custom node types
             >
               <Controls />
               <MiniMap 
@@ -621,6 +636,7 @@ const TopologyPageContent: NextPage = () => {
           </div>
         </div>
         
+        {/* Node Context Menu */}
         {nodeForContextMenu && contextMenuPosition && (
           <DropdownMenu open={!!nodeForContextMenu} onOpenChange={(isOpen) => !isOpen && setNodeForContextMenu(null)}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenuPosition.x, top: contextMenuPosition.y }} />
@@ -637,6 +653,7 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
+        {/* Edge Context Menu */}
         {edgeForContextMenu && edgeContextMenuPosition && (
           <DropdownMenu open={!!edgeForContextMenu} onOpenChange={(isOpen) => { if (!isOpen) setEdgeForContextMenu(null); }}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: edgeContextMenuPosition.x, top: edgeContextMenuPosition.y }} />
@@ -660,7 +677,7 @@ const TopologyPageContent: NextPage = () => {
                 </DialogDescription>
               )}
             </DialogHeader>
-            {editingNodeProperties && (
+            {editingNodeProperties && ( // Ensure editingNodeProperties is not null before accessing its fields
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
                 <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
@@ -673,6 +690,7 @@ const TopologyPageContent: NextPage = () => {
                 />
               </div>
 
+              {/* Server Specific Fields */}
               {editingNodeProperties.type === 'server' && (
                 <>
                   <div className="space-y-1">
@@ -718,6 +736,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
+              {/* Client Specific Fields */}
               {editingNodeProperties.type === 'client' && (
                  <>
                   <div className="space-y-1">
@@ -741,6 +760,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
+              {/* Landing Specific Fields */}
               {editingNodeProperties.type === 'landing' && (
                  <>
                   <div className="space-y-1">
@@ -754,6 +774,7 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
+              {/* User Specific Fields */}
               {editingNodeProperties.type === 'user' && (
                  <div className="space-y-1">
                     <Label htmlFor="user-desc" className="font-sans">描述</Label>
@@ -772,10 +793,11 @@ const TopologyPageContent: NextPage = () => {
         </Dialog>
 
 
+        {/* Delete Node Confirmation Dialog */}
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={(isOpen) => {
             setIsDeleteNodeDialogOpen(isOpen);
             if (!isOpen) {
-                setNodeToDelete(null); 
+                setNodeToDelete(null); // Clear node to delete if dialog is closed
             }
         }}>
             <AlertDialogContent>
@@ -797,6 +819,7 @@ const TopologyPageContent: NextPage = () => {
             </AlertDialogContent>
         </AlertDialog>
 
+        {/* Delete Edge Confirmation Dialog */}
         <AlertDialog open={isDeleteEdgeDialogOpen} onOpenChange={(isOpen) => {
           setIsDeleteEdgeDialogOpen(isOpen);
           if (!isOpen) {
@@ -823,6 +846,7 @@ const TopologyPageContent: NextPage = () => {
         </AlertDialog>
 
 
+        {/* Clear Canvas Confirmation Dialog */}
         <AlertDialog open={isClearCanvasAlertOpen} onOpenChange={setIsClearCanvasAlertOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
