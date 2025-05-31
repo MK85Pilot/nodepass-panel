@@ -263,6 +263,24 @@ const TopologyPageContent: NextPage = () => {
     return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
 
+  const getEdgeStyle = (sourceType: TopologyNodeData['type'] | undefined, targetType: TopologyNodeData['type'] | undefined): { stroke: string; markerColor: string } => {
+    let strokeColor = 'hsl(var(--muted-foreground))'; // Default color
+  
+    if (sourceType === 'controller') {
+      if (targetType === 'server') strokeColor = 'hsl(var(--primary))';      // Controller to Server (Blue)
+      else if (targetType === 'client') strokeColor = 'hsl(var(--accent))'; // Controller to Client (Cyan)
+    } else if (sourceType === 'user') {
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-1))';      // User to Client (Coral-ish)
+    } else if (sourceType === 'server') {
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';      // Server to Client (Teal-ish)
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))'; // Server to Landing (Orange-ish)
+    } else if (sourceType === 'client') {
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';      // Client to Server (Teal-ish, same as S->C)
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))'; // Client to Landing (Pink-ish)
+    }
+    return { stroke: strokeColor, markerColor: strokeColor };
+  };
+
   const onConnect: OnConnect = useCallback(
     (params) => {
       const sourceNode = getNode(params.source!) as NodePassFlowNodeType | undefined;
@@ -270,14 +288,21 @@ const TopologyPageContent: NextPage = () => {
 
       if (sourceNode && targetNode && sourceNode.data && targetNode.data) {
         if (isValidConnection(sourceNode, targetNode)) {
-          setEdges((eds) => addEdge({ ...params, type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: 'hsl(var(--primary))' }, style: { strokeWidth: 1.5, stroke: 'hsl(var(--primary))' } }, eds));
+          const edgeColors = getEdgeStyle(sourceNode.data.type, targetNode.data.type);
+          setEdges((eds) => addEdge({ 
+            ...params, 
+            type: 'smoothstep', 
+            animated: true, 
+            markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: edgeColors.markerColor }, 
+            style: { strokeWidth: 1.5, stroke: edgeColors.stroke } 
+          }, eds));
           toast({ title: "连接已创建", description: `节点 "${sourceNode.data.label}" 已连接到 "${targetNode.data.label}"。` });
         } else {
           toast({ title: "无效的连接", description: `无法从 "${sourceNode.data.type}" 类型连接到 "${targetNode.data.type}" 类型。`, variant: "destructive" });
         }
       }
     },
-    [setEdges, getNode, isValidConnection, toast]
+    [setEdges, getNode, isValidConnection, toast, getEdgeStyle] // Added getEdgeStyle to dependencies if it's defined outside, or ensure it's stable if defined inside
   );
 
   const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -311,8 +336,8 @@ const TopologyPageContent: NextPage = () => {
         clientY,
         boundsLeft: reactFlowBounds.left,
         boundsTop: reactFlowBounds.top,
-        _calculatedRelativeX: clientX - reactFlowBounds.left, // For logging/debugging
-        _calculatedRelativeY: clientY - reactFlowBounds.top, // For logging/debugging
+        _calculatedRelativeX: clientX - reactFlowBounds.left, 
+        _calculatedRelativeY: clientY - reactFlowBounds.top, 
       });
       console.log("Calculated Flow Position for New Node (pre-center):", position);
       
