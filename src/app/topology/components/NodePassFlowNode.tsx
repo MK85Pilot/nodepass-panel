@@ -5,7 +5,7 @@ import React from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { cn } from "@/lib/utils";
 import type { TopologyNodeData, ControllerNodeData, ServerNodeData, ClientNodeData, LandingNodeData, UserNodeData } from '../lib/topology-types';
-import { getNodeIcon, getNodeIconColorClass, getNodeBorderColorClass } from '../lib/topology-utils';
+import { getNodeIcon, getNodeIconColorClass, getNodeBorderColorClass, getSelectedNodeBgClass } from '../lib/topology-utils';
 
 const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ data, selected }) => {
   if (!data) {
@@ -42,21 +42,52 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
         break;
     }
   }
+  
+  // Determine styles based on selection
+  const baseBorderClass = getNodeBorderColorClass(data.type, false, data.isChainHighlighted, data.statusInfo);
+  const backgroundClass = selected ? getSelectedNodeBgClass(data.type) : "bg-card";
+  const mainTextColorClass = selected ? "text-primary-foreground" : "text-card-foreground";
+  const iconFinalColorClass = selected ? "text-primary-foreground" : getNodeIconColorClass(data.type);
+  const subTextFinalColorClass = selected ? "text-primary-foreground/80" : "text-muted-foreground";
+  
+  let statusInfoFinalColorClass = '';
+  let statusInfoInlineStyle = {};
+  if (data.statusInfo) {
+    if (selected) {
+      statusInfoFinalColorClass = 'text-primary-foreground/90';
+    } else {
+      // Default status color logic (inline style for non-selected to handle specific HSL)
+      statusInfoInlineStyle = { color: data.statusInfo.includes('失败') ? 'hsl(var(--destructive))' : 'hsl(var(--chart-2))' };
+    }
+  }
+
 
   return (
     <div
       className={cn(
-        "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
-        "min-w-[120px] max-w-[160px] py-1 px-2",
-        getNodeBorderColorClass(data.type, selected, data.isChainHighlighted, data.statusInfo)
+        "rounded-md shadow-md flex flex-col items-center justify-center border-2",
+        "py-1 px-2", // Standard padding
+        baseBorderClass, // Always apply the base border color for the type
+        backgroundClass, // Background changes on selection
+        mainTextColorClass // Main text color changes on selection
+        // Explicit width/height is applied by React Flow from the node object
       )}
+      data-type={data.type} // For potential CSS targeting
     >
       <div className="flex items-center text-[11px] font-medium mb-0.5">
-        {Icon && <Icon className={`h-3.5 w-3.5 mr-1 ${getNodeIconColorClass(data.type)}`} />}
+        {Icon && <Icon className={cn("h-3.5 w-3.5 mr-1 shrink-0", iconFinalColorClass)} />}
         <span className="truncate" title={displayLabel}>{displayLabel}</span>
       </div>
-      {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
-      {data.statusInfo && <div className="text-[8px] font-semibold mt-0.5 w-full text-center" style={{ color: data.statusInfo.includes('失败') ? 'hsl(var(--destructive))' : 'hsl(var(--chart-2))' }}>{data.statusInfo}</div>}
+      {subText && <div className={cn("text-[9px] truncate w-full text-center", subTextFinalColorClass)} title={subText}>{subText}</div>}
+      
+      {data.statusInfo && (
+        <div 
+          className={cn("text-[8px] font-semibold mt-0.5 w-full text-center", statusInfoFinalColorClass)}
+          style={statusInfoInlineStyle}
+        >
+          {data.statusInfo}
+        </div>
+      )}
 
       {(data.type === 'controller' || data.type === 'user') && (
          <Handle type="source" position={Position.Right} id="output"
@@ -84,7 +115,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
             style={{ right: '5px', top: 'calc(50% - 7px)', transform: 'translateY(-50%)' }} />
       )}
        {data.type === 'client' && (
-        <Handle type="source" position={Position.Right} id="c_to_s_output" // Added this handle for client to server connections.
+        <Handle type="source" position={Position.Right} id="c_to_s_output" 
             className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-primary hover:!border-primary-foreground transition-all cursor-grab shadow-md"
             style={{ right: '5px', top: 'calc(50% + 7px)', transform: 'translateY(-50%)' }} />
       )}

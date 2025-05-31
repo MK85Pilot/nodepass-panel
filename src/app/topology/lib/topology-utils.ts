@@ -28,12 +28,16 @@ export const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undef
     }
 };
 
+// Returns the Tailwind class for the node's border based on its type and state.
+// This function is now simplified to mostly return the type-specific border.
+// The general "selected" ring can be applied by React Flow or a wrapper if needed,
+// but the main request is for background change matching this border.
 export const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false, isChainHighlighted: boolean = false, statusInfo?: string): string => {
-    if (selected) return 'border-ring ring-2 ring-ring';
-    if (statusInfo?.includes('失败')) return 'border-destructive ring-2 ring-destructive/70';
-    if (statusInfo?.includes('已提交')) return 'border-green-500 ring-2 ring-green-400/70';
-    if (isChainHighlighted) return 'border-green-500 ring-2 ring-green-400/70';
+    if (statusInfo?.includes('失败')) return 'border-destructive ring-1 ring-destructive/50'; // Keep distinctive status borders
+    if (statusInfo?.includes('已提交')) return 'border-green-500 ring-1 ring-green-400/50'; // Keep distinctive status borders
+    if (isChainHighlighted && !selected) return 'border-green-500 ring-1 ring-green-400/50'; // Chain highlight if not selected (selected style takes precedence)
 
+    // Base border color by type
     switch (nodeType) {
         case 'controller': return 'border-yellow-500';
         case 'server': return 'border-primary';
@@ -43,6 +47,20 @@ export const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | und
         default: return 'border-border';
     }
 };
+
+// Returns the Tailwind class for the node's background when it's selected.
+// This color should match its characteristic border color.
+export const getSelectedNodeBgClass = (nodeType: TopologyNodeData['type'] | undefined): string => {
+    switch (nodeType) {
+        case 'controller': return 'bg-yellow-500';
+        case 'server': return 'bg-primary';
+        case 'client': return 'bg-accent';
+        case 'landing': return 'bg-purple-500';
+        case 'user': return 'bg-green-500';
+        default: return 'bg-muted'; // Fallback selected background
+    }
+};
+
 
 export function extractHostname(urlOrHostPort: string): string | null {
   if (!urlOrHostPort) return null;
@@ -84,11 +102,6 @@ export function extractPort(addressWithPort: string): string | null {
       const portCandidate = addressWithPort.substring(lastColonIndex + 1);
       // Ensure it's not part of an IPv6 address if no brackets are used (less common for host:port with IPv6)
       if (/^\d+$/.test(portCandidate)) {
-        // Check if the part before the last colon is an IPv6 address ending (e.g. ...::1)
-        // This is a heuristic; proper IPv6 parsing is complex.
-        // For [ipv6]:port, the hostname logic should handle it.
-        // For bare ipv6:port (less common), this might misinterpret part of ipv6 as port.
-        // Given the use case, we mostly expect domain:port, ipv4:port, or [ipv6]:port.
         return portCandidate;
       }
     }
@@ -157,4 +170,3 @@ export function buildNodePassUrlFromNode(
   const queryString = queryParams.toString();
   return queryString ? `${url}?${queryString}` : url;
 }
-

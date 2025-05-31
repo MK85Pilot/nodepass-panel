@@ -64,7 +64,7 @@ import type {
   TopologyNodeData, NodePassFlowNodeType, PendingOperations,
   ControllerNodeData, ServerNodeData, ClientNodeData, LandingNodeData, UserNodeData
 } from './lib/topology-types';
-import { initialViewport, NODE_DEFAULT_WIDTH, NODE_DEFAULT_HEIGHT, CHAIN_HIGHLIGHT_COLOR } from './lib/topology-types';
+import { initialViewport, NODE_DEFAULT_WIDTH, NODE_DEFAULT_HEIGHT, CONTROLLER_NODE_DEFAULT_WIDTH, CONTROLLER_NODE_DEFAULT_HEIGHT, CHAIN_HIGHLIGHT_COLOR } from './lib/topology-types';
 import { getId, extractHostname, extractPort, buildNodePassUrlFromNode } from './lib/topology-utils';
 
 
@@ -151,7 +151,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; // Client to Server can reuse server-client color
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; 
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -182,7 +182,7 @@ const TopologyPageContent: NextPage = () => {
               let serverHost = extractHostname(serverData.tunnelAddress);
               let effectiveServerHost = serverHost;
 
-              if (serverHost === '0.0.0.0' || serverHost === '::' || !serverHost) {
+              if (!serverHost || serverHost === '0.0.0.0' || serverHost === '::') {
                 const serverManagingControllerEdge = rfGetEdges().find(edge =>
                   edge.target === sourceNode.id && rfGetNode(edge.source)?.data?.type === 'controller'
                 );
@@ -203,7 +203,8 @@ const TopologyPageContent: NextPage = () => {
               if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[')) { 
                 formattedHost = `[${effectiveServerHost}]`;
               }
-              const newClientTunnelAddress = `${formattedHost}:${serverPort}`;
+              const newClientTunnelAddress = formattedHost ? `${formattedHost}:${serverPort}` : `:${serverPort}`;
+
 
               if (clientData.tunnelAddress !== newClientTunnelAddress) {
                 setNodes((nds) =>
@@ -245,21 +246,25 @@ const TopologyPageContent: NextPage = () => {
       if (typeof draggedNodeTypeFromPanel === 'undefined' || !draggedNodeTypeFromPanel) return;
 
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      const centeredPosition = { x: position.x - NODE_DEFAULT_WIDTH / 2, y: position.y - NODE_DEFAULT_HEIGHT / 2 };
-
+      
       let newNodeData: TopologyNodeData;
       let actualNodeTypeForData: TopologyNodeData['type'];
+      let nodeWidth = NODE_DEFAULT_WIDTH;
+      let nodeHeight = NODE_DEFAULT_HEIGHT;
 
       if (draggedNodeTypeFromPanel === 'controller' && draggedApiId && draggedApiName) {
         const existingControllerNodes = rfGetNodes().filter(n => n.data?.type === 'controller');
         if (existingControllerNodes.length === 0) {
           actualNodeTypeForData = 'controller';
+          nodeWidth = CONTROLLER_NODE_DEFAULT_WIDTH;
+          nodeHeight = CONTROLLER_NODE_DEFAULT_HEIGHT;
           newNodeData = {
             label: draggedApiName, type: 'controller',
             apiId: draggedApiId, apiName: draggedApiName, role: 'server', statusInfo: ''
           } as ControllerNodeData;
         } else {
-          actualNodeTypeForData = 'client';
+          actualNodeTypeForData = 'client'; // It becomes a client node data-wise
+          // uses NODE_DEFAULT_WIDTH/HEIGHT for client
           newNodeData = {
             label: `${draggedApiName} Client`, type: 'client', instanceType: 'client',
             tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info',
@@ -269,15 +274,32 @@ const TopologyPageContent: NextPage = () => {
       } else {
         actualNodeTypeForData = draggedNodeTypeFromPanel;
         switch (draggedNodeTypeFromPanel) {
-          case 'server': newNodeData = { label: initialLabel || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' } as ServerNodeData; break;
-          case 'client': newNodeData = { label: initialLabel || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' } as ClientNodeData; break;
-          case 'landing': newNodeData = { label: initialLabel || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' } as LandingNodeData; break;
-          case 'user': newNodeData = { label: initialLabel || '用户源', type: 'user', description: '', statusInfo: '' } as UserNodeData; break;
+          case 'server': 
+            newNodeData = { label: initialLabel || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' } as ServerNodeData; 
+            break;
+          case 'client': 
+            newNodeData = { label: initialLabel || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' } as ClientNodeData; 
+            break;
+          case 'landing': 
+            newNodeData = { label: initialLabel || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' } as LandingNodeData; 
+            break;
+          case 'user': 
+            newNodeData = { label: initialLabel || '用户源', type: 'user', description: '', statusInfo: '' } as UserNodeData; 
+            break;
           default: console.warn("Unknown node type dropped from panel:", draggedNodeTypeFromPanel); return;
         }
       }
+      const centeredPosition = { x: position.x - nodeWidth / 2, y: position.y - nodeHeight / 2 };
 
-      const newNode: NodePassFlowNodeType = { id: getId(actualNodeTypeForData + '_'), type: 'custom', position: centeredPosition, data: newNodeData };
+      const newNode: NodePassFlowNodeType = { 
+        id: getId(actualNodeTypeForData + '_'), 
+        type: 'custom', 
+        position: centeredPosition, 
+        data: newNodeData,
+        width: nodeWidth, // Set explicit width
+        height: nodeHeight, // Set explicit height
+      };
+
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
       onAppLog?.(`节点 "${newNode.data.label}" (${newNode.id.substring(0,8)}) 已添加到画布。类型: ${newNode.data.type}`, 'INFO');
@@ -429,9 +451,7 @@ const TopologyPageContent: NextPage = () => {
       const { nodes: newNodesLayout, edges: newEdgesLayout } = await calculateElkLayout(currentNodes, currentEdges);
       
       setNodes(newNodesLayout);
-      // Note: setEdges(newEdgesLayout) could be used if calculateElkLayout modifies edge paths
-      // for custom edge rendering. For now, React Flow rerenders existing edges to new node positions.
-      rfSetEdges(newEdgesLayout); // Or simply setEdges if React Flow handles the update internally based on node moves.
+      rfSetEdges(newEdgesLayout); 
 
       setTimeout(() => { fitView({ padding: 0.2, duration: 600 }); }, 100);
       toast({ title: "布局已使用ELK格式化", description: "节点已通过ELK重新排列。" });
