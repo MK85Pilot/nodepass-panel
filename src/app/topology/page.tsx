@@ -67,21 +67,21 @@ const initialViewport: Viewport = { x: 0, y: 0, zoom: 0.8 };
 interface BaseNodeData {
   label: string;
   type: 'controller' | 'server' | 'client' | 'landing' | 'user';
-  apiId?: string;
-  apiName?: string;
+  apiId?: string; // For controller nodes, it's their own API ID.
+  apiName?: string; // For controller nodes, it's their own API Name.
   isChainHighlighted?: boolean;
   statusInfo?: string;
 }
 
 export interface ControllerNodeData extends BaseNodeData {
   type: 'controller';
-  apiName: string;
-  apiId: string;
+  apiName: string; // The name of the API config this controller node represents
+  apiId: string;   // The ID of the API config
   role?: 'server' | 'client' | 'general';
 }
 export interface ServerNodeData extends BaseNodeData {
   type: 'server';
-  instanceType: 'server';
+  instanceType: 'server'; // To differentiate from controller 'server' role
   tunnelAddress: string;
   targetAddress: string;
   logLevel: MasterLogLevel;
@@ -91,10 +91,12 @@ export interface ServerNodeData extends BaseNodeData {
 }
 export interface ClientNodeData extends BaseNodeData {
   type: 'client';
-  instanceType: 'client';
+  instanceType: 'client'; // To differentiate from controller 'client' role
   tunnelAddress: string;
   targetAddress: string;
   logLevel: MasterLogLevel;
+  managingApiId?: string; // ID of the API config managing this client if created from a controller drag
+  managingApiName?: string; // Name of the API config
 }
 export interface LandingNodeData extends BaseNodeData {
   type: 'landing';
@@ -170,7 +172,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
   const Icon = getNodeIcon(data.type);
 
   let displayLabel = data.label;
-  let subText = data.type === 'controller' ? (data as ControllerNodeData).apiName || '未配置API' : '未配置';
+  let subText = '';
 
 
   if (data.type === 'controller') {
@@ -179,13 +181,17 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     subText = controllerData.apiName || '未知API'; 
     if (controllerData.role === 'server') displayLabel += ' (服务)';
     else if (controllerData.role === 'client') displayLabel += ' (客户)';
+  } else if (data.type === 'client') {
+     const clientData = data as ClientNodeData;
+     displayLabel = clientData.label;
+     subText = clientData.tunnelAddress || '未配置服务端';
+     if(clientData.managingApiName) {
+         subText += ` (由 ${clientData.managingApiName} 管理)`;
+     }
   } else {
     switch (data.type) {
         case 'server':
           subText = (data as ServerNodeData).tunnelAddress || '未配置隧道';
-          break;
-        case 'client':
-          subText = (data as ClientNodeData).tunnelAddress || '未配置服务端';
           break;
         case 'landing':
           subText = ((data as LandingNodeData).landingIp && (data as LandingNodeData).landingPort) ? `${(data as LandingNodeData).landingIp}:${(data as LandingNodeData).landingPort}` : '未配置IP/端口';
@@ -201,7 +207,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
     <div
       className={cn(
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
-        "min-w-[120px] max-w-[160px] py-1 px-2",
+        "min-w-[120px] max-w-[160px] py-1 px-2", // Adjusted for smaller size
         getNodeBorderColorClass(data.type, selected, data.isChainHighlighted, data.statusInfo)
       )}
     >
@@ -220,7 +226,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
       )}
       {(data.type === 'server' || data.type === 'client' || data.type === 'landing') && (
          <Handle type="target" position={Position.Left} id="input"
-            className="!w-5 !h-5 !rounded-full !bg-transparent !border-0"
+            className="!w-5 !h-5 !rounded-full !bg-transparent !border-0" // Made larger and transparent for easier connection
             style={{ left: '-10px' }} />
       )}
       {data.type === 'server' && (
@@ -233,10 +239,15 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
             style={{ bottom: '5px', left: '50%', transform: 'translateX(-50%)' }}/>
         </>
       )}
-      {data.type === 'client' && (
-        <Handle type="source" position={Position.Right} id="c_to_l_output"
+      {data.type === 'client' && ( // This applies to all client types, including controller-managed ones
+        <Handle type="source" position={Position.Right} id="c_to_l_output" // For client to landing
             className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-purple-500 hover:!border-purple-300 transition-all cursor-grab shadow-md"
-            style={{ right: '5px', top: '50%', transform: 'translateY(-50%)' }} />
+            style={{ right: '5px', top: 'calc(50% - 7px)', transform: 'translateY(-50%)' }} /> // Adjusted top for distinct position
+      )}
+      {data.type === 'client' && ( // Adding source handle for client to server connection
+        <Handle type="source" position={Position.Right} id="c_to_s_output"
+            className="!w-2.5 !h-2.5 !rounded-full !bg-slate-400 dark:!bg-slate-600 !border-2 !border-background dark:!border-card hover:!bg-primary hover:!border-primary-foreground transition-all cursor-grab shadow-md"
+            style={{ right: '5px', top: 'calc(50% + 7px)', transform: 'translateY(-50%)' }} /> // Adjusted top for distinct position
       )}
     </div>
   );
@@ -291,9 +302,6 @@ const TopologyPageContent: NextPage = () => {
   >({
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
-      // This query is primarily a placeholder to trigger refetch logic and show loading/error states
-      // related to the overall data freshness concept.
-      // Actual instance data for topology construction is not directly fetched here.
       return [];
     },
     enabled: !isLoadingApiConfig && apiConfigsList.length > 0,
@@ -312,6 +320,14 @@ const TopologyPageContent: NextPage = () => {
     const sourceType = sourceNode.data.type;
     const targetType = targetNode.data.type;
 
+    // Valid connections:
+    // Controller -> Server
+    // Controller -> Client
+    // User -> Client
+    // Client -> Server (Client connects to Server's tunnel)
+    // Client -> Landing
+    // Server -> Client (Server can initiate connection to client's listener IF client is acting as a server, rare for NodePass basic model but possible)
+    // Server -> Landing
     const validConnections: Record<string, string[]> = {
       'controller': ['server', 'client'],
       'user': ['client'],
@@ -322,19 +338,19 @@ const TopologyPageContent: NextPage = () => {
   }, []);
 
   const getEdgeStyle = useCallback((sourceType: TopologyNodeData['type'] | undefined, targetType: TopologyNodeData['type'] | undefined): { stroke: string; markerColor: string } => {
-    let strokeColor = 'hsl(var(--muted-foreground))'; // Default color
+    let strokeColor = 'hsl(var(--muted-foreground))'; 
 
     if (sourceType === 'controller') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--primary))'; // Controller to Server
-      else if (targetType === 'client') strokeColor = 'hsl(var(--accent))'; // Controller to Client
+      if (targetType === 'server') strokeColor = 'hsl(var(--primary))'; 
+      else if (targetType === 'client') strokeColor = 'hsl(var(--accent))'; 
     } else if (sourceType === 'user') {
-      if (targetType === 'client') strokeColor = 'hsl(var(--chart-1))'; // User to Client
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-1))'; 
     } else if (sourceType === 'server') {
-      if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))'; // Server to Client
-      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))'; // Server to Landing
+      if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))'; 
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))'; 
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; // Client to Server
-      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))'; // Client to Landing
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; 
+      else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))'; 
     }
     return { stroke: strokeColor, markerColor: strokeColor };
   }, []);
@@ -355,12 +371,37 @@ const TopologyPageContent: NextPage = () => {
             style: { strokeWidth: 1.5, stroke: edgeColors.stroke }
           }, eds));
           toast({ title: "连接已创建", description: `节点 "${sourceNode.data.label}" 已连接到 "${targetNode.data.label}"。` });
+          onAppLog?.(`连接创建: "${sourceNode.data.label}" (${sourceNode.id.substring(0,8)}) -> "${targetNode.data.label}" (${targetNode.id.substring(0,8)})`, 'INFO');
+
+          // Auto-fill client tunnel address if server connects to client
+          if (sourceNode.data.type === 'server' && targetNode.data.type === 'client') {
+            const serverTunnelAddress = (sourceNode.data as ServerNodeData).tunnelAddress;
+            if (serverTunnelAddress && serverTunnelAddress.trim() !== '') {
+              const clientData = targetNode.data as ClientNodeData;
+              if (clientData.tunnelAddress !== serverTunnelAddress) {
+                setNodes((nds) =>
+                  nds.map((n) =>
+                    n.id === targetNode.id
+                      ? { ...n, data: { ...clientData, tunnelAddress: serverTunnelAddress } }
+                      : n
+                  )
+                );
+                toast({
+                  title: "客户端隧道已自动填写",
+                  description: `客户端 "${clientData.label}" 的隧道地址已更新为 "${serverTunnelAddress}".`,
+                });
+                onAppLog?.(`客户端 "${clientData.label}" (${targetNode.id.substring(0,8)}) 隧道地址自动设置为 "${serverTunnelAddress}" 来自服务端 "${sourceNode.data.label}" (${sourceNode.id.substring(0,8)}).`, 'INFO');
+              }
+            }
+          }
+
         } else {
           toast({ title: "无效的连接", description: `无法从 "${sourceNode.data.type}" 类型连接到 "${targetNode.data.type}" 类型。`, variant: "destructive" });
+          onAppLog?.(`无效连接尝试: "${sourceNode.data.label}" (${sourceNode.id.substring(0,8)}) -> "${targetNode.data.label}" (${targetNode.id.substring(0,8)})`, 'WARNING');
         }
       }
     },
-    [setEdges, rfGetNode, isValidConnection, toast, getEdgeStyle]
+    [setEdges, rfGetNode, isValidConnection, toast, getEdgeStyle, setNodes, onAppLog]
   );
 
   const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -373,58 +414,70 @@ const TopologyPageContent: NextPage = () => {
       event.preventDefault();
       if (!reactFlowWrapper.current) return;
 
-      const type = event.dataTransfer.getData('application/reactflow-nodetype') as TopologyNodeData['type'];
-      let label = event.dataTransfer.getData('application/reactflow-label');
-      const apiId = event.dataTransfer.getData('application/reactflow-apiid');
-      const apiName = event.dataTransfer.getData('application/reactflow-apiname');
+      const draggedNodeType = event.dataTransfer.getData('application/reactflow-nodetype') as TopologyNodeData['type'];
+      let initialLabel = event.dataTransfer.getData('application/reactflow-label');
+      const draggedApiId = event.dataTransfer.getData('application/reactflow-apiid');
+      const draggedApiName = event.dataTransfer.getData('application/reactflow-apiname');
 
-      if (typeof type === 'undefined' || !type) return;
+      if (typeof draggedNodeType === 'undefined' || !draggedNodeType) return;
 
       const clientX = event.clientX;
       const clientY = event.clientY;
-
-      const position = screenToFlowPosition({
-        x: clientX,
-        y: clientY,
-      });
-      
+      const position = screenToFlowPosition({ x: clientX, y: clientY });
       const centeredPosition = {
         x: position.x - NODE_DEFAULT_WIDTH / 2,
         y: position.y - NODE_DEFAULT_HEIGHT / 2,
       };
 
       let newNodeData: TopologyNodeData;
-      switch (type) {
-        case 'controller':
-          const existingControllers = rfGetNodes().filter(n => n.data?.type === 'controller');
-          const role = existingControllers.length === 0 ? 'server' : 'client';
+      let finalNodeTypeOnCanvas: 'custom' = 'custom'; // All use NodePassFlowNode
+
+      if (draggedNodeType === 'controller') {
+        const existingControllerNodes = rfGetNodes().filter(n => n.data?.type === 'controller');
+        if (existingControllerNodes.length === 0) { // First controller node
           newNodeData = { 
-            label: label || '主控', 
+            label: draggedApiName || initialLabel || '主控', 
             type: 'controller', 
-            apiId: apiId || '', 
-            apiName: apiName || '未知API', 
-            role: role,
+            apiId: draggedApiId || '', 
+            apiName: draggedApiName || '未知API', 
+            role: 'server',
             statusInfo: '' 
-          }; 
-          break;
-        case 'server':
-          newNodeData = { label: label || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' }; break;
-        case 'client':
-          newNodeData = { label: label || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' }; break;
-        case 'landing':
-          newNodeData = { label: label || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' }; break;
-        case 'user':
-          newNodeData = { label: label || '用户源', type: 'user', description: '', statusInfo: '' }; break;
-        default: console.warn("Unknown node type dropped:", type); return;
+          };
+        } else { // Subsequent controller drag becomes a client node
+          newNodeData = {
+            label: `${draggedApiName || '未命名主控'} Client`,
+            type: 'client',
+            instanceType: 'client',
+            tunnelAddress: 'server.host:10001', // Default placeholder
+            targetAddress: '127.0.0.1:8000',  // Default placeholder
+            logLevel: 'info',
+            managingApiId: draggedApiId,
+            managingApiName: draggedApiName,
+            statusInfo: ''
+          };
+        }
+      } else { // For server, client (direct drag), landing, user
+        switch (draggedNodeType) {
+          case 'server':
+            newNodeData = { label: initialLabel || '服务端', type: 'server', instanceType: 'server', tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080', logLevel: 'info', tlsMode: '1', crtPath: '', keyPath: '', statusInfo: '' }; break;
+          case 'client': // Direct drag of a client component
+            newNodeData = { label: initialLabel || '客户端', type: 'client', instanceType: 'client', tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info', statusInfo: '' }; break;
+          case 'landing':
+            newNodeData = { label: initialLabel || '落地', type: 'landing', landingIp: '', landingPort: '', statusInfo: '' }; break;
+          case 'user':
+            newNodeData = { label: initialLabel || '用户源', type: 'user', description: '', statusInfo: '' }; break;
+          default: console.warn("Unknown node type dropped:", draggedNodeType); return;
+        }
       }
 
       const newNode: NodePassFlowNodeType = {
-        id: getId(type + '_'), type: 'custom', position: centeredPosition, data: newNodeData,
+        id: getId((newNodeData.type) + '_'), type: finalNodeTypeOnCanvas, position: centeredPosition, data: newNodeData,
       };
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
+      onAppLog?.(`节点 "${newNode.data.label}" (${newNode.id.substring(0,8)}) 已添加到画布。类型: ${newNode.data.type}`, 'INFO');
     },
-    [screenToFlowPosition, setNodes, toast, rfGetNodes]
+    [screenToFlowPosition, setNodes, toast, rfGetNodes, onAppLog]
   );
 
   const updateSelectedChain = useCallback((startNodeId: string | null) => {
@@ -504,6 +557,7 @@ const TopologyPageContent: NextPage = () => {
     setNodeForContextMenu(null);
     setEdgeForContextMenu(null);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
+    onAppLog?.('画布已清空。', 'INFO');
     setIsClearCanvasAlertOpen(false);
   };
 
@@ -527,10 +581,10 @@ const TopologyPageContent: NextPage = () => {
         description: `链路 "${edgeLabel}" 已被删除。`,
         variant: "default",
       });
+      onAppLog?.(`链路 "${edgeLabel}" 已删除。`, 'SUCCESS');
       if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
         updateSelectedChain(null); 
       }
-      onAppLog?.(`链路 "${edgeLabel}" 已删除。`, 'SUCCESS');
     }
     setEdgeForContextMenu(null); 
   };
@@ -558,15 +612,22 @@ const TopologyPageContent: NextPage = () => {
 
   const handleSaveNodeProperties = () => {
     if (nodeForContextMenu && editingNodeProperties) {
+      const originalNode = rfGetNode(nodeForContextMenu.id);
       const newLabel = editingNodeProperties.label;
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...editingNodeProperties, isChainHighlighted: n.data.isChainHighlighted, statusInfo: n.data.statusInfo } } 
+            ? { ...n, data: { 
+                ...(originalNode?.data || {}), // Preserve existing data like managingApiId etc.
+                ...editingNodeProperties,     // Apply changes from dialog
+                isChainHighlighted: n.data.isChainHighlighted, // Preserve internal state
+                statusInfo: n.data.statusInfo                  // Preserve internal state
+              } } 
             : n
         )
       );
       toast({ title: "属性已更新", description: `节点 "${newLabel}" 的属性已更改。` });
+      onAppLog?.(`节点 "${newLabel}" (${nodeForContextMenu.id.substring(0,8)}) 属性已更新。`, 'INFO');
     }
     setIsEditPropertiesDialogOpen(false);
     setEditingNodeProperties(null);
@@ -598,13 +659,16 @@ const TopologyPageContent: NextPage = () => {
 
   const confirmDeleteNode = () => {
     if (nodeToDelete) {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeToDelete.id));
-      setEdges((eds) => eds.filter((e) => e.source !== nodeToDelete.id && e.target !== nodeToDelete.id));
-      toast({ title: "节点已删除", description: `节点 "${nodeToDelete.data?.label}" 已被删除。`, variant: "destructive" });
-      if (selectedNodeForPropsPanel?.id === nodeToDelete.id) {
+      const deletedNodeLabel = nodeToDelete.data?.label || '未知节点';
+      const deletedNodeId = nodeToDelete.id;
+      setNodes((nds) => nds.filter((n) => n.id !== deletedNodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== deletedNodeId && e.target !== deletedNodeId));
+      toast({ title: "节点已删除", description: `节点 "${deletedNodeLabel}" 已被删除。`, variant: "destructive" });
+      onAppLog?.(`节点 "${deletedNodeLabel}" (${deletedNodeId.substring(0,8)}) 已删除。`, 'SUCCESS');
+      if (selectedNodeForPropsPanel?.id === deletedNodeId) {
         setSelectedNodeForPropsPanel(null);
       }
-      if (selectedChainElements?.nodes.has(nodeToDelete.id)) {
+      if (selectedChainElements?.nodes.has(deletedNodeId)) {
         updateSelectedChain(null); 
       }
     }
@@ -710,10 +774,10 @@ const TopologyPageContent: NextPage = () => {
 
   const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
     { type: 'server', title: '服务端', icon: ServerIcon },
-    { type: 'client', title: '客户端', icon: SmartphoneIcon },
+    { type: 'client', title: '客户端 (通用)', icon: SmartphoneIcon }, // Generic client
     { type: 'landing', title: '落地', icon: Globe },
     { type: 'user', title: '用户源', icon: UserCircle2 },
-    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon }, 
+    // Controller type is handled by dragging from "已配置主控"
   ];
 
   const onDragStartPanelItem = (event: React.DragEvent<HTMLDivElement>, nodeType: TopologyNodeData['type'], label?: string, apiId?: string, apiName?: string) => {
@@ -775,23 +839,17 @@ const TopologyPageContent: NextPage = () => {
       const currentAllNodes = rfGetNodes();
       const currentAllEdges = rfGetEdges();
       const ops: PendingOperations = {};
-      const processedNodeIds = new Set<string>(); 
+      const processedNodeIds = new Set<string>();
 
-      const controllerNodesList = currentAllNodes.filter(n => n.data?.type === 'controller') as Node<ControllerNodeData>[];
-      for (const controllerNode of controllerNodesList) {
-          if (!controllerNode.data.apiId || !controllerNode.data.apiName) continue;
-
-          const apiConfig = getApiConfigById(controllerNode.data.apiId);
-          if (!apiConfig) {
-              toast({ title: "配置错误", description: `未找到主控 "${controllerNode.data.apiName}" 的配置。跳过此主控的操作。`, variant: "destructive" });
-              onAppLog?.(`尝试提交拓扑: 主控 "${controllerNode.data.apiName}" (ID: ${controllerNode.data.apiId}) 配置未找到。`, 'ERROR');
-              continue;
+      // Initialize ops for all available API configurations
+      apiConfigsList.forEach(conf => {
+          const apiConfig = getApiConfigById(conf.id);
+          if (apiConfig) {
+              ops[conf.id] = { apiConfig, urlsToCreate: [] };
           }
-          if (!ops[controllerNode.data.apiId]) {
-              ops[controllerNode.data.apiId] = { apiConfig, urlsToCreate: [] };
-          }
-      }
+      });
       
+      // Clear previous status info from nodes
       const nodesToClearStatus = currentAllNodes
           .filter(node => node.data?.type === 'server' || node.data?.type === 'client')
           .map(node => node.id);
@@ -805,72 +863,84 @@ const TopologyPageContent: NextPage = () => {
           );
       }
 
-      for (const controllerNode of controllerNodesList) {
-          if (!controllerNode.data.apiId || !ops[controllerNode.data.apiId]) continue;
+      // Assign instances to managing controllers
+      currentAllNodes.forEach(node => {
+          if (node.data?.type === 'server' || node.data?.type === 'client') {
+              if (processedNodeIds.has(node.id)) return; // Already processed
 
-          currentAllEdges.forEach(edge => {
-              if (edge.source === controllerNode.id) { 
-                  const targetInstanceNode = currentAllNodes.find(n => n.id === edge.target);
-                  if (targetInstanceNode && targetInstanceNode.data && (targetInstanceNode.data.type === 'server' || targetInstanceNode.data.type === 'client')) {
-                      if (processedNodeIds.has(targetInstanceNode.id)) {
-                          const existingController = Object.values(ops).find(opGroup => opGroup.urlsToCreate.some(op => op.originalNodeId === targetInstanceNode.id))?.apiConfig.name;
-                          toast({ title: "配置警告", description: `节点 "${targetInstanceNode.data.label}" 连接到多个主控。将由主控 "${existingController || '先前的主控'}" 创建。`, variant: "default" });
-                          onAppLog?.(`节点 "${targetInstanceNode.data.label}" (${targetInstanceNode.id}) 连接到多个主控。主控 "${controllerNode.data.apiName}" 的连接将被忽略。`, 'WARNING');
-                          return; 
-                      }
-                      const url = buildNodePassUrlFromNode(targetInstanceNode as Node<ServerNodeData | ClientNodeData>, currentAllNodes, currentAllEdges);
-                      if (url) {
-                          ops[controllerNode.data.apiId].urlsToCreate.push({ originalNodeId: targetInstanceNode.id, url });
-                          processedNodeIds.add(targetInstanceNode.id);
+              let managingControllerId: string | null = null;
+
+              // 1. Check for direct link from a 'controller' type node
+              const controllerEdge = currentAllEdges.find(edge => 
+                  edge.target === node.id && 
+                  rfGetNode(edge.source)?.data?.type === 'controller'
+              );
+              if (controllerEdge) {
+                  managingControllerId = (rfGetNode(controllerEdge.source)!.data as ControllerNodeData).apiId;
+              } 
+              // 2. Else, if it's a client node created from controller drag (has managingApiId)
+              else if (node.data.type === 'client' && (node.data as ClientNodeData).managingApiId) {
+                  managingControllerId = (node.data as ClientNodeData).managingApiId!;
+              }
+              // 3. Else, if it's a client implicitly managed by a server's controller
+              else if (node.data.type === 'client') {
+                  const connectedServerEdge = currentAllEdges.find(edge => 
+                      (edge.source === node.id && rfGetNode(edge.target)?.data?.type === 'server') ||
+                      (edge.target === node.id && rfGetNode(edge.source)?.data?.type === 'server')
+                  );
+                  if (connectedServerEdge) {
+                      const serverNodeId = rfGetNode(connectedServerEdge.source)?.data?.type === 'server' ? connectedServerEdge.source : connectedServerEdge.target;
+                      const serverNode = rfGetNode(serverNodeId);
+                      if (serverNode) {
+                          const serverControllerEdge = currentAllEdges.find(edge => 
+                              edge.target === serverNode.id && 
+                              rfGetNode(edge.source)?.data?.type === 'controller'
+                          );
+                          if (serverControllerEdge) {
+                              managingControllerId = (rfGetNode(serverControllerEdge.source)!.data as ControllerNodeData).apiId;
+                          }
                       }
                   }
               }
-          });
-      }
 
-      const clientNodesToProcessImplicitly = currentAllNodes.filter(n => n.data?.type === 'client' && !processedNodeIds.has(n.id)) as Node<ClientNodeData>[];
-      for (const clientNode of clientNodesToProcessImplicitly) {
-          const connectedServerEdge = currentAllEdges.find(edge => {
-              const sourceNode = currentAllNodes.find(n => n.id === edge.source);
-              const targetNode = currentAllNodes.find(n => n.id === edge.target);
-              return (edge.source === clientNode.id && targetNode?.data?.type === 'server') ||
-                     (edge.target === clientNode.id && sourceNode?.data?.type === 'server');
-          });
-          
-          if (connectedServerEdge) {
-              const serverNodeId = currentAllNodes.find(n => n.id === connectedServerEdge.source)?.data?.type === 'server' 
-                                  ? connectedServerEdge.source 
-                                  : connectedServerEdge.target;
-              
-              if (processedNodeIds.has(serverNodeId)) { 
-                  let managingControllerApiId: string | null = null;
-                  for (const apiId in ops) {
-                      if (ops[apiId].urlsToCreate.some(op => op.originalNodeId === serverNodeId)) {
-                          managingControllerApiId = apiId;
-                          break;
+              if (managingControllerId && ops[managingControllerId]) {
+                  const url = buildNodePassUrlFromNode(node as Node<ServerNodeData | ClientNodeData>, currentAllNodes, currentAllEdges);
+                  if (url) {
+                      // Avoid duplicate additions if a node somehow matched multiple conditions (shouldn't happen with current logic flow)
+                      if (!ops[managingControllerId].urlsToCreate.some(op => op.originalNodeId === node.id)) {
+                         ops[managingControllerId].urlsToCreate.push({ originalNodeId: node.id, url });
+                         processedNodeIds.add(node.id);
                       }
+                  } else {
+                       onAppLog?.(`无法为节点 "${node.data.label}" (${node.id.substring(0,8)}) 生成URL。跳过创建。`, 'WARNING');
                   }
-                  if (managingControllerApiId) {
-                      const url = buildNodePassUrlFromNode(clientNode, currentAllNodes, currentAllEdges);
-                      if (url && !ops[managingControllerApiId].urlsToCreate.some(op => op.originalNodeId === clientNode.id)) {
-                          ops[managingControllerApiId].urlsToCreate.push({ originalNodeId: clientNode.id, url });
-                          processedNodeIds.add(clientNode.id); 
-                      }
-                  }
+              } else if (managingControllerId && !ops[managingControllerId]) {
+                  onAppLog?.(`尝试为节点 "${node.data.label}" 分配到主控 ${managingControllerId}，但该主控不在ops中。可能是一个已删除或无效的主控配置。`, 'ERROR');
+              } else if (node.data.type === 'client' && !(node.data as ClientNodeData).managingApiId) {
+                  // This case might catch clients that are not connected to anything indicating a controller
+                  onAppLog?.(`节点 "${node.data.label}" (${node.id.substring(0,8)}) 未连接到任何主控，无法确定创建者。跳过。`, 'WARNING');
               }
           }
-      }
+      });
       
-      const totalUrls = Object.values(ops).reduce((sum, group) => sum + group.urlsToCreate.length, 0);
+      // Filter out ops groups with no URLs to create
+      const finalOps: PendingOperations = {};
+      for (const apiIdKey in ops) {
+        if (ops[apiIdKey].urlsToCreate.length > 0) {
+          finalOps[apiIdKey] = ops[apiIdKey];
+        }
+      }
+
+      const totalUrls = Object.values(finalOps).reduce((sum, group) => sum + group.urlsToCreate.length, 0);
       if (totalUrls === 0) {
           toast({ title: "无需提交", description: "未在画布中检测到可创建的实例链路。" });
           onAppLog?.('尝试提交拓扑: 无可创建的实例。', 'INFO');
           return;
       }
 
-      setPendingOperations(ops);
+      setPendingOperations(finalOps);
       setIsSubmitModalOpen(true);
-      onAppLog?.(`准备提交拓扑: ${totalUrls} 个实例待创建。`, 'INFO', ops);
+      onAppLog?.(`准备提交拓扑: ${totalUrls} 个实例待创建。`, 'INFO', finalOps);
   };
 
   const createInstanceMutation = useMutation({
@@ -1026,7 +1096,7 @@ const TopologyPageContent: NextPage = () => {
           </Card>
         )}
 
-        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}> {/* Adjusted height for better fit */}
+        <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
           <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><ControllerIcon className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
@@ -1036,7 +1106,7 @@ const TopologyPageContent: NextPage = () => {
                   {apiConfigsList.map((config) => (
                     <div key={config.id} draggable onDragStart={(e) => onDragStartPanelItem(e, 'controller', config.name, config.id, config.name)}
                          className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
-                         title={`拖拽添加主控: "${config.name}"`}>
+                         title={`拖拽添加主控: "${config.name}" (首个为主控节点, 后续为客户端节点)`}>
                       <ControllerIcon className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                       <span className="font-medium truncate font-sans">{config.name}</span>
                     </div>
@@ -1077,6 +1147,7 @@ const TopologyPageContent: NextPage = () => {
                     {selectedNodeForPropsPanel.data.type === 'controller' && (
                         <>
                             <p><span className="font-semibold">API 名称:</span> {(selectedNodeForPropsPanel.data as ControllerNodeData).apiName}</p>
+                            <p><span className="font-semibold">API ID:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ControllerNodeData).apiId}</span></p>
                             <p><span className="font-semibold">角色:</span> {
                                 (selectedNodeForPropsPanel.data as ControllerNodeData).role === 'server' ? '服务焦点' :
                                 (selectedNodeForPropsPanel.data as ControllerNodeData).role === 'client' ? '客户焦点' :
@@ -1095,6 +1166,8 @@ const TopologyPageContent: NextPage = () => {
                         <p><span className="font-semibold">服务端隧道:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ClientNodeData).tunnelAddress}</span></p>
                         <p><span className="font-semibold">本地转发:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as ClientNodeData).targetAddress}</span></p>
                         <p><span className="font-semibold">日志:</span> {(selectedNodeForPropsPanel.data as ClientNodeData).logLevel}</p>
+                        {(selectedNodeForPropsPanel.data as ClientNodeData).managingApiName && 
+                          <p><span className="font-semibold">管理主控:</span> {(selectedNodeForPropsPanel.data as ClientNodeData).managingApiName}</p>}
                     </>}
                      {selectedNodeForPropsPanel.data.type === 'landing' && <>
                         <p><span className="font-semibold">IP:</span> <span className="font-mono">{(selectedNodeForPropsPanel.data as LandingNodeData).landingIp || 'N/A'}</span></p>
@@ -1285,6 +1358,11 @@ const TopologyPageContent: NextPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {(editingNodeProperties as ClientNodeData).managingApiName && (
+                    <div className="text-xs text-muted-foreground pt-2">
+                        此客户端由主控 "{(editingNodeProperties as ClientNodeData).managingApiName}" 管理。
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1422,7 +1500,6 @@ const TopologyPageContent: NextPage = () => {
   );
 };
 
-// Wrapper component to provide ReactFlow context
 const TopologyEditorPageWrapper: NextPage = () => {
   return (
     <ReactFlowProvider>
