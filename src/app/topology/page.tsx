@@ -144,7 +144,6 @@ const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined,
 
 const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ data, selected }) => {
   if (!data) {
-    // Fallback for undefined data, common during MiniMap initial render or if data is somehow missing
     return <div className="w-20 h-10 bg-muted rounded text-xs flex items-center justify-center">Loading...</div>;
   }
   const Icon = getNodeIcon(data.type);
@@ -174,7 +173,7 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
         "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
         "min-w-[150px] max-w-[200px] py-2 px-2.5", // Compact sizing
         getNodeBorderColorClass(data.type, selected),
-        selected && "ring-2 ring-offset-1 ring-ring" // Ensure ring is applied correctly on top of border
+        selected && "ring-2 ring-offset-1 ring-ring" 
       )}
     >
       <div className="flex items-center text-[11px] font-medium mb-0.5">
@@ -183,7 +182,6 @@ const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ da
       </div>
       {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
       
-      {/* Handles - simplified and positioned */}
       {(data.type === 'controller' || data.type === 'user') && (
          <Handle type="source" position={Position.Right} id="output" className="!w-2 !h-2 !bg-primary" />
       )}
@@ -227,12 +225,12 @@ const TopologyPageContent: NextPage = () => {
   const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   
   const [isEditPropertiesDialogOpen, setIsEditPropertiesDialogOpen] = useState(false);
-  const [editingNodeProperties, setEditingNodeProperties] = useState<Partial<TopologyNodeData> & { label: string }>({ label: '' });
+  const [editingNodeProperties, setEditingNodeProperties] = useState<TopologyNodeData | null>(null);
   
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
   
   const { data: allFetchedInstancesData, isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
-    any[], // Simplified for placeholder
+    any[], 
     Error
   >({
     queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
@@ -313,7 +311,7 @@ const TopologyPageContent: NextPage = () => {
           newNodeData = {
             label: label || '服务端', type: 'server',
             tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080',
-            logLevel: 'info', tlsMode: '1', // Default to self-signed
+            logLevel: 'info', tlsMode: '1', 
           };
           break;
         case 'client':
@@ -342,7 +340,7 @@ const TopologyPageContent: NextPage = () => {
 
       const newNode: NodePassFlowNodeType = {
         id: getId(type + '_'),
-        type: 'custom', // Use our custom node type
+        type: 'custom', 
         position,
         data: newNodeData,
       };
@@ -383,12 +381,8 @@ const TopologyPageContent: NextPage = () => {
   );
 
   const openEditPropertiesDialog = () => {
-    if (nodeForContextMenu) {
-      const currentData = nodeForContextMenu.data;
-      setEditingNodeProperties({
-        label: currentData.label,
-        ...currentData // Spread all current data properties
-      });
+    if (nodeForContextMenu && nodeForContextMenu.data) {
+      setEditingNodeProperties({ ...nodeForContextMenu.data }); // Clone the data object
       setIsEditPropertiesDialogOpen(true);
     }
     setNodeForContextMenu(null);
@@ -397,22 +391,23 @@ const TopologyPageContent: NextPage = () => {
   
   const handleSaveNodeProperties = () => {
     if (nodeForContextMenu && editingNodeProperties) {
+      const newLabel = editingNodeProperties.label; // Capture the label before potential reset
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeForContextMenu.id
-            ? { ...n, data: { ...n.data, ...editingNodeProperties, label: editingNodeProperties.label } } // Ensure label is also updated
+            ? { ...n, data: { ...editingNodeProperties } } // Use the entire editingNodeProperties as the new data
             : n
         )
       );
-      toast({ title: "属性已更新", description: `节点 "${editingNodeProperties.label}" 的属性已更改。` });
+      toast({ title: "属性已更新", description: `节点 "${newLabel}" 的属性已更改。` });
     }
     setIsEditPropertiesDialogOpen(false);
-    setEditingNodeProperties({label: ''}); // Reset
+    setEditingNodeProperties(null); // Reset
   };
   
   const openDeleteNodeDialog = () => {
     if (nodeForContextMenu) {
-      setIsDeleteNodeDialogOpen(true); // Dialog will use nodeForContextMenu
+      setIsDeleteNodeDialogOpen(true); 
     }
     setNodeForContextMenu(null);
     setContextMenuPosition(null);
@@ -476,12 +471,6 @@ const TopologyPageContent: NextPage = () => {
               <Eraser className="mr-1 h-4 w-4" />
               清空画布
             </Button>
-             {/* Placeholder for Submit Topology Button - To be re-implemented
-            <Button variant="default" onClick={() => {}} size="sm" className="font-sans bg-accent hover:bg-accent/90 text-accent-foreground">
-              <UploadCloud className="mr-1 h-4 w-4" />
-              提交创建实例
-            </Button>
-            */}
           </div>
         </div>
 
@@ -493,7 +482,7 @@ const TopologyPageContent: NextPage = () => {
         )}
 
         <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
-          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> {/* Left Panel narrowed */}
+          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> 
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Settings className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[120px]">
@@ -512,9 +501,9 @@ const TopologyPageContent: NextPage = () => {
             
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Network className="mr-1.5 h-4 w-4 text-primary"/>组件面板</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> {/* Increased height slightly */}
+              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> 
                 <div className="space-y-1 p-1">
-                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( // Exclude generic controller
+                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( 
                     <div key={type} draggable onDragStart={(e) => onDragStartPanelItem(e, type, title)}
                          className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加 "${title}"`}>
@@ -577,7 +566,7 @@ const TopologyPageContent: NextPage = () => {
               proOptions={{ hideAttribution: true }}
               className="bg-background"
               defaultViewport={initialViewport}
-              nodeTypes={nodeTypes} // Register custom node types
+              nodeTypes={nodeTypes} 
             >
               <Controls />
               <MiniMap 
@@ -591,7 +580,6 @@ const TopologyPageContent: NextPage = () => {
           </div>
         </div>
         
-        {/* Context Menu for Nodes */}
         {nodeForContextMenu && contextMenuPosition && (
           <DropdownMenu open={!!nodeForContextMenu} onOpenChange={(isOpen) => !isOpen && setNodeForContextMenu(null)}>
             <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenuPosition.x, top: contextMenuPosition.y }} />
@@ -608,42 +596,42 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
-        {/* Edit Node Properties Dialog */}
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <ShadDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</ShadDialogTitle>
-              {nodeForContextMenu?.data?.type === 'landing' && (
+              {editingNodeProperties?.type === 'landing' && (
                 <DialogDescription className="font-sans text-xs">
                   对于“落地”节点, “标签 (名称)”字段将作为其标识名称 (例如 `ip:port@标签名称` 中的 `@标签名称` 部分)。
                 </DialogDescription>
               )}
             </DialogHeader>
+            {editingNodeProperties && (
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
                 <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
                 <Input
                   id="node-label-input"
                   value={editingNodeProperties.label}
-                  onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, label: e.target.value }))}
+                  onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, label: e.target.value }) : null)}
                   className="font-sans"
                   autoFocus
                 />
               </div>
 
-              {nodeForContextMenu?.data?.type === 'server' && (
+              {editingNodeProperties.type === 'server' && (
                 <>
                   <div className="space-y-1">
                     <Label htmlFor="server-tunnel" className="font-sans">隧道监听地址</Label>
-                    <Input id="server-tunnel" value={(editingNodeProperties as ServerNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, tunnelAddress: e.target.value }))} className="font-mono text-sm" placeholder="0.0.0.0:10001"/>
+                    <Input id="server-tunnel" value={(editingNodeProperties as ServerNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="0.0.0.0:10001"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-target" className="font-sans">流量转发地址</Label>
-                    <Input id="server-target" value={(editingNodeProperties as ServerNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, targetAddress: e.target.value }))} className="font-mono text-sm" placeholder="0.0.0.0:8080"/>
+                    <Input id="server-target" value={(editingNodeProperties as ServerNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="0.0.0.0:8080"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-log" className="font-sans">日志级别</Label>
-                    <Select value={(editingNodeProperties as ServerNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, logLevel: v as ServerNodeData['logLevel'] }))}>
+                    <Select value={(editingNodeProperties as ServerNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ServerNodeData['logLevel'] }) : null)}>
                       <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -653,7 +641,7 @@ const TopologyPageContent: NextPage = () => {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="server-tls" className="font-sans">TLS 模式</Label>
-                    <Select value={(editingNodeProperties as ServerNodeData).tlsMode || '1'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, tlsMode: v as ServerNodeData['tlsMode'] }))}>
+                    <Select value={(editingNodeProperties as ServerNodeData).tlsMode || '1'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, tlsMode: v as ServerNodeData['tlsMode'] }) : null)}>
                        <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                        <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -665,30 +653,30 @@ const TopologyPageContent: NextPage = () => {
                     <>
                       <div className="space-y-1">
                         <Label htmlFor="server-crt" className="font-sans">证书路径 (crt)</Label>
-                        <Input id="server-crt" value={(editingNodeProperties as ServerNodeData).crtPath || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, crtPath: e.target.value }))} className="font-mono text-sm" placeholder="/path/to/cert.pem"/>
+                        <Input id="server-crt" value={(editingNodeProperties as ServerNodeData).crtPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, crtPath: e.target.value }) : null)} className="font-mono text-sm" placeholder="/path/to/cert.pem"/>
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="server-key" className="font-sans">密钥路径 (key)</Label>
-                        <Input id="server-key" value={(editingNodeProperties as ServerNodeData).keyPath || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, keyPath: e.target.value }))} className="font-mono text-sm" placeholder="/path/to/key.pem"/>
+                        <Input id="server-key" value={(editingNodeProperties as ServerNodeData).keyPath || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, keyPath: e.target.value }) : null)} className="font-mono text-sm" placeholder="/path/to/key.pem"/>
                       </div>
                     </>
                   )}
                 </>
               )}
 
-              {nodeForContextMenu?.data?.type === 'client' && (
+              {editingNodeProperties.type === 'client' && (
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="client-tunnel" className="font-sans">服务端隧道地址</Label>
-                    <Input id="client-tunnel" value={(editingNodeProperties as ClientNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, tunnelAddress: e.target.value }))} className="font-mono text-sm" placeholder="your.server.com:10001"/>
+                    <Input id="client-tunnel" value={(editingNodeProperties as ClientNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, tunnelAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="your.server.com:10001"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="client-target" className="font-sans">本地转发地址</Label>
-                    <Input id="client-target" value={(editingNodeProperties as ClientNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, targetAddress: e.target.value }))} className="font-mono text-sm" placeholder="127.0.0.1:8000"/>
+                    <Input id="client-target" value={(editingNodeProperties as ClientNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, targetAddress: e.target.value }) : null)} className="font-mono text-sm" placeholder="127.0.0.1:8000"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="client-log" className="font-sans">日志级别</Label>
-                     <Select value={(editingNodeProperties as ClientNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, logLevel: v as ClientNodeData['logLevel'] }))}>
+                     <Select value={(editingNodeProperties as ClientNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => prev ? ({ ...prev, logLevel: v as ClientNodeData['logLevel'] }) : null)}>
                        <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
                        <SelectContent>
                         <SelectItem value="master">主控默认</SelectItem>
@@ -699,38 +687,37 @@ const TopologyPageContent: NextPage = () => {
                 </>
               )}
 
-              {nodeForContextMenu?.data?.type === 'landing' && (
+              {editingNodeProperties.type === 'landing' && (
                  <>
                   <div className="space-y-1">
                     <Label htmlFor="landing-ip" className="font-sans">IP 地址</Label>
-                    <Input id="landing-ip" value={(editingNodeProperties as LandingNodeData).landingIp || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, landingIp: e.target.value }))} className="font-mono text-sm" placeholder="192.168.1.100"/>
+                    <Input id="landing-ip" value={(editingNodeProperties as LandingNodeData).landingIp || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingIp: e.target.value }) : null)} className="font-mono text-sm" placeholder="192.168.1.100"/>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="landing-port" className="font-sans">端口</Label>
-                    <Input id="landing-port" value={(editingNodeProperties as LandingNodeData).landingPort || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, landingPort: e.target.value }))} className="font-mono text-sm" placeholder="80"/>
+                    <Input id="landing-port" value={(editingNodeProperties as LandingNodeData).landingPort || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, landingPort: e.target.value }) : null)} className="font-mono text-sm" placeholder="80"/>
                   </div>
                 </>
               )}
 
-              {nodeForContextMenu?.data?.type === 'user' && (
+              {editingNodeProperties.type === 'user' && (
                  <div className="space-y-1">
                     <Label htmlFor="user-desc" className="font-sans">描述</Label>
-                    <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, description: e.target.value }))} className="font-sans text-sm" placeholder="用户流量描述"/>
+                    <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => prev ? ({ ...prev, description: e.target.value }) : null)} className="font-sans text-sm" placeholder="用户流量描述"/>
                   </div>
               )}
-
             </div>
+            )}
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="outline" className="font-sans">取消</Button>
               </DialogClose>
-              <Button onClick={handleSaveNodeProperties} className="font-sans">保存更改</Button>
+              <Button onClick={handleSaveNodeProperties} className="font-sans" disabled={!editingNodeProperties}>保存更改</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
 
-        {/* Delete Node Dialog */}
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={setIsDeleteNodeDialogOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -751,7 +738,6 @@ const TopologyPageContent: NextPage = () => {
             </AlertDialogContent>
         </AlertDialog>
 
-        {/* Clear Canvas Dialog */}
         <AlertDialog open={isClearCanvasAlertOpen} onOpenChange={setIsClearCanvasAlertOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -785,3 +771,4 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
+
