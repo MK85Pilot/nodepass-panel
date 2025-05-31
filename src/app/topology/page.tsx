@@ -54,7 +54,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from "@/lib/utils";
 
 
-const initialViewport: Viewport = { x: 0, y: 0, zoom: 1.2 };
+const initialViewport: Viewport = { x: 0, y: 0, zoom: 0.8 };
 
 interface BaseNodeData {
   label: string;
@@ -498,10 +498,11 @@ const TopologyPageContent: NextPage = () => {
 
   const deleteEdgeFromContextMenu = () => {
     if (edgeForContextMenu) {
+      const edgeLabel = `从 ${rfGetNode(edgeForContextMenu.source)?.data?.label || '未知源'} 到 ${rfGetNode(edgeForContextMenu.target)?.data?.label || '未知目标'} (ID: ${edgeForContextMenu.id.substring(0,8)}...)`;
       setEdges((eds) => eds.filter((e) => e.id !== edgeForContextMenu.id));
       toast({
         title: "链路已删除",
-        description: `ID: ${edgeForContextMenu.id.substring(0, 15)}... 的链路已被删除。`,
+        description: `链路 "${edgeLabel}" 已被删除。`,
         variant: "destructive",
       });
       if (selectedChainElements?.edges.has(edgeForContextMenu.id)) {
