@@ -7,7 +7,7 @@ import {
   ReactFlow,
   Controls,
   Background,
-  MiniMap,
+  // MiniMap, // Removed MiniMap import
   useNodesState,
   useEdgesState,
   addEdge,
@@ -206,23 +206,7 @@ const nodeTypes = {
   custom: NodePassFlowNode,
 };
 
-const getMiniMapNodeColor = (node: Node<TopologyNodeData | undefined>): string => {
-  if (!node.data) return 'hsl(var(--muted-foreground))';
-  switch (node.data.type) {
-    case 'controller':
-      return 'hsl(var(--primary))'; 
-    case 'server':
-      return 'hsl(var(--accent))'; 
-    case 'client':
-      return 'hsl(var(--chart-2))';
-    case 'landing':
-      return 'hsl(var(--chart-4))';
-    case 'user':
-      return 'hsl(var(--chart-5))';
-    default:
-      return 'hsl(var(--muted-foreground))';
-  }
-};
+// Removed getMiniMapNodeColor function
 
 
 const TopologyPageContent: NextPage = () => {
@@ -654,13 +638,7 @@ const TopologyPageContent: NextPage = () => {
               nodeTypes={nodeTypes} 
             >
               <Controls />
-              <MiniMap 
-                nodeComponent={NodePassFlowNode} 
-                nodeColor={getMiniMapNodeColor}
-                zoomable 
-                pannable 
-                className="bg-card border border-border rounded-md"
-              />
+              {/* MiniMap removed */}
               <Background gap={16} />
             </ReactFlow>
           </div>
