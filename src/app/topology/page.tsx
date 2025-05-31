@@ -52,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle } from '@/components/ui/dialog'; // Added DialogHeader, DialogFooter, DialogTitle
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -611,9 +611,9 @@ const TopologyPageContent: NextPage = () => {
         {/* Edit Node Properties Dialog */}
         <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
           <DialogContent className="sm:max-w-md">
-            <AlertDialogHeader> {/* Using AlertDialogHeader for consistent styling, though it's a Dialog */}
-              <AlertDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</AlertDialogTitle>
-            </AlertDialogHeader>
+            <DialogHeader>
+              <ShadDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</ShadDialogTitle>
+            </DialogHeader>
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
                 <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
@@ -715,12 +715,12 @@ const TopologyPageContent: NextPage = () => {
               )}
 
             </div>
-            <AlertDialogFooter> {/* Using AlertDialogFooter for consistent styling */}
+            <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="outline" className="font-sans">取消</Button>
               </DialogClose>
               <Button onClick={handleSaveNodeProperties} className="font-sans">保存更改</Button>
-            </AlertDialogFooter>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
