@@ -18,18 +18,20 @@ import {
   type OnConnect,
   type Viewport,
   MarkerType,
+  Handle,
+  Position,
+  NodeProps,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { nodePassApi } from '@/lib/api';
-import type { Instance } from '@/types/nodepass';
+// nodePassApi import removed as submit functionality is not yet re-implemented for React Flow
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings, Info, Eraser, UploadCloud, Edit3, Trash2 } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Network, ServerIcon, SmartphoneIcon, Globe, UserCircle2, Settings2Icon as ControllerIcon, Info, Eraser, UploadCloud, Edit3, Trash2, Settings } from 'lucide-react'; // Renamed Settings to Settings2Icon for Controller, kept Settings for general
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -49,24 +51,159 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogClose } from '@/components/ui/dialog'; // DialogContent was missing, added Dialog, DialogClose as they are used.
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from "@/lib/utils";
+
 
 const initialViewport: Viewport = { x: 0, y: 0, zoom: 1.2 };
 
-interface TopologyNodeData {
+interface BaseNodeData {
   label: string;
-  type: 'controller' | 'server' | 'client' | 'landing' | 'user' | 'default';
-  apiId?: string;
-  apiName?: string;
-  // Add other specific data properties as needed
+  type: 'controller' | 'server' | 'client' | 'landing' | 'user';
+  apiId?: string; // For controller tracking
+  apiName?: string; // For controller tracking
 }
 
-const initialNodes: Node<TopologyNodeData>[] = [];
+export interface ControllerNodeData extends BaseNodeData {
+  type: 'controller';
+  apiName: string;
+  apiId: string;
+}
+export interface ServerNodeData extends BaseNodeData {
+  type: 'server';
+  tunnelAddress: string;
+  targetAddress: string;
+  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  tlsMode: 'master' | '0' | '1' | '2';
+  crtPath?: string;
+  keyPath?: string;
+}
+export interface ClientNodeData extends BaseNodeData {
+  type: 'client';
+  tunnelAddress: string;
+  targetAddress: string;
+  logLevel: 'master' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+}
+export interface LandingNodeData extends BaseNodeData {
+  type: 'landing';
+  landingIp: string;
+  landingPort: string;
+}
+export interface UserNodeData extends BaseNodeData {
+  type: 'user';
+  description: string;
+}
+
+export type TopologyNodeData = ControllerNodeData | ServerNodeData | ClientNodeData | LandingNodeData | UserNodeData;
+export type NodePassFlowNodeType = Node<TopologyNodeData>;
+
+
+const initialNodes: NodePassFlowNodeType[] = [];
 const initialEdges: Edge[] = [];
 
 let nodeIdCounter = 0;
-const getId = (prefix = 'dndnode_') => `${prefix}${nodeIdCounter++}`;
+const getId = (prefix = 'npnode_') => `${prefix}${nodeIdCounter++}_${Date.now()}`;
+
+
+const getNodeIcon = (nodeType: TopologyNodeData['type'] | undefined): React.ElementType => {
+    switch (nodeType) {
+        case 'controller': return ControllerIcon;
+        case 'server': return ServerIcon;
+        case 'client': return SmartphoneIcon;
+        case 'landing': return Globe;
+        case 'user': return UserCircle2;
+        default: return Network;
+    }
+};
+
+const getNodeIconColorClass = (nodeType: TopologyNodeData['type'] | undefined): string => {
+    switch (nodeType) {
+        case 'controller': return 'text-yellow-500';
+        case 'server': return 'text-primary';
+        case 'client': return 'text-accent';
+        case 'landing': return 'text-purple-500';
+        case 'user': return 'text-green-500';
+        default: return 'text-muted-foreground';
+    }
+};
+
+const getNodeBorderColorClass = (nodeType: TopologyNodeData['type'] | undefined, selected: boolean = false): string => {
+    if (selected) return 'border-ring'; // Use ring color for selection border for all types
+    switch (nodeType) {
+        case 'controller': return 'border-yellow-500';
+        case 'server': return 'border-primary';
+        case 'client': return 'border-accent';
+        case 'landing': return 'border-purple-500';
+        case 'user': return 'border-green-500';
+        default: return 'border-border';
+    }
+};
+
+
+const NodePassFlowNode: React.FC<NodeProps<TopologyNodeData>> = React.memo(({ data, selected }) => {
+  const Icon = getNodeIcon(data.type);
+  
+  let subText = '未配置';
+  switch (data.type) {
+    case 'controller':
+      subText = data.apiName || '未指定API';
+      break;
+    case 'server':
+      subText = data.tunnelAddress || '未配置隧道';
+      break;
+    case 'client':
+      subText = data.tunnelAddress || '未配置服务端';
+      break;
+    case 'landing':
+      subText = (data.landingIp && data.landingPort) ? `${data.landingIp}:${data.landingPort}` : '未配置IP/端口';
+      break;
+    case 'user':
+      subText = data.description ? (data.description.length > 25 ? data.description.substring(0, 22) + '...' : data.description) : '未描述';
+      break;
+  }
+
+  return (
+    <div
+      className={cn(
+        "bg-card text-card-foreground rounded-md shadow-md flex flex-col items-center justify-center border-2",
+        "min-w-[150px] max-w-[200px] py-2 px-2.5", // Compact sizing
+        getNodeBorderColorClass(data.type, selected),
+        selected && "ring-2 ring-offset-1 ring-ring" // Ensure ring is applied correctly on top of border
+      )}
+    >
+      <div className="flex items-center text-[11px] font-medium mb-0.5">
+        {Icon && <Icon className={`h-3.5 w-3.5 mr-1 ${getNodeIconColorClass(data.type)}`} />}
+        <span className="truncate" title={data.label}>{data.label}</span>
+      </div>
+      {subText && <div className="text-[9px] text-muted-foreground truncate w-full text-center" title={subText}>{subText}</div>}
+      
+      {/* Handles - simplified and positioned */}
+      {(data.type === 'controller' || data.type === 'user') && (
+         <Handle type="source" position={Position.Right} id="output" className="!w-2 !h-2 !bg-primary" />
+      )}
+      {(data.type === 'server' || data.type === 'client' || data.type === 'landing') && (
+         <Handle type="target" position={Position.Left} id="input" className="!w-2 !h-2 !bg-primary" />
+      )}
+      {data.type === 'server' && (
+        <>
+          <Handle type="source" position={Position.Right} id="s_to_c_output" className="!w-2 !h-2 !bg-accent !-translate-y-1" />
+          <Handle type="source" position={Position.Bottom} id="s_to_l_output" className="!w-2 !h-2 !bg-purple-500" />
+        </>
+      )}
+      {data.type === 'client' && (
+        <Handle type="source" position={Position.Right} id="c_to_l_output" className="!w-2 !h-2 !bg-purple-500" />
+      )}
+    </div>
+  );
+});
+NodePassFlowNode.displayName = 'NodePassFlowNode';
+
+const nodeTypes = {
+  custom: NodePassFlowNode,
+};
+
 
 const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig, getApiRootUrl, getToken } = useApiConfig();
@@ -77,32 +214,25 @@ const TopologyPageContent: NextPage = () => {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNodeForProps, setSelectedNodeForProps] = useState<Node<TopologyNodeData> | null>(null);
+  
+  const [selectedNodeForPropsPanel, setSelectedNodeForPropsPanel] = useState<NodePassFlowNodeType | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [isClearCanvasAlertOpen, setIsClearCanvasAlertOpen] = useState(false);
 
-  const [contextMenu, setContextMenu] = useState<{
-    mouseX: number;
-    mouseY: number;
-    node: Node<TopologyNodeData>;
-  } | null>(null);
-
-  const [isEditLabelDialogOpen, setIsEditLabelDialogOpen] = useState(false);
-  const [editingNodeNewLabel, setEditingNodeNewLabel] = useState('');
+  const [nodeForContextMenu, setNodeForContextMenu] = useState<NodePassFlowNodeType | null>(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  const [isEditPropertiesDialogOpen, setIsEditPropertiesDialogOpen] = useState(false);
+  const [editingNodeProperties, setEditingNodeProperties] = useState<Partial<TopologyNodeData> & { label: string }>({ label: '' });
   
   const [isDeleteNodeDialogOpen, setIsDeleteNodeDialogOpen] = useState(false);
-  const [nodeToDelete, setNodeToDelete] = useState<Node<TopologyNodeData> | null>(null);
-
-
+  
   const { data: allFetchedInstancesData, isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
-    (Instance & { apiId: string; apiName: string })[],
+    any[], // Simplified for placeholder
     Error
   >({
-    queryKey: ['allInstancesForTopology', apiConfigsList.map(c => c.id).join(',')],
+    queryKey: ['allInstancesForTopologyPlaceholder', apiConfigsList.map(c => c.id).join(',')],
     queryFn: async () => {
-      if (apiConfigsList.length === 0) return [];
-      // This data isn't directly used to populate React Flow nodes currently,
-      // but could be used for validation or reference in the future.
       console.log("Fetched instances data (for reference, not direct graph population):", allFetchedInstancesData);
       return []; 
     },
@@ -110,24 +240,28 @@ const TopologyPageContent: NextPage = () => {
     onSuccess: () => setLastRefreshed(new Date()),
   });
 
-  const isValidConnection = useCallback((sourceNodeType: string, targetNodeType: string): boolean => {
+  const isValidConnection = useCallback((sourceNode: NodePassFlowNodeType, targetNode: NodePassFlowNodeType): boolean => {
+    if (!sourceNode.data || !targetNode.data) return false;
+    const sourceType = sourceNode.data.type;
+    const targetType = targetNode.data.type;
+
     const validConnections: Record<string, string[]> = {
       'controller': ['server', 'client'],
       'user': ['client'],
       'client': ['server', 'landing'],
-      'server': ['landing', 'client'], // Server can also output to a client if it's a passthrough/proxy
+      'server': ['client', 'landing'],
     };
-    return validConnections[sourceNodeType]?.includes(targetNodeType) || false;
+    return validConnections[sourceType]?.includes(targetType) || false;
   }, []);
 
   const onConnect: OnConnect = useCallback(
     (params) => {
-      const sourceNode = getNode(params.source!);
-      const targetNode = getNode(params.target!);
+      const sourceNode = getNode(params.source!) as NodePassFlowNodeType | undefined;
+      const targetNode = getNode(params.target!) as NodePassFlowNodeType | undefined;
 
       if (sourceNode && targetNode && sourceNode.data && targetNode.data) {
-        if (isValidConnection(sourceNode.data.type, targetNode.data.type)) {
-          setEdges((eds) => addEdge({ ...params, type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--primary))' }, style: { strokeWidth: 2, stroke: 'hsl(var(--primary))' } }, eds));
+        if (isValidConnection(sourceNode, targetNode)) {
+          setEdges((eds) => addEdge({ ...params, type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: 'hsl(var(--primary))' }, style: { strokeWidth: 1.5, stroke: 'hsl(var(--primary))' } }, eds));
           toast({ title: "连接已创建", description: `节点 "${sourceNode.data.label}" 已连接到 "${targetNode.data.label}"。` });
         } else {
           toast({ title: "无效的连接", description: `无法从 "${sourceNode.data.type}" 类型连接到 "${targetNode.data.type}" 类型。`, variant: "destructive" });
@@ -153,189 +287,160 @@ const TopologyPageContent: NextPage = () => {
       const apiId = event.dataTransfer.getData('application/reactflow-apiid');
       const apiName = event.dataTransfer.getData('application/reactflow-apiname');
 
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
+      if (typeof type === 'undefined' || !type) return;
 
       const position = screenToFlowPosition({
         x: event.clientX - reactFlowBounds.left,
         y: event.clientY - reactFlowBounds.top,
       });
       
-      let newNodeType = type;
-      if (type === 'controller' && apiId) { // It's from the "已配置主控" panel
-          const existingControllers = getNodes().filter(n => n.data.type === 'controller');
-          if (existingControllers.length === 0) {
-              // First controller from API config, create as actual controller
-              label = apiName || '主控';
-          } else {
-              // Subsequent controllers from API config, create as client by default
-              newNodeType = 'client';
-              label = `客户端 (${apiName || '未知主控'})`;
-          }
+      let newNodeData: TopologyNodeData;
+
+      switch (type) {
+        case 'controller':
+          newNodeData = {
+            label: apiName || label || '主控',
+            type: 'controller',
+            apiId: apiId || '',
+            apiName: apiName || '未知API',
+          };
+          break;
+        case 'server':
+          newNodeData = {
+            label: label || '服务端', type: 'server',
+            tunnelAddress: '0.0.0.0:10001', targetAddress: '0.0.0.0:8080',
+            logLevel: 'info', tlsMode: '1', // Default to self-signed
+          };
+          break;
+        case 'client':
+          newNodeData = {
+            label: label || '客户端', type: 'client',
+            tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000',
+            logLevel: 'info',
+          };
+          break;
+        case 'landing':
+          newNodeData = {
+            label: label || '落地', type: 'landing',
+            landingIp: '', landingPort: '',
+          };
+          break;
+        case 'user':
+          newNodeData = {
+            label: label || '用户源', type: 'user',
+            description: '',
+          };
+          break;
+        default:
+          console.warn("Unknown node type dropped:", type);
+          return;
       }
 
-
-      const newNode: Node<TopologyNodeData> = {
-        id: getId(),
-        type: 'default',
+      const newNode: NodePassFlowNodeType = {
+        id: getId(type + '_'),
+        type: 'custom', // Use our custom node type
         position,
-        data: { 
-          label: label || `${newNodeType} 节点`,
-          type: newNodeType,
-          ...(apiId && newNodeType === 'controller' && { apiId, apiName }), // Store API info only if it's a controller type
-        },
-        style: {
-          border: '2px solid',
-          borderColor: getNodeBorderColor(newNodeType),
-          borderRadius: '0.5rem',
-          padding: '10px 15px',
-          minWidth: '180px',
-          background: 'hsl(var(--card))',
-          color: 'hsl(var(--card-foreground))',
-          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-        }
+        data: newNodeData,
       };
 
       setNodes((nds) => nds.concat(newNode));
       toast({title: "节点已添加", description: `节点 "${newNode.data.label}" 已添加到画布。`})
-
-      // If it was the first controller from API Config, also add a default server
-      if (type === 'controller' && apiId && newNodeType === 'controller') {
-          const serverNode: Node<TopologyNodeData> = {
-              id: getId('server_'),
-              type: 'default',
-              position: { x: position.x + 220, y: position.y },
-              data: { label: '默认服务端', type: 'server' },
-               style: {
-                  border: '2px solid',
-                  borderColor: getNodeBorderColor('server'),
-                  borderRadius: '0.5rem',
-                  padding: '10px 15px',
-                  minWidth: '180px',
-                  background: 'hsl(var(--card))',
-                  color: 'hsl(var(--card-foreground))',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-               }
-          };
-          setNodes((nds) => nds.concat(serverNode));
-          setEdges((eds) => addEdge({
-              id: `e-${newNode.id}-${serverNode.id}`,
-              source: newNode.id,
-              target: serverNode.id,
-              type: 'smoothstep',
-              animated: true,
-              markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'hsl(var(--primary))' },
-              style: { strokeWidth: 2, stroke: 'hsl(var(--primary))' },
-          }, eds));
-      }
     },
-    [screenToFlowPosition, setNodes, setEdges, toast, getNodes]
+    [screenToFlowPosition, setNodes, toast] 
   );
 
-  const handleNodeClick = useCallback((event: React.MouseEvent, node: Node<TopologyNodeData>) => {
-    setSelectedNodeForProps(node);
-    setContextMenu(null); // Close context menu on left click
+  const handleNodeClick = useCallback((event: React.MouseEvent, node: NodePassFlowNodeType) => {
+    setSelectedNodeForPropsPanel(node);
+    setNodeForContextMenu(null); 
   }, []);
 
   const handlePaneClick = useCallback(() => {
-    setSelectedNodeForProps(null);
-    setContextMenu(null); // Close context menu on pane click
+    setSelectedNodeForPropsPanel(null);
+    setNodeForContextMenu(null); 
   }, []);
   
   const clearCanvas = () => {
     setNodes([]);
     setEdges([]);
-    setSelectedNodeForProps(null);
-    setContextMenu(null);
+    setSelectedNodeForPropsPanel(null);
+    setNodeForContextMenu(null);
     toast({ title: "画布已清空", description: "所有节点和连接已移除。" });
     setIsClearCanvasAlertOpen(false);
   };
 
   const handleNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node<TopologyNodeData>) => {
+    (event: React.MouseEvent, node: NodePassFlowNodeType) => {
       event.preventDefault();
-      setSelectedNodeForProps(node); // Also select it for the properties panel
-      setContextMenu({
-        mouseX: event.clientX,
-        mouseY: event.clientY,
-        node: node,
-      });
+      setSelectedNodeForPropsPanel(node); 
+      setNodeForContextMenu(node);
+      setContextMenuPosition({ x: event.clientX, y: event.clientY });
     },
-    [setSelectedNodeForProps]
+    []
   );
 
-  const handleEditLabel = () => {
-    if (contextMenu?.node) {
-      setEditingNodeNewLabel(contextMenu.node.data.label);
-      setIsEditLabelDialogOpen(true);
+  const openEditPropertiesDialog = () => {
+    if (nodeForContextMenu) {
+      const currentData = nodeForContextMenu.data;
+      setEditingNodeProperties({
+        label: currentData.label,
+        ...currentData // Spread all current data properties
+      });
+      setIsEditPropertiesDialogOpen(true);
     }
-    setContextMenu(null);
+    setNodeForContextMenu(null);
+    setContextMenuPosition(null);
   };
-
-  const handleSaveLabel = () => {
-    if (contextMenu?.node) {
+  
+  const handleSaveNodeProperties = () => {
+    if (nodeForContextMenu && editingNodeProperties) {
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === contextMenu.node.id
-            ? { ...n, data: { ...n.data, label: editingNodeNewLabel } }
+          n.id === nodeForContextMenu.id
+            ? { ...n, data: { ...n.data, ...editingNodeProperties, label: editingNodeProperties.label } } // Ensure label is also updated
             : n
         )
       );
-      toast({ title: "标签已更新", description: `节点 "${contextMenu.node.data.label}" 的标签已更改。` });
+      toast({ title: "属性已更新", description: `节点 "${editingNodeProperties.label}" 的属性已更改。` });
     }
-    setIsEditLabelDialogOpen(false);
+    setIsEditPropertiesDialogOpen(false);
+    setEditingNodeProperties({label: ''}); // Reset
   };
   
-  const handleDeleteNode = () => {
-    if (contextMenu?.node) {
-      setNodeToDelete(contextMenu.node);
-      setIsDeleteNodeDialogOpen(true);
+  const openDeleteNodeDialog = () => {
+    if (nodeForContextMenu) {
+      setIsDeleteNodeDialogOpen(true); // Dialog will use nodeForContextMenu
     }
-    setContextMenu(null);
+    setNodeForContextMenu(null);
+    setContextMenuPosition(null);
   };
 
   const confirmDeleteNode = () => {
-    if (nodeToDelete) {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeToDelete.id));
-      setEdges((eds) => eds.filter((e) => e.source !== nodeToDelete.id && e.target !== nodeToDelete.id));
-      toast({ title: "节点已删除", description: `节点 "${nodeToDelete.data.label}" 已被删除。`, variant: "destructive" });
-      if (selectedNodeForProps?.id === nodeToDelete.id) {
-        setSelectedNodeForProps(null);
+    if (nodeForContextMenu) {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeForContextMenu.id));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeForContextMenu.id && e.target !== nodeForContextMenu.id));
+      toast({ title: "节点已删除", description: `节点 "${nodeForContextMenu.data.label}" 已被删除。`, variant: "destructive" });
+      if (selectedNodeForPropsPanel?.id === nodeForContextMenu.id) {
+        setSelectedNodeForPropsPanel(null);
       }
     }
     setIsDeleteNodeDialogOpen(false);
-    setNodeToDelete(null);
   };
 
-
-  const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; iconColorClass: string; }[] = [
-    { type: 'server', title: '服务端', icon: ServerIcon, iconColorClass: "text-primary" },
-    { type: 'client', title: '客户端', icon: SmartphoneIcon, iconColorClass: "text-accent" },
-    { type: 'landing', title: '落地', icon: Globe, iconColorClass: "text-purple-500" },
-    { type: 'user', title: '用户源', icon: UserCircle2, iconColorClass: "text-green-500" },
-    { type: 'controller', title: '主控 (通用)', icon: Settings, iconColorClass: "text-yellow-500" },
+  const nodePanelTypes: { type: TopologyNodeData['type']; title: string; icon: React.ElementType; }[] = [
+    { type: 'server', title: '服务端', icon: ServerIcon },
+    { type: 'client', title: '客户端', icon: SmartphoneIcon },
+    { type: 'landing', title: '落地', icon: Globe },
+    { type: 'user', title: '用户源', icon: UserCircle2 },
+    { type: 'controller', title: '主控 (通用)', icon: ControllerIcon },
   ];
 
-  const onDragStart = (event: React.DragEvent<HTMLDivElement>, nodeType: TopologyNodeData['type'], label?: string, apiId?: string, apiName?: string) => {
+  const onDragStartPanelItem = (event: React.DragEvent<HTMLDivElement>, nodeType: TopologyNodeData['type'], label?: string, apiId?: string, apiName?: string) => {
     event.dataTransfer.setData('application/reactflow-nodetype', nodeType);
-    event.dataTransfer.setData('application/reactflow-label', label || `${nodeType} Node`);
+    event.dataTransfer.setData('application/reactflow-label', label || `${nodeType} 节点`);
     if (apiId) event.dataTransfer.setData('application/reactflow-apiid', apiId);
     if (apiName) event.dataTransfer.setData('application/reactflow-apiname', apiName);
     event.dataTransfer.effectAllowed = 'copy';
   };
-
-  const getNodeBorderColor = (nodeType: TopologyNodeData['type'] | undefined) => {
-    switch (nodeType) {
-        case 'controller': return 'hsl(var(--ring))'; // Using ring color as primary is blue
-        case 'server': return 'hsl(var(--chart-2))';
-        case 'client': return 'hsl(var(--accent))';
-        case 'landing': return 'hsl(var(--chart-4))';
-        case 'user': return 'hsl(var(--chart-1))';
-        default: return 'hsl(var(--border))';
-    }
-  };
-
 
   if (isLoadingApiConfig) {
     return (
@@ -352,7 +457,7 @@ const TopologyPageContent: NextPage = () => {
     <AppLayout onLog={(message, type) => console.log(`[AppLayout Log] ${type}: ${message}`)}>
       <div className="flex flex-col h-full">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-          <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑 (React Flow)</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold font-title">实例连接拓扑</h1>
           <div className="flex items-center gap-2 flex-wrap">
             {lastRefreshed && (
               <span className="text-xs text-muted-foreground font-sans">
@@ -367,7 +472,7 @@ const TopologyPageContent: NextPage = () => {
               <Eraser className="mr-1 h-4 w-4" />
               清空画布
             </Button>
-            {/* Placeholder for Submit Topology Button
+             {/* Placeholder for Submit Topology Button - To be re-implemented
             <Button variant="default" onClick={() => {}} size="sm" className="font-sans bg-accent hover:bg-accent/90 text-accent-foreground">
               <UploadCloud className="mr-1 h-4 w-4" />
               提交创建实例
@@ -384,18 +489,17 @@ const TopologyPageContent: NextPage = () => {
         )}
 
         <div className="flex-grow flex gap-4" style={{ height: 'calc(100vh - var(--header-height) - var(--footer-height) - 10rem)' }}>
-          {/* Left Panel narrowed from w-72 to w-60 */}
-          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col">
+          <div className="w-60 flex-shrink-0 space-y-3 h-full overflow-y-hidden flex flex-col"> {/* Left Panel narrowed */}
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Settings className="mr-1.5 h-4 w-4 text-yellow-500"/>已配置主控</CardTitle></CardHeader>
               <CardContent className="p-1.5"><ScrollArea className="h-[120px]">
                 <div className="space-y-1 p-1">
                   {apiConfigsList.length === 0 && <p className="text-xs text-muted-foreground text-center py-1 font-sans">无主控连接。</p>}
                   {apiConfigsList.map((config) => (
-                    <div key={config.id} draggable onDragStart={(e) => onDragStart(e, 'controller', config.name, config.id, config.name)}
-                         className="flex items-center gap-1.5 p-1 border rounded cursor-grab hover:bg-accent/10 active:cursor-grabbing transition-colors text-xs"
+                    <div key={config.id} draggable onDragStart={(e) => onDragStartPanelItem(e, 'controller', config.name, config.id, config.name)}
+                         className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加主控: "${config.name}"`}>
-                      <Settings className="h-3 w-3 text-yellow-500 shrink-0" />
+                      <ControllerIcon className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                       <span className="font-medium truncate font-sans">{config.name}</span>
                     </div>
                   ))}
@@ -404,13 +508,13 @@ const TopologyPageContent: NextPage = () => {
             
             <Card className="shadow-sm flex-shrink-0">
               <CardHeader className="py-2.5 px-3"><CardTitle className="text-sm font-title flex items-center"><Network className="mr-1.5 h-4 w-4 text-primary"/>组件面板</CardTitle></CardHeader>
-              <CardContent className="p-1.5"><ScrollArea className="h-[140px]">
+              <CardContent className="p-1.5"><ScrollArea className="h-[160px]"> {/* Increased height slightly */}
                 <div className="space-y-1 p-1">
-                {nodePanelTypes.map(({ type, title, icon: Icon, iconColorClass }) => (
-                    <div key={type} draggable onDragStart={(e) => onDragStart(e, type, title)}
-                         className="flex items-center gap-1.5 p-1 border rounded cursor-grab hover:bg-accent/10 active:cursor-grabbing transition-colors text-xs"
+                {nodePanelTypes.filter(nt => nt.type !== 'controller').map(({ type, title, icon: Icon }) => ( // Exclude generic controller
+                    <div key={type} draggable onDragStart={(e) => onDragStartPanelItem(e, type, title)}
+                         className="flex items-center gap-1.5 p-1.5 border rounded cursor-grab hover:bg-muted/50 active:cursor-grabbing transition-colors text-xs"
                          title={`拖拽添加 "${title}"`}>
-                        <Icon className={`h-3 w-3 ${iconColorClass || 'text-muted-foreground'} shrink-0`} />
+                        <Icon className={`h-3.5 w-3.5 ${getNodeIconColorClass(type)} shrink-0`} />
                         <span className="font-medium font-sans">{title}</span>
                     </div>
                 ))}
@@ -421,24 +525,40 @@ const TopologyPageContent: NextPage = () => {
               <CardHeader className="py-2.5 px-3 flex-shrink-0">
                 <CardTitle className="text-sm font-title flex items-center"><Info className="mr-1.5 h-4 w-4 text-blue-500"/>节点属性</CardTitle>
                 <CardDescription className="text-xs font-sans mt-0.5 truncate">
-                  {selectedNodeForProps ? `编辑: ${selectedNodeForProps.data.label} (ID: ${selectedNodeForProps.id.substring(0,8)}...)` : "点击节点查看属性。"}
+                  {selectedNodeForPropsPanel ? `编辑: ${selectedNodeForPropsPanel.data.label} (ID: ${selectedNodeForPropsPanel.id.substring(0,8)}...)` : "点击节点查看属性。"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-2.5 flex-grow overflow-y-auto"><ScrollArea className="h-full pr-1">
-                {selectedNodeForProps ? (
-                  <div className="space-y-2.5">
-                    <p className="text-xs font-sans">ID: <span className="font-mono">{selectedNodeForProps.id}</span></p>
-                    <p className="text-xs font-sans">类型: <span className="font-mono">{selectedNodeForProps.data.type || 'N/A'}</span></p>
-                    <p className="text-xs font-sans">标签: <span className="font-mono">{selectedNodeForProps.data.label}</span></p>
-                    {selectedNodeForProps.data.apiName && <p className="text-xs font-sans">来源主控: <span className="font-mono">{selectedNodeForProps.data.apiName}</span></p>}
-                    <p className="text-xs text-muted-foreground font-sans mt-2">右键点击节点可编辑标签或删除。</p>
+                {selectedNodeForPropsPanel ? (
+                  <div className="space-y-1.5 text-xs">
+                    <p><span className="font-semibold">ID:</span> <span className="font-mono">{selectedNodeForPropsPanel.id}</span></p>
+                    <p><span className="font-semibold">类型:</span> <span className="font-mono capitalize">{selectedNodeForPropsPanel.data.type}</span></p>
+                    <p><span className="font-semibold">标签:</span> {selectedNodeForPropsPanel.data.label}</p>
+                    {selectedNodeForPropsPanel.data.type === 'controller' && <p><span className="font-semibold">API:</span> {selectedNodeForPropsPanel.data.apiName}</p>}
+                    {selectedNodeForPropsPanel.data.type === 'server' && <>
+                        <p><span className="font-semibold">隧道:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.tunnelAddress}</span></p>
+                        <p><span className="font-semibold">转发:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.targetAddress}</span></p>
+                        <p><span className="font-semibold">日志:</span> {selectedNodeForPropsPanel.data.logLevel}</p>
+                        <p><span className="font-semibold">TLS:</span> {selectedNodeForPropsPanel.data.tlsMode}</p>
+                    </>}
+                     {selectedNodeForPropsPanel.data.type === 'client' && <>
+                        <p><span className="font-semibold">服务端隧道:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.tunnelAddress}</span></p>
+                        <p><span className="font-semibold">本地转发:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.targetAddress}</span></p>
+                        <p><span className="font-semibold">日志:</span> {selectedNodeForPropsPanel.data.logLevel}</p>
+                    </>}
+                     {selectedNodeForPropsPanel.data.type === 'landing' && <>
+                        <p><span className="font-semibold">IP:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.landingIp || 'N/A'}</span></p>
+                        <p><span className="font-semibold">端口:</span> <span className="font-mono">{selectedNodeForPropsPanel.data.landingPort || 'N/A'}</span></p>
+                    </>}
+                     {selectedNodeForPropsPanel.data.type === 'user' && <p><span className="font-semibold">描述:</span> {selectedNodeForPropsPanel.data.description || 'N/A'}</p>}
+                    <p className="text-muted-foreground font-sans mt-2 pt-2 border-t">右键点击节点可编辑或删除。</p>
                   </div>
                 ) : ( <p className="text-xs text-muted-foreground text-center py-3 font-sans">未选择节点。</p> )}
               </ScrollArea></CardContent>
             </Card>
           </div>
 
-          <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/70 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
+          <div ref={reactFlowWrapper} className="flex-grow border rounded-lg shadow-md bg-background/80 backdrop-blur-sm relative h-full" onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -453,24 +573,25 @@ const TopologyPageContent: NextPage = () => {
               proOptions={{ hideAttribution: true }}
               className="bg-background"
               defaultViewport={initialViewport}
+              nodeTypes={nodeTypes} // Register custom node types
             >
               <Controls />
-              <MiniMap nodeStrokeWidth={3} zoomable pannable nodeColor={(n) => getNodeBorderColor(n.data.type)} />
+              <MiniMap nodeComponent={NodePassFlowNode} zoomable pannable nodeColor={(n) => getNodeBorderColorClass(n.data.type).split('-')[1] || 'gray'} />
               <Background gap={16} />
             </ReactFlow>
           </div>
         </div>
         
         {/* Context Menu for Nodes */}
-        {contextMenu && (
-          <DropdownMenu open={!!contextMenu} onOpenChange={(isOpen) => !isOpen && setContextMenu(null)}>
-            <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenu.mouseX, top: contextMenu.mouseY }} />
+        {nodeForContextMenu && contextMenuPosition && (
+          <DropdownMenu open={!!nodeForContextMenu} onOpenChange={(isOpen) => !isOpen && setNodeForContextMenu(null)}>
+            <DropdownMenuTrigger style={{ position: 'fixed', left: contextMenuPosition.x, top: contextMenuPosition.y }} />
             <DropdownMenuContent align="start" className="w-48 font-sans">
-              <DropdownMenuItem onClick={handleEditLabel}>
+              <DropdownMenuItem onClick={openEditPropertiesDialog}>
                 <Edit3 className="mr-2 h-4 w-4" />
-                编辑标签
+                编辑属性
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDeleteNode} className="text-destructive hover:!text-destructive focus:!text-destructive">
+              <DropdownMenuItem onClick={openDeleteNodeDialog} className="text-destructive hover:!text-destructive focus:!text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
                 删除节点
               </DropdownMenuItem>
@@ -478,31 +599,122 @@ const TopologyPageContent: NextPage = () => {
           </DropdownMenu>
         )}
 
-        {/* Edit Label Dialog */}
-        <AlertDialog open={isEditLabelDialogOpen} onOpenChange={setIsEditLabelDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="font-title">编辑节点标签</AlertDialogTitle>
-              <AlertDialogDescription className="font-sans">
-                为节点 "{contextMenu?.node.data.label}" 输入新标签。
-              </AlertDialogDescription>
+        {/* Edit Node Properties Dialog */}
+        <Dialog open={isEditPropertiesDialogOpen} onOpenChange={setIsEditPropertiesDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <AlertDialogHeader> {/* Using AlertDialogHeader for consistent styling, though it's a Dialog */}
+              <AlertDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data.label}</AlertDialogTitle>
             </AlertDialogHeader>
-            <div className="py-2">
-              <Label htmlFor="node-label-input" className="font-sans">新标签</Label>
-              <Input
-                id="node-label-input"
-                value={editingNodeNewLabel}
-                onChange={(e) => setEditingNodeNewLabel(e.target.value)}
-                className="mt-1 font-sans"
-                autoFocus
-              />
+            <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              <div className="space-y-1">
+                <Label htmlFor="node-label-input" className="font-sans">标签 (名称)</Label>
+                <Input
+                  id="node-label-input"
+                  value={editingNodeProperties.label}
+                  onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, label: e.target.value }))}
+                  className="font-sans"
+                  autoFocus
+                />
+              </div>
+
+              {nodeForContextMenu?.data.type === 'server' && (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="server-tunnel" className="font-sans">隧道监听地址</Label>
+                    <Input id="server-tunnel" value={(editingNodeProperties as ServerNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, tunnelAddress: e.target.value }))} className="font-mono text-sm" placeholder="0.0.0.0:10001"/>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="server-target" className="font-sans">流量转发地址</Label>
+                    <Input id="server-target" value={(editingNodeProperties as ServerNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, targetAddress: e.target.value }))} className="font-mono text-sm" placeholder="0.0.0.0:8080"/>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="server-log" className="font-sans">日志级别</Label>
+                    <Select value={(editingNodeProperties as ServerNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, logLevel: v as ServerNodeData['logLevel'] }))}>
+                      <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="master">主控默认</SelectItem>
+                        <SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="fatal">Fatal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="server-tls" className="font-sans">TLS 模式</Label>
+                    <Select value={(editingNodeProperties as ServerNodeData).tlsMode || '1'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, tlsMode: v as ServerNodeData['tlsMode'] }))}>
+                       <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                        <SelectItem value="master">主控默认</SelectItem>
+                        <SelectItem value="0">0: 无TLS</SelectItem><SelectItem value="1">1: 自签名</SelectItem><SelectItem value="2">2: 自定义</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(editingNodeProperties as ServerNodeData).tlsMode === '2' && (
+                    <>
+                      <div className="space-y-1">
+                        <Label htmlFor="server-crt" className="font-sans">证书路径 (crt)</Label>
+                        <Input id="server-crt" value={(editingNodeProperties as ServerNodeData).crtPath || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, crtPath: e.target.value }))} className="font-mono text-sm" placeholder="/path/to/cert.pem"/>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="server-key" className="font-sans">密钥路径 (key)</Label>
+                        <Input id="server-key" value={(editingNodeProperties as ServerNodeData).keyPath || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, keyPath: e.target.value }))} className="font-mono text-sm" placeholder="/path/to/key.pem"/>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {nodeForContextMenu?.data.type === 'client' && (
+                 <>
+                  <div className="space-y-1">
+                    <Label htmlFor="client-tunnel" className="font-sans">服务端隧道地址</Label>
+                    <Input id="client-tunnel" value={(editingNodeProperties as ClientNodeData).tunnelAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, tunnelAddress: e.target.value }))} className="font-mono text-sm" placeholder="your.server.com:10001"/>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="client-target" className="font-sans">本地转发地址</Label>
+                    <Input id="client-target" value={(editingNodeProperties as ClientNodeData).targetAddress || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, targetAddress: e.target.value }))} className="font-mono text-sm" placeholder="127.0.0.1:8000"/>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="client-log" className="font-sans">日志级别</Label>
+                     <Select value={(editingNodeProperties as ClientNodeData).logLevel || 'info'} onValueChange={(v) => setEditingNodeProperties(prev => ({ ...prev, logLevel: v as ClientNodeData['logLevel'] }))}>
+                       <SelectTrigger className="font-sans text-sm"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                        <SelectItem value="master">主控默认</SelectItem>
+                        <SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="fatal">Fatal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {nodeForContextMenu?.data.type === 'landing' && (
+                 <>
+                  <div className="space-y-1">
+                    <Label htmlFor="landing-ip" className="font-sans">IP 地址</Label>
+                    <Input id="landing-ip" value={(editingNodeProperties as LandingNodeData).landingIp || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, landingIp: e.target.value }))} className="font-mono text-sm" placeholder="192.168.1.100"/>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="landing-port" className="font-sans">端口</Label>
+                    <Input id="landing-port" value={(editingNodeProperties as LandingNodeData).landingPort || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, landingPort: e.target.value }))} className="font-mono text-sm" placeholder="80"/>
+                  </div>
+                </>
+              )}
+
+              {nodeForContextMenu?.data.type === 'user' && (
+                 <div className="space-y-1">
+                    <Label htmlFor="user-desc" className="font-sans">描述</Label>
+                    <Input id="user-desc" value={(editingNodeProperties as UserNodeData).description || ''} onChange={(e) => setEditingNodeProperties(prev => ({ ...prev, description: e.target.value }))} className="font-sans text-sm" placeholder="用户流量描述"/>
+                  </div>
+              )}
+
             </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setIsEditLabelDialogOpen(false)} className="font-sans">取消</AlertDialogCancel>
-              <AlertDialogAction onClick={handleSaveLabel} className="font-sans">保存</AlertDialogAction>
+            <AlertDialogFooter> {/* Using AlertDialogFooter for consistent styling */}
+              <DialogClose asChild>
+                <Button type="button" variant="outline" className="font-sans">取消</Button>
+              </DialogClose>
+              <Button onClick={handleSaveNodeProperties} className="font-sans">保存更改</Button>
             </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          </DialogContent>
+        </Dialog>
+
 
         {/* Delete Node Dialog */}
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={setIsDeleteNodeDialogOpen}>
@@ -510,11 +722,11 @@ const TopologyPageContent: NextPage = () => {
                 <AlertDialogHeader>
                     <AlertDialogTitle className="font-title">确认删除节点</AlertDialogTitle>
                     <AlertDialogDescription className="font-sans">
-                        您确定要删除节点 “{nodeToDelete?.data.label}” 及其所有连接吗？此操作无法撤销。
+                        您确定要删除节点 “{nodeForContextMenu?.data.label}” 及其所有连接吗？此操作无法撤销。
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => { setIsDeleteNodeDialogOpen(false); setNodeToDelete(null);}} className="font-sans">取消</AlertDialogCancel>
+                    <AlertDialogCancel onClick={() => { setIsDeleteNodeDialogOpen(false);}} className="font-sans">取消</AlertDialogCancel>
                     <AlertDialogAction
                         onClick={confirmDeleteNode}
                         className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
@@ -559,3 +771,4 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
+
