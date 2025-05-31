@@ -47,12 +47,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
+  AlertDialogDescription as ShadAlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle as ShadAlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle } from '@/components/ui/dialog'; // Added DialogHeader, DialogFooter, DialogTitle
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle as ShadDialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from "@/lib/utils";
 
@@ -613,6 +613,11 @@ const TopologyPageContent: NextPage = () => {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <ShadDialogTitle className="font-title">编辑节点属性: {nodeForContextMenu?.data?.label}</ShadDialogTitle>
+              {nodeForContextMenu?.data?.type === 'landing' && (
+                <DialogDescription className="font-sans text-xs">
+                  对于“落地”节点, “标签 (名称)”字段将作为其标识名称 (例如 `ip:port@标签名称` 中的 `@标签名称` 部分)。
+                </DialogDescription>
+              )}
             </DialogHeader>
             <div className="py-2 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <div className="space-y-1">
@@ -729,10 +734,10 @@ const TopologyPageContent: NextPage = () => {
         <AlertDialog open={isDeleteNodeDialogOpen} onOpenChange={setIsDeleteNodeDialogOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle className="font-title">确认删除节点</AlertDialogTitle>
-                    <AlertDialogDescription className="font-sans">
+                    <ShadAlertDialogTitle className="font-title">确认删除节点</ShadAlertDialogTitle>
+                    <ShadAlertDialogDescription className="font-sans">
                         您确定要删除节点 “{nodeForContextMenu?.data?.label}” 及其所有连接吗？此操作无法撤销。
-                    </AlertDialogDescription>
+                    </ShadAlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={() => { setIsDeleteNodeDialogOpen(false);}} className="font-sans">取消</AlertDialogCancel>
@@ -750,10 +755,10 @@ const TopologyPageContent: NextPage = () => {
         <AlertDialog open={isClearCanvasAlertOpen} onOpenChange={setIsClearCanvasAlertOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle className="font-title">确认清空画布</AlertDialogTitle>
-                    <AlertDialogDescription className="font-sans">
+                    <ShadAlertDialogTitle className="font-title">确认清空画布</ShadAlertDialogTitle>
+                    <ShadAlertDialogDescription className="font-sans">
                         您确定要删除画布上所有的节点和连接吗？此操作无法撤销。
-                    </AlertDialogDescription>
+                    </ShadAlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={() => setIsClearCanvasAlertOpen(false)} className="font-sans">取消</AlertDialogCancel>
