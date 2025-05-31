@@ -223,7 +223,7 @@ const TopologyPageContent: NextPage = () => {
   const { apiConfigsList, isLoading: isLoadingApiConfig } = useApiConfig();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView, setInteractive } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getNode, getEdges: getFlowEdges, fitView, setInteractive: rfSetInteractive } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -573,6 +573,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: { 
+            ...edge.style, // Preserve other potential style attributes
             stroke: CHAIN_HIGHLIGHT_COLOR, 
             strokeWidth: 2.5,
           },
@@ -587,6 +588,7 @@ const TopologyPageContent: NextPage = () => {
         return {
           ...edge,
           style: { 
+            ...edge.style, // Preserve other potential style attributes
             stroke: defaultColors.stroke, 
             strokeWidth: 1.5,
           },
@@ -618,7 +620,11 @@ const TopologyPageContent: NextPage = () => {
   const toggleLock = () => {
     const newLockedState = !isLocked;
     setIsLocked(newLockedState);
-    setInteractive(!newLockedState); 
+    if (typeof rfSetInteractive === 'function') {
+      rfSetInteractive(!newLockedState);
+    } else {
+      console.warn('React Flow rfSetInteractive function is not available. Interactivity will update on next render via props.');
+    }
     toast({
       title: newLockedState ? "画布已锁定" : "画布已解锁",
       description: newLockedState ? "平移和缩放已禁用 (滚轮缩放仍可用)。" : "可以平移和通过拖拽缩放。",
@@ -1007,3 +1013,4 @@ const TopologyEditorPageWrapper: NextPage = () => {
 };
 
 export default TopologyEditorPageWrapper;
+
