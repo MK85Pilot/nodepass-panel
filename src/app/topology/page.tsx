@@ -58,13 +58,13 @@ import { TopologyControlBar } from './components/TopologyControlBar';
 import { DraggablePanels } from './components/DraggablePanels';
 import { PropertiesDisplayPanel } from './components/PropertiesDisplayPanel';
 import { SubmitTopologyDialog } from './components/dialogs/SubmitTopologyDialog';
-import { calculateTieredLayout } from './lib/advanced-layout'; // Import the new layout function
+import { calculateElkLayout, calculateTieredLayout } from './lib/advanced-layout'; 
 
 import type {
   TopologyNodeData, NodePassFlowNodeType, PendingOperations,
   ControllerNodeData, ServerNodeData, ClientNodeData, LandingNodeData, UserNodeData
 } from './lib/topology-types';
-import { initialViewport, NODE_DEFAULT_WIDTH, NODE_DEFAULT_HEIGHT, CHAIN_HIGHLIGHT_COLOR } from './lib/topology-types'; // TIER_Y_SPACING, NODE_X_SPACING no longer needed here directly
+import { initialViewport, NODE_DEFAULT_WIDTH, NODE_DEFAULT_HEIGHT, CHAIN_HIGHLIGHT_COLOR } from './lib/topology-types';
 import { getId, extractHostname, extractPort, buildNodePassUrlFromNode } from './lib/topology-utils';
 
 
@@ -80,7 +80,7 @@ const TopologyPageContent: NextPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes: rfGetNodes, getNode: rfGetNode, getEdges: rfGetEdges, setEdges: rfSetEdges, fitView } = useReactFlow();
   const [appLogs, setAppLogs] = useState<AppLogEntry[]>([]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNodeData>(initialNodes);
@@ -107,6 +107,8 @@ const TopologyPageContent: NextPage = () => {
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [pendingOperations, setPendingOperations] = useState<PendingOperations>({});
   const [isSubmittingTopology, setIsSubmittingTopology] = useState(false);
+  const [isFormattingLayout, setIsFormattingLayout] = useState(false);
+
 
   const { isLoading: isLoadingInstances, error: fetchErrorGlobal, refetch: refetchInstances } = useQuery<
     any[], Error
@@ -149,7 +151,7 @@ const TopologyPageContent: NextPage = () => {
       if (targetType === 'client') strokeColor = 'hsl(var(--chart-2))';
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-4))';
     } else if (sourceType === 'client') {
-      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))';
+      if (targetType === 'server') strokeColor = 'hsl(var(--chart-2))'; // Client to Server can reuse server-client color
       else if (targetType === 'landing') strokeColor = 'hsl(var(--chart-5))';
     }
     return { stroke: strokeColor, markerColor: strokeColor };
@@ -198,7 +200,7 @@ const TopologyPageContent: NextPage = () => {
               }
 
               let formattedHost = effectiveServerHost;
-              if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[')) { // Check for IPv6 and ensure bracketing
+              if (effectiveServerHost && effectiveServerHost.includes(':') && !effectiveServerHost.startsWith('[')) { 
                 formattedHost = `[${effectiveServerHost}]`;
               }
               const newClientTunnelAddress = `${formattedHost}:${serverPort}`;
@@ -246,20 +248,20 @@ const TopologyPageContent: NextPage = () => {
       const centeredPosition = { x: position.x - NODE_DEFAULT_WIDTH / 2, y: position.y - NODE_DEFAULT_HEIGHT / 2 };
 
       let newNodeData: TopologyNodeData;
-      let actualNodeTypeForData: TopologyNodeData['type'] = draggedNodeTypeFromPanel;
+      let actualNodeTypeForData: TopologyNodeData['type'];
 
-      if (draggedNodeTypeFromPanel === 'controller') {
+      if (draggedNodeTypeFromPanel === 'controller' && draggedApiId && draggedApiName) {
         const existingControllerNodes = rfGetNodes().filter(n => n.data?.type === 'controller');
         if (existingControllerNodes.length === 0) {
           actualNodeTypeForData = 'controller';
           newNodeData = {
-            label: draggedApiName || initialLabel || '主控', type: 'controller',
-            apiId: draggedApiId || '', apiName: draggedApiName || '未知API', role: 'server', statusInfo: ''
+            label: draggedApiName, type: 'controller',
+            apiId: draggedApiId, apiName: draggedApiName, role: 'server', statusInfo: ''
           } as ControllerNodeData;
         } else {
           actualNodeTypeForData = 'client';
           newNodeData = {
-            label: `${draggedApiName || '主控'} Client`, type: 'client', instanceType: 'client',
+            label: `${draggedApiName} Client`, type: 'client', instanceType: 'client',
             tunnelAddress: 'server.host:10001', targetAddress: '127.0.0.1:8000', logLevel: 'info',
             managingApiId: draggedApiId, managingApiName: draggedApiName, statusInfo: ''
           } as ClientNodeData;
@@ -411,21 +413,40 @@ const TopologyPageContent: NextPage = () => {
     setIsDeleteNodeDialogOpen(false); setNodeToDelete(null);
   };
 
-  const formatLayout = useCallback(() => {
+  const formatLayout = useCallback(async () => {
+    setIsFormattingLayout(true);
     const currentNodes = rfGetNodes();
+    const currentEdges = rfGetEdges();
+
     if (currentNodes.length === 0) {
       toast({ title: "画布为空", description: "没有可格式化的节点。" });
+      setIsFormattingLayout(false);
       return;
     }
     
-    // Call the new layout function
-    const newNodesLayout = calculateTieredLayout(currentNodes);
-    
-    setNodes(newNodesLayout);
-    setTimeout(() => { fitView({ padding: 0.2, duration: 600 }); }, 100);
-    toast({ title: "布局已格式化", description: "节点已重新排列。" });
-    onAppLog?.('画布节点已格式化。', 'INFO');
-  }, [rfGetNodes, setNodes, fitView, toast, onAppLog]);
+    onAppLog?.('开始ELK布局计算...', 'INFO');
+    try {
+      const { nodes: newNodesLayout, edges: newEdgesLayout } = await calculateElkLayout(currentNodes, currentEdges);
+      
+      setNodes(newNodesLayout);
+      // Note: setEdges(newEdgesLayout) could be used if calculateElkLayout modifies edge paths
+      // for custom edge rendering. For now, React Flow rerenders existing edges to new node positions.
+      rfSetEdges(newEdgesLayout); // Or simply setEdges if React Flow handles the update internally based on node moves.
+
+      setTimeout(() => { fitView({ padding: 0.2, duration: 600 }); }, 100);
+      toast({ title: "布局已使用ELK格式化", description: "节点已通过ELK重新排列。" });
+      onAppLog?.('ELK布局计算完成，画布节点已格式化。', 'INFO');
+    } catch (error) {
+        console.error("ELK布局失败，回退到分层布局:", error);
+        onAppLog?.('ELK布局失败，回退到默认分层布局。', 'ERROR', error instanceof Error ? error.message : String(error));
+        const tieredNodes = calculateTieredLayout(currentNodes);
+        setNodes(tieredNodes);
+        setTimeout(() => { fitView({ padding: 0.2, duration: 600 }); }, 100);
+        toast({ title: "ELK布局失败", description: "已回退到默认分层布局。" , variant: "destructive"});
+    } finally {
+        setIsFormattingLayout(false);
+    }
+  }, [rfGetNodes, rfGetEdges, setNodes, rfSetEdges, fitView, toast, onAppLog]);
 
   const processedNodes = useMemo(() => {
     return nodes.map(node => ({ ...node, data: { ...node.data, isChainHighlighted: selectedChainElements?.nodes.has(node.id) || false } }));
@@ -596,7 +617,7 @@ const TopologyPageContent: NextPage = () => {
           onRefreshData={() => refetchInstances()}
           onSubmitTopology={handleSubmitTopology}
           onClearCanvas={() => setIsClearCanvasAlertOpen(true)}
-          isLoadingData={isLoadingInstances}
+          isLoadingData={isLoadingInstances || isFormattingLayout}
           lastRefreshed={lastRefreshed}
         />
 
@@ -625,6 +646,12 @@ const TopologyPageContent: NextPage = () => {
             >
               <Background gap={16} />
             </ReactFlow>
+             {isFormattingLayout && (
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-20">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="ml-3 text-sm font-sans">格式化布局中...</p>
+                </div>
+            )}
           </div>
         </div>
 
