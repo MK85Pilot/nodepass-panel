@@ -343,12 +343,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderMobileSkeletons = () => {
     return Array.from({ length: 2 }).map((_, i) => (
         <Card key={`skeleton-card-${i}`} className="mb-4">
-          <CardHeader className="p-3 flex flex-row items-start justify-between">
-            <div className="space-y-1"><Skeleton className="h-5 w-32" /><Skeleton className="h-3 w-24" /></div>
-            <Skeleton className="h-8 w-20" />
+          <CardHeader className="p-3">
+            <Skeleton className="h-5 w-3/4 mb-1" /> {/* For ID */}
+            <div className="flex items-center space-x-2">
+                <Skeleton className="h-4 w-1/2" /> {/* For Alias */}
+                <Skeleton className="h-5 w-10" /> {/* For Type Badge */}
+                <Skeleton className="h-5 w-16" /> {/* For Status Badge */}
+                <div className="ml-auto flex space-x-1">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                </div>
+            </div>
           </CardHeader>
           <CardContent className="p-3 space-y-2 border-t">
-            <div className="flex items-center space-x-2"><Skeleton className="h-5 w-16" /><Skeleton className="h-5 w-20" /></div>
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
             <Skeleton className="h-4 w-4/6" />
@@ -397,76 +404,57 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         // Mobile Card Rendering
         return (
           <Card key={instance.id} className="mb-3 shadow-md card-hover-shadow">
-            <CardHeader className="p-3 flex flex-row items-start justify-between gap-2">
-              <div className="flex items-start space-x-2 flex-grow min-w-0">
-                {instance.id !== '********' && (
-                  <Checkbox
-                    checked={selectedInstanceIds.has(instance.id)}
-                    onCheckedChange={() => handleSelectInstance(instance.id)}
-                    aria-label={`选择实例 ${instance.id}`}
-                    className="mt-1 flex-shrink-0"
-                    disabled={isBulkDeleting}
-                  />
-                )}
-                {instance.id === '********' && <div className="w-4 flex-shrink-0"></div> /* Spacer for API Key */}
-                <div className="flex-grow min-w-0">
-                  <div
-                    className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words"
-                    onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
-                    title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
-                  >
-                    {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
-                  </div>
-                  {instance.id !== '********' && (
-                    <div
-                      className="text-xs text-muted-foreground mt-0.5 cursor-pointer hover:text-primary truncate"
-                      onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
-                      title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
-                    >
-                      {isLoadingAliases ? <Skeleton className="h-3 w-16 mt-1"/> : currentAlias || <span className="italic">设置别名...</span>}
-                    </div>
-                  )}
-                  <div className="flex items-center space-x-2 mt-2">
-                    {instance.id === '********' ? (
-                      <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                        <KeyRound className="h-3 w-3 mr-1" />API 密钥
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant={instance.type === 'server' ? 'default' : 'accent'}
-                        className="items-center whitespace-nowrap text-xs font-sans"
-                      >
-                        {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                        {instance.type === 'server' ? '服务端' : '客户端'}
-                      </Badge>
-                    )}
-                    {instance.id === '********' ? (
-                        <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-                          <CheckCircle className="mr-1 h-3.5 w-3.5" />
-                          可用
-                        </Badge>
-                      ) : (
-                        <InstanceStatusBadge status={instance.status} />
-                    )}
-                  </div>
-                </div>
+            <CardHeader className="p-3">
+              <div 
+                className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words mb-1"
+                onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
+                title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
+              >
+                {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
               </div>
-              <div className="flex items-center space-x-0.5 flex-shrink-0">
+              <div className="flex items-center space-x-2">
                 {instance.id !== '********' && (
-                  <InstanceControls
-                    instance={instance}
-                    onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
-                    isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-                  />
+                    <div
+                        className="text-xs text-muted-foreground cursor-pointer hover:text-primary truncate flex-shrink min-w-0"
+                        onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
+                        title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
+                    >
+                        {isLoadingAliases ? <Skeleton className="h-3 w-16"/> : currentAlias || <span className="italic">设置别名...</span>}
+                    </div>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
-                  <Eye className="h-4 w-4" />
-                </Button>
-                {instance.id !== '********' && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} title="删除实例" disabled={isBulkDeleting || (deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                {instance.id === '********' ? (
+                     <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5 flex-shrink-0">
+                        <CheckCircle className="mr-1 h-3 w-3" />可用
+                    </Badge>
+                ) : (
+                    <>
+                    <Badge
+                        variant={instance.type === 'server' ? 'default' : 'accent'}
+                        className="items-center whitespace-nowrap text-xs py-0.5 px-1 font-sans flex-shrink-0"
+                    >
+                        {instance.type === 'server' ? <ServerIcon size={10} className="mr-0.5" /> : <SmartphoneIcon size={10} className="mr-0.5" />}
+                        {instance.type === 'server' ? 'S' : 'C'}
+                    </Badge>
+                    <InstanceStatusBadge status={instance.status} />
+                    </>
                 )}
+                <div className="ml-auto flex items-center space-x-0.5 flex-shrink-0">
+                    {instance.id !== '********' && (
+                    <InstanceControls
+                        instance={instance}
+                        onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                        isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+                    />
+                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
+                    <Eye className="h-4 w-4" />
+                    </Button>
+                    {instance.id !== '********' && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} title="删除实例" disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                    )}
+                </div>
               </div>
             </CardHeader>
             {instance.id !== '********' && (
@@ -597,7 +585,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                         className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
                         onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDelete(instance);}}
                         aria-label="删除"
-                        disabled={isBulkDeleting || deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
+                        disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
                     >
                         <Trash2 className="h-4 w-4" />
                     </button>
@@ -619,7 +607,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
-           {selectedInstanceIds.size > 0 && deletableInstances.length > 0 && (
+           {!isMobile && selectedInstanceIds.size > 0 && deletableInstances.length > 0 && (
             <Button
               variant="destructive"
               size="sm"
@@ -647,28 +635,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </Button>
         </div>
       </CardHeader>
-
-      {apiId && !instancesError && isMobile && deletableInstances.length > 0 && (
-        <div className="px-4 sm:px-6 pb-2 pt-0 flex items-center border-b">
-          <Checkbox
-            id="select-all-mobile"
-            checked={
-              deletableInstances.length > 0 &&
-              selectedInstanceIds.size === deletableInstances.length
-                ? true
-                : deletableInstances.length > 0 && selectedInstanceIds.size > 0
-                ? "indeterminate"
-                : false
-            }
-            onCheckedChange={handleSelectAllInstances}
-            aria-label="全选/取消全选实例"
-            disabled={deletableInstances.length === 0 || isBulkDeleting}
-          />
-          <label htmlFor="select-all-mobile" className="ml-2 text-sm font-medium text-muted-foreground font-sans">
-            全选 ({selectedInstanceIds.size} / {deletableInstances.length})
-          </label>
-        </div>
-      )}
 
       <CardContent className={isMobile ? "pt-4 px-2 sm:px-4" : ""}>
         {!apiId && (
@@ -740,17 +706,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         onConfirmDelete={(id) => deleteInstanceMutation.mutate(id)}
         isLoading={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === selectedInstanceForDelete?.id}
       />
-      <BulkDeleteInstancesDialog
-        selectedInstances={
-          instances?.filter(inst => selectedInstanceIds.has(inst.id))
-            .map(inst => ({ id: inst.id, url: inst.url }))
-          || []
-        }
-        open={isBulkDeleteDialogOpen}
-        onOpenChange={setIsBulkDeleteDialogOpen}
-        isLoading={isBulkDeleting}
-        onConfirmDelete={handleConfirmBulkDelete}
-      />
+      {!isMobile && 
+        <BulkDeleteInstancesDialog
+            selectedInstances={
+            instances?.filter(inst => selectedInstanceIds.has(inst.id))
+                .map(inst => ({ id: inst.id, url: inst.url }))
+            || []
+            }
+            open={isBulkDeleteDialogOpen}
+            onOpenChange={setIsBulkDeleteDialogOpen}
+            isLoading={isBulkDeleting}
+            onConfirmDelete={handleConfirmBulkDelete}
+        />
+      }
       {editingAliasContext && (
         <EditAliasDialog
             open={isEditAliasDialogOpen}
@@ -766,5 +734,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
-
