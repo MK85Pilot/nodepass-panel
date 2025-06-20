@@ -7,7 +7,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Info, Settings2, Share2, Zap, Tag } from 'lucide-react'; // Added Tag
+import { Info, Settings2, Share2, Zap, Tag, KeyRound, Users, Minimize, Expand } from 'lucide-react';
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig } from '@/hooks/use-api-key';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from './constants';
@@ -84,7 +84,7 @@ export function CreateInstanceFormFields({
                   className="text-xs font-sans h-9"
                   placeholder="例: 我的测试服务"
                   {...field}
-                  value={field.value || ""} 
+                  value={field.value || ""}
                 />
               </FormControl>
               {showDetailedDescriptions && (
@@ -96,6 +96,34 @@ export function CreateInstanceFormFields({
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="tunnelKey"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="font-sans text-xs flex items-center">
+                <KeyRound size={14} className="mr-1 text-muted-foreground" />
+                隧道密钥 (可选)
+              </FormLabel>
+              <FormControl>
+                <Input
+                  className="text-xs font-sans h-9"
+                  placeholder="留空则使用端口派生密钥"
+                  {...field}
+                  value={field.value || ""}
+                />
+              </FormControl>
+              {showDetailedDescriptions && (
+                <FormDescription className="font-sans text-xs mt-0.5">
+                  用于客户端和服务端连接验证。若留空，将使用隧道地址的端口号作为密钥。
+                </FormDescription>
+              )}
+              <FormMessage className="text-xs" />
+            </FormItem>
+          )}
+        />
+
 
         {instanceType === '客户端' && (
           <FormField
@@ -205,6 +233,68 @@ export function CreateInstanceFormFields({
             </FormItem>
           )}
         />
+
+        {instanceType === '客户端' && (
+            <div className="grid grid-cols-2 gap-3">
+                <FormField
+                control={form.control}
+                name="minPoolSize"
+                render={({ field }) => (
+                    <FormItem className="space-y-1">
+                    <FormLabel className="font-sans text-xs flex items-center">
+                        <Minimize size={14} className="mr-1 text-muted-foreground" />
+                        最小连接池 (可选)
+                    </FormLabel>
+                    <FormControl>
+                        <Input
+                        type="number"
+                        className="text-xs font-mono h-9"
+                        placeholder="默认: 64"
+                        {...field}
+                        onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
+                        value={field.value ?? ""}
+                        />
+                    </FormControl>
+                    {showDetailedDescriptions && (
+                        <FormDescription className="font-sans text-xs mt-0.5">
+                        客户端连接池的最小容量。
+                        </FormDescription>
+                    )}
+                    <FormMessage className="text-xs" />
+                    </FormItem>
+                )}
+                />
+                <FormField
+                control={form.control}
+                name="maxPoolSize"
+                render={({ field }) => (
+                    <FormItem className="space-y-1">
+                    <FormLabel className="font-sans text-xs flex items-center">
+                        <Expand size={14} className="mr-1 text-muted-foreground" />
+                        最大连接池 (可选)
+                    </FormLabel>
+                    <FormControl>
+                        <Input
+                        type="number"
+                        className="text-xs font-mono h-9"
+                        placeholder="默认: 8192"
+                        {...field}
+                        onChange={event => field.onChange(event.target.value === '' ? undefined : +event.target.value)}
+                        value={field.value ?? ""}
+                        />
+                    </FormControl>
+                    {showDetailedDescriptions && (
+                        <FormDescription className="font-sans text-xs mt-0.5">
+                        客户端连接池的最大容量。
+                        </FormDescription>
+                    )}
+                    <FormMessage className="text-xs" />
+                    </FormItem>
+                )}
+                />
+            </div>
+        )}
+
 
         <FormField
           control={form.control}
@@ -335,5 +425,3 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
-
-    

@@ -7,22 +7,25 @@ export const createInstanceFormSchema = z.object({
     required_error: "实例类型是必需的。",
   }),
   alias: z.string().trim().max(50, "别名最长50字符").optional(),
+  tunnelKey: z.string().trim().max(100, "隧道密钥最长100字符").optional(),
   isSingleEndedForward: z.optional(z.boolean()),
   tunnelAddress: z.string().min(1, "此字段是必需的。"),
   targetAddress: z.optional(z.string()),
-  logLevel: z.enum(["master", "debug", "info", "warn", "error"], { // Added "master"
+  logLevel: z.enum(["master", "debug", "info", "warn", "error"], {
     required_error: "日志级别是必需的。",
   }),
   tlsMode: z.string(),
   certPath: z.optional(z.string()),
   keyPath: z.optional(z.string()),
+  minPoolSize: z.number().int().positive().optional(),
+  maxPoolSize: z.number().int().positive().optional(),
 }).superRefine((data, ctx) => {
   if (data.instanceType === "客户端") {
     if (data.isSingleEndedForward) {
-      if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) { // Changed regex here
+      if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "监听地址格式无效 (例: 127.0.0.1:8080 或 [::]:8080)", // Updated message
+          message: "监听地址格式无效 (例: 127.0.0.1:8080 或 [::]:8080)",
           path: ["tunnelAddress"],
         });
       }
@@ -54,6 +57,13 @@ export const createInstanceFormSchema = z.object({
           path: ["targetAddress"],
         });
       }
+    }
+    if (data.minPoolSize && data.maxPoolSize && data.minPoolSize >= data.maxPoolSize) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "最小连接数必须小于最大连接数。",
+        path: ["minPoolSize"],
+      });
     }
   } else if (data.instanceType === "服务端") {
     if (!/^(?:\[[0-9a-fA-F:]+\]|[0-9a-zA-Z.-]+):[0-9]+$/.test(data.tunnelAddress)) {
@@ -107,5 +117,3 @@ export const createInstanceApiSchema = z.object({
 export const updateInstanceSchema = z.object({
   action: z.enum(["start", "stop", "restart"]),
 });
-
-

@@ -24,7 +24,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from '../EventLog';
-import { extractHostname } from '@/lib/url-utils'; 
+import { extractHostname } from '@/lib/url-utils';
 import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 
 import { CreateInstanceFormFields } from './CreateInstanceFormFields';
@@ -44,7 +44,7 @@ interface CreateInstanceDialogProps {
 export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiToken, apiName, activeApiConfig, onLog }: CreateInstanceDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig(); 
+  const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig();
   const { setAlias: saveInstanceAlias } = useInstanceAliases();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
   const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
@@ -54,13 +54,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
     defaultValues: {
       instanceType: '客户端',
       alias: '',
+      tunnelKey: '',
       isSingleEndedForward: false,
       tunnelAddress: '',
       targetAddress: '',
-      logLevel: 'master', 
+      logLevel: 'master',
       tlsMode: 'master',
       certPath: '',
       keyPath: '',
+      minPoolSize: undefined,
+      maxPoolSize: undefined,
     },
   });
 
@@ -74,13 +77,16 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
       form.reset({
         instanceType: '客户端',
         alias: '',
+        tunnelKey: '',
         isSingleEndedForward: false,
         tunnelAddress: '',
         targetAddress: '',
-        logLevel: 'master', 
+        logLevel: 'master',
         tlsMode: 'master',
         certPath: '',
         keyPath: '',
+        minPoolSize: undefined,
+        maxPoolSize: undefined,
       });
       setExternalApiSuggestion(null);
       setShowDetailedDescriptions(false);
@@ -107,6 +113,9 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             if (form.getValues("certPath") !== '') form.setValue("certPath", '');
             if (form.getValues("keyPath") !== '') form.setValue("keyPath", '');
         }
+        // For server, min/max pool size are not applicable, ensure they are undefined
+        if (form.getValues("minPoolSize") !== undefined) form.setValue("minPoolSize", undefined);
+        if (form.getValues("maxPoolSize") !== undefined) form.setValue("maxPoolSize", undefined);
     }
   }, [instanceType, form, isSingleEndedForwardWatched, tlsModeWatch]);
 
@@ -158,9 +167,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         description: '实例 (URL: ' + shortUrl + ') -> ID: ' + createdInstance.id.substring(0,8) + '...',
       });
       onLog?.('实例创建成功于 ' + masterNameForToast + ': ' + (createdInstance.type === 'server' ? '服务端' : '客户端') + ' - ' + createdInstance.id.substring(0,8) + '... (URL: ' + shortUrl + ')', 'SUCCESS');
-      
-      // Alias is saved in onSubmitHandler now, after mutateAsync resolves.
-      // Invalidate queries after alias is potentially saved.
+
       queryClient.invalidateQueries({ queryKey: ['instances', variables.useApiRoot === apiRoot ? apiId : apiConfigsList.find(c => getApiRootUrl(c.id) === variables.useApiRoot)?.id] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
     },
@@ -224,23 +231,13 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
          }
       }
 
-      // If mutation was successful (no exception thrown), this point is reached.
-      // The onSuccess callback of the mutation will handle toasts and query invalidations.
-      // Now, reset form and close dialog if everything up to here was fine.
-      // The createInstanceMutation.isError check might be redundant if await throws,
-      // but it's a safeguard.
       if (!createInstanceMutation.isError) {
          form.reset();
          onOpenChange(false);
       }
     } catch (error: any) {
-       // This catch block handles errors from mutateAsync directly (if it throws)
-       // or any other synchronous errors in this try block.
-       // Note: createInstanceMutation.onError already handles toast/log for mutation failures.
        console.error("创建实例或保存别名时发生错误:", error);
-       // Optionally, add a generic toast here if the error isn't from the mutation itself
-       // (though most errors would likely be from mutateAsync).
-       if (!createInstanceMutation.isError) { // If error is not from the mutation handled by its onError
+       if (!createInstanceMutation.isError) {
           toast({ title: "操作失败", description: "创建实例过程中发生意外错误。", variant: "destructive" });
           onLog?.('创建实例或保存别名时发生错误: ' + error.message, 'ERROR');
        }

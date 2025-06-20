@@ -3,7 +3,7 @@
 
 import type { CreateInstanceFormValues } from '@/zod-schemas/nodepass';
 import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
-import { extractHostname, extractPort } from '@/lib/url-utils'; // isWildcardHostname removed
+import { extractHostname, extractPort } from '@/lib/url-utils';
 
 export function formatHostForUrl(host: string | null | undefined): string {
   if (!host) return '127.0.0.1';
@@ -16,12 +16,15 @@ export function formatHostForUrl(host: string | null | undefined): string {
 export interface BuildUrlParams {
   instanceType: "客户端" | "服务端";
   isSingleEndedForward?: boolean;
+  tunnelKey?: string;
   tunnelAddress: string;
   targetAddress: string;
-  logLevel: MasterLogLevel; // This will be 'debug', 'info', 'warn', or 'error' from the form
+  logLevel: MasterLogLevel;
   tlsMode?: MasterTlsMode | '2' | undefined;
   certPath?: string;
   keyPath?: string;
+  minPoolSize?: number;
+  maxPoolSize?: number;
 }
 
 export function buildUrlFromFormValues(
@@ -29,23 +32,18 @@ export function buildUrlFromFormValues(
   masterConfigForInstance: NamedApiConfig | null
 ): string {
   const schemeType = params.instanceType === "服务端" ? "server" : "client";
-
-  let url = `${schemeType}://${params.tunnelAddress}/${params.targetAddress}`;
+  const tunnelAuthPart = params.tunnelKey ? `${params.tunnelKey}@` : "";
+  let url = `${schemeType}://${tunnelAuthPart}${params.tunnelAddress}/${params.targetAddress}`;
 
   const queryParams = new URLSearchParams();
 
   let effectiveLogLevel = params.logLevel;
-  // If params.logLevel is one of the four explicit types, it will be used.
-  // The 'master' check for effectiveLogLevel is based on masterConfig, not instance param, which is correct.
-  if (effectiveLogLevel === 'master') { // This will only be true if masterConfigForInstance.masterDefaultLogLevel is 'master'
+  if (effectiveLogLevel === 'master') {
     effectiveLogLevel = masterConfigForInstance?.masterDefaultLogLevel || 'master';
   }
-  // Only append log if it's not 'master' (which means inherit from NodePass global default)
-  // or if it's one of the 4 explicit levels which should always be appended.
   if (effectiveLogLevel && effectiveLogLevel !== "master") {
     queryParams.append('log', effectiveLogLevel);
   }
-
 
   let effectiveTlsMode = params.tlsMode;
 
@@ -53,7 +51,7 @@ export function buildUrlFromFormValues(
     if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
       effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
                             ? masterConfigForInstance.masterDefaultTlsMode
-                            : '1';
+                            : '1'; // Default for server TLS is '1' (self-signed) if not master and master is 'master'
     }
     if (effectiveTlsMode === '0' || effectiveTlsMode === '2') {
       queryParams.append('tls', effectiveTlsMode);
@@ -62,16 +60,17 @@ export function buildUrlFromFormValues(
         if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
       }
     }
-  }
-  else if (params.instanceType === "客户端") {
+  } else if (params.instanceType === "客户端") {
     if (params.isSingleEndedForward) {
       // No TLS params in URL for single-ended client
     } else {
+      // For regular client, default TLS mode is '0' (no TLS to server) if not master and master is 'master'
       if (effectiveTlsMode === 'master' || !effectiveTlsMode) {
           effectiveTlsMode = (masterConfigForInstance?.masterDefaultTlsMode && masterConfigForInstance.masterDefaultTlsMode !== 'master')
                                   ? masterConfigForInstance.masterDefaultTlsMode
                                   : '0';
       }
+      // Only append tls if it's 1 or 2 (explicitly enabling TLS towards server)
       if (effectiveTlsMode === '1' || effectiveTlsMode === '2') {
           queryParams.append('tls', effectiveTlsMode);
           if (effectiveTlsMode === '2') {
@@ -79,6 +78,12 @@ export function buildUrlFromFormValues(
               if (params.keyPath && params.keyPath.trim() !== '') queryParams.append('key', params.keyPath.trim());
           }
       }
+    }
+    if (params.minPoolSize !== undefined) {
+      queryParams.append('min', params.minPoolSize.toString());
+    }
+    if (params.maxPoolSize !== undefined) {
+      queryParams.append('max', params.maxPoolSize.toString());
     }
   }
 
@@ -103,30 +108,32 @@ export function prepareClientUrlParams(
 
   let clientParams: BuildUrlParams;
 
-  const clientLogLevel = values.logLevel as MasterLogLevel; // Cast is safe due to Zod schema change
+  const clientLogLevel = values.logLevel as MasterLogLevel;
   const clientTlsParamFromForm = values.tlsMode as MasterTlsMode | '2' | undefined;
   const clientCertPath = values.certPath;
   const clientKeyPath = values.keyPath;
 
   if (values.isSingleEndedForward) {
-    const localListenAddress = values.tunnelAddress; // This is now host:port
+    const localListenAddress = values.tunnelAddress;
     const remoteTargetAddress = values.targetAddress;
 
     if (!remoteTargetAddress) {
       onLogLocal("单端转发模式下，目标地址 (业务数据) 是必需的。", "ERROR");
       return null;
     }
-    // Validation for localListenAddress format is handled by Zod
 
     clientParams = {
       instanceType: "客户端",
       isSingleEndedForward: true,
-      tunnelAddress: localListenAddress, // Use the direct host:port from form
+      tunnelKey: values.tunnelKey,
+      tunnelAddress: localListenAddress,
       targetAddress: remoteTargetAddress,
       logLevel: clientLogLevel,
-      tlsMode: '0', // TLS is not applicable for the instance URL in this mode
+      tlsMode: '0',
       certPath: '',
       keyPath: '',
+      minPoolSize: values.minPoolSize,
+      maxPoolSize: values.maxPoolSize,
     };
   } else {
     const connectToServerTunnel = values.tunnelAddress;
@@ -145,12 +152,15 @@ export function prepareClientUrlParams(
     clientParams = {
       instanceType: "客户端",
       isSingleEndedForward: false,
+      tunnelKey: values.tunnelKey,
       tunnelAddress: connectToServerTunnel,
       targetAddress: clientFullLocalForwardTargetAddress,
       logLevel: clientLogLevel,
       tlsMode: clientTlsParamFromForm,
       certPath: clientCertPath,
       keyPath: clientKeyPath,
+      minPoolSize: values.minPoolSize,
+      maxPoolSize: values.maxPoolSize,
     };
   }
   return { clientParams };
@@ -179,13 +189,14 @@ export function prepareServerUrlParams(
 
   const serverParams: BuildUrlParams = {
     instanceType: "服务端",
+    tunnelKey: values.tunnelKey,
     tunnelAddress: serverTunnelAddress,
     targetAddress: serverTargetAddress,
-    logLevel: values.logLevel as MasterLogLevel, // Cast is safe due to Zod schema change
+    logLevel: values.logLevel as MasterLogLevel,
     tlsMode: values.tlsMode as MasterTlsMode | '2',
     certPath: values.certPath,
     keyPath: values.keyPath,
+    // min/maxPoolSize are not applicable to servers
   };
   return { serverParams };
 }
-
