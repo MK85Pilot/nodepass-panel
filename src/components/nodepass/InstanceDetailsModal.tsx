@@ -276,9 +276,15 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               const jsonData = JSON.parse(eventData);
               const eventInstanceField = jsonData.instance;
               let eventInstanceId: string | null = null;
+              let eventInstanceStatus: string | null = null;
 
-              if (typeof eventInstanceField === 'object' && eventInstanceField !== null && typeof eventInstanceField.id === 'string') {
-                eventInstanceId = eventInstanceField.id;
+              if (typeof eventInstanceField === 'object' && eventInstanceField !== null) {
+                if (typeof eventInstanceField.id === 'string') {
+                  eventInstanceId = eventInstanceField.id;
+                }
+                if (typeof eventInstanceField.status === 'string') {
+                  eventInstanceStatus = eventInstanceField.status;
+                }
               }
               
               if (eventInstanceId === '********' && instance.id !== '********') {
@@ -313,14 +319,16 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                 }
                 if (currentInstanceDataInEvent) {
                     const statusFromEvent = currentInstanceDataInEvent.status;
-                    if (statusFromEvent !== instance.status) {
+                    if (statusFromEvent !== instance.status) { // Only log if status changed
                          addLogEntry(parseAndFormatLogLine(`收到本实例的初始状态数据 (ID: ${instance.id}, 状态: ${statusFromEvent})。`, logCounterRef.current++, 'INFO'));
                     }
                 }
               } else if (jsonData.type === 'create' && eventInstanceId === instance.id) {
                   addLogEntry(parseAndFormatLogLine(`本实例已创建 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && eventInstanceId === instance.id) {
-                  addLogEntry(parseAndFormatLogLine(`本实例已更新 (ID: ${instance.id}, 新状态: ${jsonData.instance.status})。`, logCounterRef.current++, 'INFO'));
+                  if (eventInstanceStatus && eventInstanceStatus !== instance.status) { // Only log if status changed
+                    addLogEntry(parseAndFormatLogLine(`本实例已更新 (ID: ${instance.id}, 新状态: ${eventInstanceStatus})。`, logCounterRef.current++, 'INFO'));
+                  }
               } else if (jsonData.type === 'delete' && eventInstanceId === instance.id) {
                   addLogEntry(parseAndFormatLogLine(`本实例已删除 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'error' && eventInstanceId === instance.id) { 
