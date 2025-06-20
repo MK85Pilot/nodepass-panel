@@ -213,7 +213,7 @@ export default function HomePage() {
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
                   <PlusCircle className="mr-2 h-5 w-5" />
-                  添加首个主控连接
+                  添加主控
                 </Button>
                 <Button onClick={() => fileInputRef.current?.click()} size="lg" variant="outline" className="font-sans">
                   <Upload className="mr-2 h-5 w-5" />
