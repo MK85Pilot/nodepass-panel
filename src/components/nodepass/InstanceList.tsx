@@ -15,8 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil, MoreVertical, Play, Square, RotateCcw } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
-// InstanceControls is no longer directly used in mobile card, its logic is merged into DropdownMenu
-// import { InstanceControls } from './InstanceControls'; 
 import { DeleteInstanceDialog } from './DeleteInstanceDialog';
 import { InstanceDetailsModal } from './InstanceDetailsModal';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +38,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from '@/components/ui/separator';
 
 
 function formatBytes(bytes: number) {
@@ -445,7 +444,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
                 {/* Right: Type Badge & Manage Button */}
                 {!isApiKeyInstance && (
-                  <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                   <div className="flex items-center space-x-2 flex-shrink-0">
                      <Badge
                         variant={instance.type === 'server' ? 'default' : 'accent'}
                         className="items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans"
@@ -496,28 +495,31 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               </div>
             </CardHeader>
             {!isApiKeyInstance && (
-              <CardContent className="p-3 pt-1 text-xs space-y-1.5">
-                <div title={copyTunnelTitle}>
-                  <strong className="font-medium text-muted-foreground">隧道:</strong>
-                  <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
-                    {displayTunnelAddress}
-                  </span>
-                </div>
-                <div title={copyTargetTitle}>
-                  <strong className="font-medium text-muted-foreground">目标:</strong>
-                  <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
-                    {displayTargetAddress}
-                  </span>
-                </div>
-                <div>
-                  <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
-                  <span className="font-mono ml-1">
-                    <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
-                    <span className="text-muted-foreground mx-1">/</span>
-                    <ArrowUp className="inline-block h-3 w-3 mr-0.5 text-green-500" />{formatBytes(totalTx)}
-                  </span>
-                </div>
-              </CardContent>
+              <>
+                <Separator className="my-2" />
+                <CardContent className="p-3 pt-1 text-xs space-y-1.5">
+                  <div title={copyTunnelTitle}>
+                    <strong className="font-medium text-muted-foreground">隧道:</strong>
+                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
+                      {displayTunnelAddress}
+                    </span>
+                  </div>
+                  <div title={copyTargetTitle}>
+                    <strong className="font-medium text-muted-foreground">目标:</strong>
+                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
+                      {displayTargetAddress}
+                    </span>
+                  </div>
+                  <div>
+                    <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
+                    <span className="font-mono ml-1">
+                      <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
+                      <span className="text-muted-foreground mx-1">/</span>
+                      <ArrowUp className="inline-block h-3 w-3 mr-0.5 text-green-500" />{formatBytes(totalTx)}
+                    </span>
+                  </div>
+                </CardContent>
+              </>
             )}
           </Card>
         );
@@ -559,7 +561,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableCell>
                 {instance.id === '********' ? (
                     <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                    <KeyRound className="h-3 w-3 mr-1" />API 密钥 
+                    <KeyRound className="h-3 w-3 mr-1" />API 密钥
                     </Badge>
                 ) : (
                     <Badge
@@ -769,7 +771,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         onConfirmDelete={(id) => deleteInstanceMutation.mutate(id)}
         isLoading={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === selectedInstanceForDelete?.id}
       />
-      {!isMobile && 
+      {!isMobile &&
         <BulkDeleteInstancesDialog
             selectedInstances={
             instances?.filter(inst => desktopSelectedInstanceIds.has(inst.id))
