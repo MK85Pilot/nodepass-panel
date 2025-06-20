@@ -344,16 +344,16 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     return Array.from({ length: 2 }).map((_, i) => (
         <Card key={`skeleton-card-${i}`} className="mb-4">
           <CardHeader className="p-3">
-            <Skeleton className="h-5 w-3/4 mb-1" /> {/* For ID */}
+            <Skeleton className="h-5 w-3/4 mb-1" /> {/* For Alias/ID */}
             <div className="flex items-center space-x-2">
-                <Skeleton className="h-4 w-1/2" /> {/* For Alias */}
                 <Skeleton className="h-5 w-10" /> {/* For Type Badge */}
                 <Skeleton className="h-5 w-16" /> {/* For Status Badge */}
                 <div className="ml-auto flex space-x-1">
-                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-8 w-8 rounded-full" /> {/* Placeholder for actions */}
                     <Skeleton className="h-8 w-8 rounded-full" />
                 </div>
             </div>
+            <Skeleton className="h-4 w-1/2 mt-1" /> {/* For ID under Alias */}
           </CardHeader>
           <CardContent className="p-3 space-y-2 border-t">
             <Skeleton className="h-4 w-full" />
@@ -401,27 +401,30 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       } = getInstanceDisplayDetails(instance);
 
       if (isMobile) {
-        // Mobile Card Rendering
         return (
           <Card key={instance.id} className="mb-3 shadow-md card-hover-shadow">
             <CardHeader className="p-3">
-              <div 
-                className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words mb-1"
-                onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
-                title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
-              >
-                {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
-              </div>
-              <div className="flex items-center space-x-2">
+               <div
+                  className="text-sm font-semibold cursor-pointer hover:text-primary truncate flex-shrink min-w-0"
+                  onClick={() => instance.id !== '********' && handleOpenEditAliasDialog(instance.id, currentAlias)}
+                  title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
+                >
+                  {instance.id === '********' ? 
+                    <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : 
+                    (isLoadingAliases ? <Skeleton className="h-4 w-24"/> : currentAlias || <span className="italic">设置别名...</span>)
+                  }
+                </div>
                 {instance.id !== '********' && (
                     <div
-                        className="text-xs text-muted-foreground cursor-pointer hover:text-primary truncate flex-shrink min-w-0"
-                        onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
-                        title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
+                        className="font-mono text-xs text-muted-foreground/80 cursor-pointer hover:text-primary break-words"
+                        onClick={() => handleCopyToClipboard(instance.id, "ID")}
+                        title={`实例ID: ${instance.id} (点击复制)`}
                     >
-                        {isLoadingAliases ? <Skeleton className="h-3 w-16"/> : currentAlias || <span className="italic">设置别名...</span>}
+                        {instance.id}
                     </div>
                 )}
+
+              <div className="flex items-center space-x-2 mt-1">
                 {instance.id === '********' ? (
                      <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5 flex-shrink-0">
                         <CheckCircle className="mr-1 h-3 w-3" />可用
@@ -433,7 +436,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                         className="items-center whitespace-nowrap text-xs py-0.5 px-1 font-sans flex-shrink-0"
                     >
                         {instance.type === 'server' ? <ServerIcon size={10} className="mr-0.5" /> : <SmartphoneIcon size={10} className="mr-0.5" />}
-                        {instance.type === 'server' ? 'S' : 'C'}
+                        {instance.type === 'server' ? '服务端' : '客户端'}
                     </Badge>
                     <InstanceStatusBadge status={instance.status} />
                     </>
@@ -493,14 +496,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
             >
                 <TableCell className="w-10">
-                {instance.id !== '********' ? (
+                {instance.id !== '********' && (
                     <Checkbox
                     checked={selectedInstanceIds.has(instance.id)}
                     onCheckedChange={() => handleSelectInstance(instance.id)}
                     aria-label={`选择实例 ${instance.id}`}
                     disabled={isBulkDeleting}
                     />
-                ) : null}
+                )}
                 </TableCell>
                 <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
                 <TableCell
@@ -659,19 +662,20 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
-                      <Checkbox
-                        checked={
-                          deletableInstances.length > 0 &&
-                          selectedInstanceIds.size === deletableInstances.length
-                            ? true
-                            : deletableInstances.length > 0 && selectedInstanceIds.size > 0
-                            ? "indeterminate"
-                            : false
-                        }
-                        onCheckedChange={handleSelectAllInstances}
-                        aria-label="全选/取消全选实例"
-                        disabled={deletableInstances.length === 0 || isBulkDeleting}
-                      />
+                      {!isMobile && deletableInstances.length > 0 && (
+                        <Checkbox
+                          checked={
+                            selectedInstanceIds.size === deletableInstances.length
+                              ? true
+                              : selectedInstanceIds.size > 0
+                              ? "indeterminate"
+                              : false
+                          }
+                          onCheckedChange={handleSelectAllInstances}
+                          aria-label="全选/取消全选实例"
+                          disabled={deletableInstances.length === 0 || isBulkDeleting}
+                        />
+                      )}
                     </TableHead>
                     <TableHead className="font-sans">ID</TableHead>
                     <TableHead className="font-sans">别名</TableHead>
