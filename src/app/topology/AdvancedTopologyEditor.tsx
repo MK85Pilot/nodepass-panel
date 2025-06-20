@@ -505,26 +505,26 @@ export function AdvancedTopologyEditor() {
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        style: { strokeWidth: 3.5 }, // Thicker line
+        style: { strokeWidth: 3.5 },
         markerEnd: { type: MarkerType.ArrowClosed },
         type: 'smoothstep',
       };
 
-      if (sourceRole === 'S' && targetRole === 'C') { // S -> C link
+      if (sourceRole === 'S' && targetRole === 'C') {
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // Blue for S->C
-      } else if (sourceRole === 'C' && targetRole === 'S') { // C -> S link
+        newEdgeBase.style!.stroke = 'hsl(var(--primary))';
+      } else if (sourceRole === 'C' && targetRole === 'S') {
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // Cyan for C->S
+        newEdgeBase.style!.stroke = 'hsl(var(--accent))';
       } else if (
-        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) || // U -> S or U -> C
-        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')    // S -> T or C -> T
+        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) ||
+        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')
       ) {
         newEdgeBase.animated = true;
-        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))'; // Yellowish for U-S/C and S/C-T links
-      } else { // Other connections (e.g., C-C)
+        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))';
+      } else {
         newEdgeBase.animated = false;
         newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))';
       }
@@ -564,7 +564,7 @@ export function AdvancedTopologyEditor() {
                                 tunnelAddress: newClientTunnelAddress,
                                 targetAddress: newClientTargetAddress,
                                 isSingleEndedForwardC: false,
-                                tlsMode: n.data.tlsMode || 'master' // Or determine appropriate TLS
+                                tlsMode: n.data.tlsMode || 'master'
                             }
                         };
                     }
@@ -779,9 +779,9 @@ export function AdvancedTopologyEditor() {
              logLevel: 'master',
              isExpanded: false,
              activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
-             tunnelKey: "", // Default empty tunnel key
-             minPoolSize: undefined, // Default undefined
-             maxPoolSize: undefined, // Default undefined
+             tunnelKey: "",
+             minPoolSize: undefined,
+             maxPoolSize: undefined,
           };
 
           if (nodeRole === 'S') {
@@ -790,11 +790,11 @@ export function AdvancedTopologyEditor() {
             newNodeData.tlsMode = parentMContainer?.data.defaultTlsMode || 'master';
             newNodeData.logLevel = parentMContainer?.data.defaultLogLevel || 'master';
           } else if (nodeRole === 'C') {
-            newNodeData.isSingleEndedForwardC = false; // Default to tunnel mode for new C nodes
-            newNodeData.tunnelAddress = `remote-server.example.com:${10000 + currentCounter}`; // Placeholder for S address
-            newNodeData.targetAddress = `[::]:${3000 + currentCounter + 1}`; // Placeholder for local listen
+            newNodeData.isSingleEndedForwardC = false;
+            newNodeData.tunnelAddress = `remote-server.example.com:${10000 + currentCounter}`;
+            newNodeData.targetAddress = `[::]:${3000 + currentCounter + 1}`;
             newNodeData.logLevel = parentMContainer?.data.defaultLogLevel || 'master';
-            newNodeData.tlsMode = 'master'; // Default TLS for client connecting to server
+            newNodeData.tlsMode = 'master';
           } else if (nodeRole === 'T') {
             newNodeData.targetAddress = `192.168.1.20:${8080 + currentCounter}`;
           }
@@ -854,10 +854,10 @@ export function AdvancedTopologyEditor() {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-                newData.minPoolSize = undefined; // S nodes don't have pool size
-                newData.maxPoolSize = undefined; // S nodes don't have pool size
+                newData.minPoolSize = undefined;
+                newData.maxPoolSize = undefined;
             } else { // C
-                newData.isSingleEndedForwardC = false; // Default new C nodes to tunnel mode
+                newData.isSingleEndedForwardC = false;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
             }
@@ -902,103 +902,82 @@ export function AdvancedTopologyEditor() {
     const allCurrentEdges = getEdges();
 
     for (const node of allCurrentNodes) {
-      if (node.data.role !== 'S' && node.data.role !== 'C') continue;
+        if (node.data.role !== 'S' && node.data.role !== 'C') continue;
 
-      const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
-      if (!parentMNode || !parentMNode.data.masterId) {
-        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
-        continue;
-      }
-      const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
-      if (!masterConfigForNode) {
-        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
-        continue;
-      }
+        const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
+        if (!parentMNode || !parentMNode.data.masterId) {
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
+            continue;
+        }
+        const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
+        if (!masterConfigForNode) {
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
+            continue;
+        }
 
-      let urlParams: BuildUrlParams | null = null;
-      const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
-      let instanceTypeForDialog: "服务端" | "客户端" = node.data.role === 'S' ? "服务端" : "客户端";
+        let urlParams: BuildUrlParams | null = null;
+        const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
+        const instanceTypeForDialog: "服务端" | "客户端" = node.data.role === 'S' ? "服务端" : "客户端";
 
-      const isEntryFromU = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-
-      if (node.data.role === 'S') {
-        let sListenAddress = node.data.tunnelAddress;
-        let sTargetAddressForUrl = node.data.targetAddress;
-
-        if (isEntryFromU) { // U -> S (S is entry for "reverse tunnel" U->S->C->T or simple U->S->T)
-          const connectedCEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
-          if (connectedCEdge) { // U -> S -> C chain
-            const cNode = allCurrentNodes.find(n => n.id === connectedCEdge.target);
-            if (cNode && cNode.data.tunnelAddress) {
-              sTargetAddressForUrl = cNode.data.tunnelAddress; // S targets C's listening address
-            } else {
-              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S后C监听地址缺失' } } : n)); continue;
+        if (node.data.role === 'S') {
+            if (!node.data.tunnelAddress || !node.data.targetAddress) {
+                setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S地址信息不全' } } : n));
+                continue;
             }
-          } else { // U -> S -> T or U -> S (standalone)
-            const connectedTEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'T');
-            if (connectedTEdge) {
-              const tNode = allCurrentNodes.find(n => n.id === connectedTEdge.target);
-              sTargetAddressForUrl = (tNode && tNode.data.targetAddress) ? tNode.data.targetAddress : node.data.targetAddress;
-            } // else sTargetAddressForUrl remains node.data.targetAddress
-          }
+            urlParams = {
+                instanceType: "服务端",
+                tunnelAddress: node.data.tunnelAddress, // S listens on this
+                targetAddress: node.data.targetAddress, // S forwards/connects to this
+                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+                tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
+                certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
+            };
+        } else if (node.data.role === 'C') {
+            let isEffectivelySingleEnded = !!node.data.isSingleEndedForwardC; // Default from dialog
+
+            // Check if C is an entry point (U->C)
+            const isEntryFromU = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
+            if (isEntryFromU) {
+                isEffectivelySingleEnded = true;
+            }
+
+            // Check if C is an exit point in a U->S->C chain
+            if (!isEntryFromU) {
+                const incomingSEdge = allCurrentEdges.find(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
+                if (incomingSEdge) {
+                    const sourceSNode = allCurrentNodes.find(n => n.id === incomingSEdge.source)!;
+                    const isSFromU = allCurrentEdges.some(edge => edge.target === sourceSNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
+                    if (isSFromU) {
+                        isEffectivelySingleEnded = true;
+                    }
+                }
+            }
+            
+            if (!node.data.tunnelAddress || !node.data.targetAddress) {
+                 setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址信息不全' } } : n));
+                 continue;
+            }
+
+            urlParams = {
+                instanceType: "客户端",
+                isSingleEndedForward: isEffectivelySingleEnded,
+                tunnelAddress: node.data.tunnelAddress, // If single: C listens; If tunnel: S remote addr
+                targetAddress: node.data.targetAddress, // If single: C forwards; If tunnel: C local listen
+                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+                tlsMode: isEffectivelySingleEnded ? '0' : ((node.data.tlsMode as any) || 'master'),
+                certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
+                minPoolSize: node.data.minPoolSize, maxPoolSize: node.data.maxPoolSize,
+            };
         }
-        // If S is not entry (e.g. C -> S), sListenAddress and sTargetAddressForUrl remain as per node.data
 
-        if (!sListenAddress) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S监听地址缺失' } } : n)); continue; }
-        if (!sTargetAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S目标地址缺失' } } : n)); continue; }
-
-        urlParams = {
-          instanceType: "服务端",
-          tunnelAddress: sListenAddress, targetAddress: sTargetAddressForUrl,
-          logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-          tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
-          certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
-        };
-
-      } else if (node.data.role === 'C') {
-        let cIsSingleEndedEffective = !!node.data.isSingleEndedForwardC; // Default to dialog setting
-        let cTunnelAddressForUrl = node.data.tunnelAddress;
-        let cTargetAddressForUrl = node.data.targetAddress;
-
-        const isExitCInReverseTunnel = allCurrentEdges.some(edge => { // U -> S -> C (this C)
-          if (edge.target === node.id) {
-            const sourceSNode = allCurrentNodes.find(n => n.id === edge.source && n.data.role === 'S');
-            return sourceSNode && allCurrentEdges.some(sEdge => sEdge.target === sourceSNode.id && allCurrentNodes.find(uN => uN.id === sEdge.source)?.data.role === 'U');
-          } return false;
-        });
-
-        const isEntryCInForwardTunnel = isEntryFromU; // U -> C (this C)
-
-        if (isExitCInReverseTunnel) { // U -> S -> C (C is exit)
-          cIsSingleEndedEffective = true; // C must listen for S and forward to T
-                                        // C's tunnelAddress is its listen, C's targetAddress is T's address
-        } else if (isEntryCInForwardTunnel) { // U -> C (C is entry)
-           cIsSingleEndedEffective = true; // C must listen for U and forward to S/T
-                                         // C's tunnelAddress is its listen, C's targetAddress is S/T's address
+        if (urlParams) {
+            const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
+            instancesToCreate.push({
+                nodeId: node.id, nodeLabel: nodeLabelForDialog,
+                masterId: masterConfigForNode.id, masterName: masterConfigForNode.name,
+                url: finalUrl, instanceType: instanceTypeForDialog,
+            });
         }
-        // If C is not an entry from U, and not an exit in U->S->C, it uses its dialog setting for isSingleEndedForwardC
-
-        if (!cTunnelAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址缺失(隧道/监听)' } } : n)); continue; }
-        if (!cTargetAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址缺失(目标/本地)' } } : n)); continue; }
-
-        urlParams = {
-          instanceType: "客户端", isSingleEndedForward: cIsSingleEndedEffective,
-          tunnelAddress: cTunnelAddressForUrl, targetAddress: cTargetAddressForUrl,
-          logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-          tlsMode: cIsSingleEndedEffective ? '0' : ((node.data.tlsMode as any) || 'master'),
-          certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
-          minPoolSize: node.data.minPoolSize, maxPoolSize: node.data.maxPoolSize,
-        };
-      }
-
-      if (urlParams) {
-        const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
-        instancesToCreate.push({
-          nodeId: node.id, nodeLabel: nodeLabelForDialog,
-          masterId: masterConfigForNode.id, masterName: masterConfigForNode.name,
-          url: finalUrl, instanceType: instanceTypeForDialog,
-        });
-      }
     }
     return instancesToCreate;
   }, [getNodes, getEdges, getApiConfigById, setNodesInternal]);
@@ -1121,7 +1100,7 @@ export function AdvancedTopologyEditor() {
             }
         }
 
-        if (isInterMasterLinkForThisC) { // If it's an inter-master client link, it cannot be single-ended.
+        if (isInterMasterLinkForThisC) {
             mergedData.isSingleEndedForwardC = false;
         }
     }
@@ -1363,5 +1342,6 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+
 
 
