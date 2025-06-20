@@ -45,7 +45,7 @@ export function EditAliasDialog({ open, onOpenChange, instanceId, currentAlias, 
               编辑实例别名
             </DialogTitle>
             <DialogDescription className="font-sans">
-              为实例 <span className="font-mono font-semibold">{instanceId.substring(0,8)}...</span> 设置或修改别名。
+              为实例 <span className="font-mono font-semibold">{instanceId}</span> 设置或修改别名。
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
