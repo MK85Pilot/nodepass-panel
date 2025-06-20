@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, BarChartHorizontalBig, Check, HelpCircle, Share2, Grid2X2 } from 'lucide-react';
+import { Moon, Sun, Settings, LogOut, PlusCircle, ListTree, BarChartHorizontalBig, HelpCircle, Grid2X2 } from 'lucide-react'; // Removed Check
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,14 +13,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
 import type { AppLogEntry } from '@/components/nodepass/EventLog';
 import { AppLogo } from './AppLogo'; 
 
@@ -33,20 +27,7 @@ interface HeaderProps {
 
 export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiConfig, onLog }: HeaderProps) {
   const { setTheme, theme } = useTheme();
-  const { apiConfigsList, activeApiConfig, setActiveApiConfigId } = useApiConfig();
-  const { toast } = useToast();
-  const router = useRouter();
-
-  const handleSwitchApiConfig = (id: string) => {
-    const newActiveConf = apiConfigsList.find(c => c.id === id);
-    setActiveApiConfigId(id);
-     toast({
-      title: '活动主控已切换',
-      description: `已连接到 “${newActiveConf?.name}”。`,
-    });
-    onLog?.(`活动主控已切换至: "${newActiveConf?.name}"`, 'INFO');
-    window.location.href = '/';
-  };
+  const { activeApiConfig } = useApiConfig(); // Removed apiConfigsList, setActiveApiConfigId, useToast, router
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" style={{ height: 'var(--header-height)' }}>
@@ -92,29 +73,6 @@ export function Header({ onManageApiConfigs, onClearActiveConfig, hasActiveApiCo
                   <span>管理所有主控</span>
                 </Link>
               </DropdownMenuItem>
-
-              {apiConfigsList.length > 0 && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                     <Check className="mr-2 h-4 w-4 text-primary" />
-                    <span>切换活动主控</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
-                      {apiConfigsList.map(config => (
-                        <DropdownMenuItem
-                          key={config.id}
-                          onClick={() => handleSwitchApiConfig(config.id)}
-                          disabled={activeApiConfig?.id === config.id}
-                        >
-                          {activeApiConfig?.id === config.id && <Check className="mr-2 h-4 w-4 text-green-500" />}
-                          <span className={`truncate ${activeApiConfig?.id !== config.id ? 'ml-6' : ''}`}>{config.name}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
-              )}
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>可视化与分析</DropdownMenuLabel>
