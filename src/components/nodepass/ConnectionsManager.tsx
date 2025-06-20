@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiConfigDialog } from '@/components/nodepass/ApiKeyDialog';
-import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download, MoreVertical } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, Power, CheckCircle, Loader2, Upload, Download, MoreVertical, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -30,29 +30,72 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { AppLogEntry } from './EventLog';
 import { MasterInfoCells } from './MasterInfoCells';
-import { useIsMobile } from '@/hooks/use-mobile'; // Added
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery } from '@tanstack/react-query';
+import { nodePassApi } from '@/lib/api';
+import type { MasterInfo } from '@/types/nodepass';
+import { MASTER_TLS_MODE_DISPLAY_MAP } from './create-instance-dialog/constants';
 
 
-interface ConnectionsManagerProps {
-  onLog?: (message: string, type: AppLogEntry['type']) => void;
+const mapLogLevelMobile = (logLevel: string | undefined): string => {
+  if (!logLevel) return 'N/A';
+  const lowerLogLevel = logLevel.toLowerCase();
+  if (lowerLogLevel === 'master') return '主控默认';
+  return lowerLogLevel.charAt(0).toUpperCase() + lowerLogLevel.slice(1);
 }
 
-// Simplified MasterInfo display for cards
+const mapTlsModeMobile = (tlsMode: string | undefined): string => {
+  if (!tlsMode) return 'N/A';
+  if (tlsMode in MASTER_TLS_MODE_DISPLAY_MAP) {
+    return MASTER_TLS_MODE_DISPLAY_MAP[tlsMode as keyof typeof MASTER_TLS_MODE_DISPLAY_MAP];
+  }
+  return tlsMode;
+}
+
 const CompactMasterInfo: React.FC<{ config: NamedApiConfig, isActive: boolean }> = ({ config, isActive }) => {
-  // This is a simplified version. For actual live data, MasterInfoCells's query logic would be needed.
-  // For now, displaying defaults from config.
-  const defaultLogLevel = config.masterDefaultLogLevel || 'master';
-  const defaultTlsMode = config.masterDefaultTlsMode || 'master';
+  const { getApiRootUrl, getToken } = useApiConfig();
+
+  const { data: masterInfo, isLoading: isLoadingMasterInfo, error: masterInfoError, refetch: refetchMasterInfo, isRefetching: isRefetchingMasterInfo } = useQuery<MasterInfo, Error>({
+    queryKey: ['masterInfo', config.id, 'compact'], // Unique key for compact view
+    queryFn: () => {
+      const apiRoot = getApiRootUrl(config.id);
+      const token = getToken(config.id);
+      if (!apiRoot || !token) {
+        throw new Error(`API configuration for master ${config.name} is incomplete.`);
+      }
+      return nodePassApi.getMasterInfo(apiRoot, token);
+    },
+    enabled: !!config.id,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const defaultLogLevel = mapLogLevelMobile(config.masterDefaultLogLevel || 'master');
+  const defaultTlsMode = mapTlsModeMobile(config.masterDefaultTlsMode || 'master');
+
+  const renderInfoLine = (label: string, value: React.ReactNode, isLoading?: boolean, hasError?: boolean, onRetry?: () => void) => (
+    <div className="flex justify-between items-center">
+      <span className="text-muted-foreground">{label}:</span>
+      {isLoading ? <Skeleton className="h-3 w-16 ml-1" /> :
+       hasError ? (
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onRetry?.(); }} disabled={isRefetchingMasterInfo} className="h-auto p-0 text-xs text-destructive hover:text-destructive ml-1">
+            <AlertTriangle className="h-3 w-3 mr-0.5" />错误 <RefreshCw className={`h-2.5 w-2.5 ml-0.5 ${isRefetchingMasterInfo ? 'animate-spin' : ''}`} />
+          </Button>
+        ) : (
+          <span className="font-mono text-right truncate" title={typeof value === 'string' ? value : undefined}>{value}</span>
+        )
+      }
+    </div>
+  );
 
   return (
     <div className="text-xs space-y-1.5 mt-2 pt-2 border-t border-border/30">
@@ -72,23 +115,10 @@ const CompactMasterInfo: React.FC<{ config: NamedApiConfig, isActive: boolean }>
             </TooltipProvider>
         </div>
        )}
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">默认日志:</span>
-        <span className="font-mono">{defaultLogLevel === 'master' ? '主控配置' : defaultLogLevel}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">默认TLS:</span>
-        <span className="font-mono">{defaultTlsMode === 'master' ? '主控配置' : defaultTlsMode}</span>
-      </div>
-      {/* Placeholder for live version/OS, as MasterInfoCells has its own query */}
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">版本:</span>
-        <span className="font-mono text-muted-foreground/70">(需查询)</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">系统:</span>
-        <span className="font-mono text-muted-foreground/70">(需查询)</span>
-      </div>
+      {renderInfoLine("默认日志", defaultLogLevel)}
+      {renderInfoLine("默认TLS", defaultTlsMode)}
+      {renderInfoLine("版本", masterInfo?.ver || "N/A", isLoadingMasterInfo, !!masterInfoError, refetchMasterInfo)}
+      {renderInfoLine("系统", masterInfo ? `${masterInfo.os} ${masterInfo.arch}` : "N/A", isLoadingMasterInfo, !!masterInfoError, refetchMasterInfo)}
     </div>
   );
 };
@@ -128,7 +158,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
       description: `“${savedConfig.name}”已保存。`,
     });
     onLog?.(`主控配置 "${savedConfig.name}" 已${actionText}。`, 'SUCCESS');
-    if (isNew && apiConfigsList.length === 0) { // If this was the very first config added
+    if (isNew && apiConfigsList.length === 0) { 
         setActiveApiConfigId(savedConfig.id);
         onLog?.(`主控 "${savedConfig.name}" 已自动激活。`, 'INFO');
     }
@@ -142,8 +172,6 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
       description: `已连接到 “${config?.name}”。`,
     });
     onLog?.(`活动主控已切换至: "${config?.name}"`, 'INFO');
-    // No longer redirecting to '/' to stay on connections page
-    // window.location.href = '/';
   };
 
   const handleDeleteConfirm = () => {
@@ -222,7 +250,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
               };
-              const saved = addOrUpdateApiConfig(configToAdd); // addOrUpdate already calls saveApiConfigsList
+              const saved = addOrUpdateApiConfig(configToAdd); 
               if (importedCount === 0) {
                   firstNewlyImportedConfig = saved;
               }
@@ -319,18 +347,18 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
           <CardContent className="space-y-4">
             <p className="text-muted-foreground font-sans">未添加任何主控连接。</p>
             <p className="text-muted-foreground font-sans">点击上面的“添加新主控”或“导入配置”开始。</p>
-            {isMobile && (
-                <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                    <Button onClick={() => handleOpenApiConfigDialog(null)} size="lg" className="font-sans w-full">
-                        <PlusCircle className="mr-2 h-5 w-5" />
-                        添加主控
-                    </Button>
-                    <Button onClick={() => fileInputRef.current?.click()} size="lg" variant="outline" className="font-sans w-full">
-                        <Upload className="mr-2 h-5 w-5" />
-                        导入配置
-                    </Button>
-                </div>
-            )}
+            
+              <div className="flex flex-col sm:flex-row gap-3 mt-4 justify-center">
+                  <Button onClick={() => handleOpenApiConfigDialog(null)} size="lg" className="font-sans w-full sm:w-auto">
+                      <PlusCircle className="mr-2 h-5 w-5" />
+                      添加主控
+                  </Button>
+                  <Button onClick={() => fileInputRef.current?.click()} size="lg" variant="outline" className="font-sans w-full sm:w-auto">
+                      <Upload className="mr-2 h-5 w-5" />
+                      导入配置
+                  </Button>
+              </div>
+            
           </CardContent>
         </Card>
       ) : isMobile ? (
@@ -355,11 +383,6 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                       </div>
                     </div>
                     <div className="flex items-center space-x-1 flex-shrink-0">
-                       {isActive && (
-                          <Badge variant="default" className="text-xs py-0.5 px-1.5 bg-green-500 hover:bg-green-600">
-                            <CheckCircle className="h-3 w-3 mr-1"/>活动
-                          </Badge>
-                        )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="管理主控">
@@ -378,7 +401,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <DropdownMenuItem
-                                    onSelect={(e) => e.preventDefault()} // Prevents menu from closing
+                                    onSelect={(e) => e.preventDefault()} 
                                     disabled={isActive}
                                     className={isActive ? "" : "text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10"}
                                 >
@@ -396,7 +419,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                                 <AlertDialogCancel className="font-sans">取消</AlertDialogCancel>
                                 <AlertDialogAction
                                     onClick={() => {
-                                        setDeletingConfig(config); // For the confirmation logic to pick up
+                                        setDeletingConfig(config); 
                                         handleDeleteConfirm();
                                     }}
                                     className="bg-destructive hover:bg-destructive/90 font-sans text-destructive-foreground"
@@ -517,8 +540,8 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
         onSave={handleSaveApiConfig}
         currentConfig={editingApiConfig}
         isEditing={!!editingApiConfig}
-        onLog={onLog}
       />
     </div>
   );
 }
+
