@@ -14,8 +14,6 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { createInstanceFormSchema, type CreateInstanceFormValues, createInstanceApiSchema } from '@/zod-schemas/nodepass';
 import type { CreateInstanceRequest, Instance } from '@/types/nodepass';
@@ -47,7 +45,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
   const { apiConfigsList, getApiRootUrl, getToken } = useApiConfig();
   const { setAlias: saveInstanceAlias } = useInstanceAliases();
   const [externalApiSuggestion, setExternalApiSuggestion] = useState<string | null>(null);
-  const [showDetailedDescriptions, setShowDetailedDescriptions] = useState(false);
 
   const form = useForm<CreateInstanceFormValues>({
     resolver: zodResolver(createInstanceFormSchema),
@@ -89,7 +86,6 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
         maxPoolSize: undefined,
       });
       setExternalApiSuggestion(null);
-      setShowDetailedDescriptions(false);
     }
   }, [open, form]);
 
@@ -256,16 +252,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             <DialogDescription className="font-sans text-xs mr-4">
               为当前主控 “{apiName || 'N/A'}” 配置新实例。
             </DialogDescription>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              <Switch
-                id="toggle-descriptions"
-                checked={showDetailedDescriptions}
-                onCheckedChange={setShowDetailedDescriptions}
-                aria-label="切换详细参数说明"
-                className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&_span]:h-3 [&_span]:w-3 [&_span]:data-[state=checked]:translate-x-3.5 [&_span]:data-[state=unchecked]:translate-x-0.5"
-              />
-              <Label htmlFor="toggle-descriptions" className="font-sans text-xs cursor-pointer">参数说明</Label>
-            </div>
+            {/* Removed Switch and Label for "参数说明" */}
           </div>
         </DialogHeader>
 
@@ -280,7 +267,7 @@ export function CreateInstanceDialog({ open, onOpenChange, apiId, apiRoot, apiTo
             isLoadingServerInstances={false}
             externalApiSuggestion={externalApiSuggestion}
             onSubmitHandler={onSubmitHandler}
-            showDetailedDescriptions={showDetailedDescriptions}
+            showDetailedDescriptions={false} // Hardcoded to false
         />
 
         <DialogFooter className="pt-3 font-sans">
