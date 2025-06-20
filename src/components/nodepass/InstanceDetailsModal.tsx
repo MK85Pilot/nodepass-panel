@@ -280,17 +280,13 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               if (typeof eventInstanceField === 'object' && eventInstanceField !== null && typeof eventInstanceField.id === 'string') {
                 eventInstanceId = eventInstanceField.id;
               }
-              // For 'initial' type that might have an array of instances
-              // We handle array specifically under 'initial' type check
-
-              // Filter out events for the special '********' API Key instance from detailed logging, 
-              // unless it's the instance being viewed.
+              
               if (eventInstanceId === '********' && instance.id !== '********') {
-                continue; // To the next messageBlock
+                continue; 
               }
 
               if (jsonData.type === 'log') {
-                if (eventInstanceId === instance.id) { // Log for the current instance
+                if (eventInstanceId === instance.id) { 
                   let rawLogData = jsonData.logs || '';
                   if (typeof rawLogData === 'string') {
                     addLogEntry(parseAndFormatLogLine(rawLogData, logCounterRef.current++)); 
@@ -307,18 +303,20 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                return; // Stop processing for this connection
+                return; 
               } else if (jsonData.type === 'initial') {
-                let currentInstanceData;
+                let currentInstanceDataInEvent;
                 if (Array.isArray(eventInstanceField)) {
-                    currentInstanceData = eventInstanceField.find(inst => inst.id === instance.id);
+                    currentInstanceDataInEvent = eventInstanceField.find(instData => instData.id === instance.id);
                 } else if (eventInstanceId === instance.id) {
-                    currentInstanceData = eventInstanceField;
+                    currentInstanceDataInEvent = eventInstanceField;
                 }
-                if (currentInstanceData) {
-                    addLogEntry(parseAndFormatLogLine(`收到本实例的初始状态数据 (ID: ${instance.id}, 状态: ${currentInstanceData.status})。`, logCounterRef.current++, 'INFO'));
+                if (currentInstanceDataInEvent) {
+                    const statusFromEvent = currentInstanceDataInEvent.status;
+                    if (statusFromEvent !== instance.status) {
+                         addLogEntry(parseAndFormatLogLine(`收到本实例的初始状态数据 (ID: ${instance.id}, 状态: ${statusFromEvent})。`, logCounterRef.current++, 'INFO'));
+                    }
                 }
-                // Suppress logging of "full list of instances received" in this specific modal.
               } else if (jsonData.type === 'create' && eventInstanceId === instance.id) {
                   addLogEntry(parseAndFormatLogLine(`本实例已创建 (ID: ${instance.id})。`, logCounterRef.current++, 'INFO'));
               } else if (jsonData.type === 'update' && eventInstanceId === instance.id) {
@@ -328,20 +326,14 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
               } else if (jsonData.type === 'error' && eventInstanceId === instance.id) { 
                   const errorMessage = jsonData.error || jsonData.message || '未知实例错误';
                   addLogEntry(parseAndFormatLogLine(`实例错误: ${errorMessage} (ID: ${instance.id})`, logCounterRef.current++, 'ERROR'));
-              } else if (instance.id !== '********' && (eventInstanceId && eventInstanceId !== instance.id)) {
-                // Event for a different instance, do nothing in this modal's log.
-              } else if (instance.id !== '********' && !['log', 'shutdown', 'initial', 'create', 'update', 'delete', 'error'].includes(jsonData.type) ) {
-                // Unhandled type, potentially for current instance or general. Log as warning if not API key view.
-                const idForWarning = eventInstanceId || "未指定实例";
-                 addLogEntry(parseAndFormatLogLine(`未分类事件: 类型 '${jsonData.type}', 实例 '${idForWarning}'. 数据: ${JSON.stringify(jsonData).substring(0,100)}...`, logCounterRef.current++, 'WARN'));
               }
 
             } catch (e: any) {
-                 if (instance.id !== '********') { // Avoid spamming for API key special instance
+                 if (instance.id !== '********') { 
                     addLogEntry(parseAndFormatLogLine(`解析 'instance' 事件数据错误: ${e.message}. Data snippet: ${eventData.substring(0,100)}...`, logCounterRef.current++, 'ERROR'));
                  }
             }
-          } else if (eventData && instance.id !== '********') { // Non-'instance' event with data, log as warning if not API key view
+          } else if (eventData && instance.id !== '********') { 
              addLogEntry(parseAndFormatLogLine(`收到事件 "${eventName}" (预期 "instance"). Data: ${eventData.substring(0, 50)}...`, logCounterRef.current++, 'WARN'));
           }
         }
@@ -354,7 +346,7 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
         if (typeof error.message === 'string' && (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('networkerror'))) {
             displayError = '网络错误。请检查连接或服务器CORS设置。';
         }
-        if (instance.id !== '********') { // Avoid spamming for API key special instance
+        if (instance.id !== '********') { 
           addLogEntry(parseAndFormatLogLine(`事件流连接错误: ${displayError} ${RECONNECT_DELAY / 1000}秒后尝试重连...`, logCounterRef.current++, 'ERROR'));
           if (!signal.aborted) {
             reconnectTimeoutRef.current = setTimeout(connectToSse, RECONNECT_DELAY);
@@ -631,3 +623,4 @@ export function InstanceDetailsModal({ instance, open, onOpenChange, apiRoot, ap
   );
 }
 
+    
