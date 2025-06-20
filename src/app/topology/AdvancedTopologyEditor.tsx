@@ -31,7 +31,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { nodePassApi, getEventsUrl } from '@/lib/api';
-import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
+import { buildUrlFromFormValues, type BuildUrlParams, prepareClientUrlParams, prepareServerUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
 import { extractPort, parseNodePassUrl } from '@/lib/url-utils'; // parseNodePassUrl now used
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
@@ -900,13 +900,17 @@ export function AdvancedTopologyEditor() {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
     const allCurrentEdges = getEdges();
+    const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
+      if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
+      if (type === 'WARN') toast({ title: "配置警告", description: message, variant: "warning" });
+    };
 
     for (const node of allCurrentNodes) {
         if (node.data.role !== 'S' && node.data.role !== 'C') continue;
 
         const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
         if (!parentMNode || !parentMNode.data.masterId) {
-            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '父主控丢失' } } : n));
             continue;
         }
         const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
@@ -917,57 +921,97 @@ export function AdvancedTopologyEditor() {
 
         let urlParams: BuildUrlParams | null = null;
         const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
-        const instanceTypeForDialog: "服务端" | "客户端" = node.data.role === 'S' ? "服务端" : "客户端";
 
-        if (node.data.role === 'S') {
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-                setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S地址信息不全' } } : n));
-                continue;
-            }
-            urlParams = {
-                instanceType: "服务端",
-                tunnelAddress: node.data.tunnelAddress, // S listens on this
-                targetAddress: node.data.targetAddress, // S forwards/connects to this
-                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-                tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
-                certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
-            };
-        } else if (node.data.role === 'C') {
-            let isEffectivelySingleEnded = !!node.data.isSingleEndedForwardC; // Default from dialog
+        if (node.data.role === 'S') { // S-Node
+            const sNode = node;
+            const outgoingEdgeToC = allCurrentEdges.find(edge => edge.source === sNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
+            const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === sNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
 
-            // Check if C is an entry point (U->C)
-            const isEntryFromU = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            if (isEntryFromU) {
-                isEffectivelySingleEnded = true;
-            }
+            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C (S is entry for U, target is C's listener)
+                const targetCNode = allCurrentNodes.find(n => n.id === outgoingEdgeToC.target)!;
+                const sSubmission = prepareServerUrlParams({
+                    instanceType: "服务端",
+                    tunnelAddress: sNode.data.tunnelAddress, // S listens for U
+                    targetAddress: targetCNode.data.tunnelAddress, // S forwards to C's listener
+                    logLevel: (sNode.data.logLevel as any),
+                    tlsMode: (sNode.data.tlsMode as any),
+                    certPath: sNode.data.certPath,
+                    keyPath: sNode.data.keyPath,
+                    tunnelKey: sNode.data.tunnelKey,
+                }, localOnLog);
+                if (sSubmission) urlParams = sSubmission.serverParams;
 
-            // Check if C is an exit point in a U->S->C chain
-            if (!isEntryFromU) {
-                const incomingSEdge = allCurrentEdges.find(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
-                if (incomingSEdge) {
-                    const sourceSNode = allCurrentNodes.find(n => n.id === incomingSEdge.source)!;
-                    const isSFromU = allCurrentEdges.some(edge => edge.target === sourceSNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-                    if (isSFromU) {
-                        isEffectivelySingleEnded = true;
-                    }
-                }
+            } else { // Standard S-node or S->T
+                 const sSubmission = prepareServerUrlParams({
+                    instanceType: "服务端",
+                    tunnelAddress: sNode.data.tunnelAddress,
+                    targetAddress: sNode.data.targetAddress,
+                    logLevel: (sNode.data.logLevel as any),
+                    tlsMode: (sNode.data.tlsMode as any),
+                    certPath: sNode.data.certPath,
+                    keyPath: sNode.data.keyPath,
+                    tunnelKey: sNode.data.tunnelKey,
+                }, localOnLog);
+                 if (sSubmission) urlParams = sSubmission.serverParams;
             }
-            
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-                 setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址信息不全' } } : n));
-                 continue;
-            }
+        } else if (node.data.role === 'C') { // C-Node
+            const cNode = node;
+            const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
+            const incomingEdgeFromS = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
+            const sourceSNodeForIncoming = incomingEdgeFromS ? allCurrentNodes.find(n => n.id === incomingEdgeFromS.source) : null;
+            const isSFromU = sourceSNodeForIncoming ? allCurrentEdges.some(edge => edge.target === sourceSNodeForIncoming.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U') : false;
 
-            urlParams = {
-                instanceType: "客户端",
-                isSingleEndedForward: isEffectivelySingleEnded,
-                tunnelAddress: node.data.tunnelAddress, // If single: C listens; If tunnel: S remote addr
-                targetAddress: node.data.targetAddress, // If single: C forwards; If tunnel: C local listen
-                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-                tlsMode: isEffectivelySingleEnded ? '0' : ((node.data.tlsMode as any) || 'master'),
-                certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
-                minPoolSize: node.data.minPoolSize, maxPoolSize: node.data.maxPoolSize,
-            };
+            if (incomingEdgeFromU) { // U -> C (C is entry for U, single-ended)
+                const cSubmission = prepareClientUrlParams({
+                    instanceType: "客户端",
+                    isSingleEndedForward: true, // C acts as single-ended forwarder here
+                    tunnelAddress: cNode.data.tunnelAddress, // C listens for U
+                    targetAddress: cNode.data.targetAddress, // C forwards to next (S or T)
+                    logLevel: (cNode.data.logLevel as any),
+                    tlsMode: '0', // Single-ended listener typically no TLS
+                    certPath: cNode.data.certPath,
+                    keyPath: cNode.data.keyPath,
+                    tunnelKey: cNode.data.tunnelKey,
+                    minPoolSize: cNode.data.minPoolSize,
+                    maxPoolSize: cNode.data.maxPoolSize,
+                }, masterConfigForNode, localOnLog);
+                if (cSubmission) urlParams = cSubmission.clientParams;
+
+            } else if (isSFromU && sourceSNodeForIncoming) { // U -> S -> C (C is exit, acts as tunnel client to S)
+                const sMasterConfig = getApiConfigById(allCurrentNodes.find(n => n.id === sourceSNodeForIncoming.parentNode)?.data.masterId!);
+                const sNodeReachableAddress = calculateClientTunnelAddressForServer(sourceSNodeForIncoming.data, sMasterConfig);
+                
+                const cSubmission = prepareClientUrlParams({
+                    instanceType: "客户端",
+                    isSingleEndedForward: false, // C is a tunnel client
+                    tunnelAddress: sNodeReachableAddress, // C connects to S's reachable address
+                    targetAddress: cNode.data.targetAddress, // C's local forward to T
+                    logLevel: (cNode.data.logLevel as any),
+                    tlsMode: (cNode.data.tlsMode as any), // TLS for connection to S
+                    certPath: cNode.data.certPath,
+                    keyPath: cNode.data.keyPath,
+                    tunnelKey: cNode.data.tunnelKey,
+                    minPoolSize: cNode.data.minPoolSize,
+                    maxPoolSize: cNode.data.maxPoolSize,
+                }, masterConfigForNode, localOnLog);
+                 if (cSubmission) urlParams = cSubmission.clientParams;
+
+            } else { // Standard C-node (tunnel or single-ended based on its own dialog setting)
+                const cSubmission = prepareClientUrlParams({
+                    instanceType: "客户端",
+                    isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
+                    tunnelAddress: cNode.data.tunnelAddress,
+                    targetAddress: cNode.data.targetAddress,
+                    logLevel: (cNode.data.logLevel as any),
+                    tlsMode: (cNode.data.tlsMode as any),
+                    certPath: cNode.data.certPath,
+                    keyPath: cNode.data.keyPath,
+                    tunnelKey: cNode.data.tunnelKey,
+                    minPoolSize: cNode.data.minPoolSize,
+                    maxPoolSize: cNode.data.maxPoolSize,
+                }, masterConfigForNode, localOnLog);
+                 if (cSubmission) urlParams = cSubmission.clientParams;
+            }
         }
 
         if (urlParams) {
@@ -975,12 +1019,14 @@ export function AdvancedTopologyEditor() {
             instancesToCreate.push({
                 nodeId: node.id, nodeLabel: nodeLabelForDialog,
                 masterId: masterConfigForNode.id, masterName: masterConfigForNode.name,
-                url: finalUrl, instanceType: instanceTypeForDialog,
+                url: finalUrl, instanceType: node.data.role === 'S' ? "服务端" : "客户端",
             });
+        } else {
+             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'URL参数准备失败' } } : n));
         }
     }
     return instancesToCreate;
-  }, [getNodes, getEdges, getApiConfigById, setNodesInternal]);
+  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, toast, calculateClientTunnelAddressForServer]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {
@@ -1343,5 +1389,4 @@ export function AdvancedTopologyEditor() {
   );
 }
 
-
-
+    
