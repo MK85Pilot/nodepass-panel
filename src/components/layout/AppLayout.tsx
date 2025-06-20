@@ -89,7 +89,7 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
             </a> 驱动
           </span>
           <span className="mx-1.5">&bull;</span>
-          <span>版本: 1.0.5</span>
+          <span>版本: 1.0.6</span>
         </div>
       </footer>
     </div>
