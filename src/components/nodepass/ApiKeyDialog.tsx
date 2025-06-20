@@ -13,16 +13,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { KeyRound, Eye, EyeOff, Info } from 'lucide-react'; 
-import type { NamedApiConfig, MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key'; 
+import { KeyRound, Eye, EyeOff } from 'lucide-react';
+import type { NamedApiConfig } from '@/hooks/use-api-key';
 import type { AppLogEntry } from './EventLog';
-import { MASTER_TLS_MODE_DISPLAY_MAP } from './create-instance-dialog/constants';
 
 interface ApiConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void; 
+  onSave: (config: Omit<NamedApiConfig, 'id'> & { id?: string }) => void;
   currentConfig?: NamedApiConfig | null;
   isEditing?: boolean;
   onLog?: (message: string, type: AppLogEntry['type']) => void;
@@ -33,47 +31,33 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [masterLogLevelInput, setMasterLogLevelInput] = useState<MasterLogLevel>('master');
-  const [masterTlsModeInput, setMasterTlsModeInput] = useState<MasterTlsMode>('master');
 
   useEffect(() => {
     if (open) {
       setNameInput(currentConfig?.name || '');
       setApiUrlInput(currentConfig?.apiUrl || 'http://localhost:3000/api/v1');
       setTokenInput(currentConfig?.token || '');
-      if (isEditing) {
-        setMasterLogLevelInput(currentConfig?.masterDefaultLogLevel || 'master');
-        setMasterTlsModeInput(currentConfig?.masterDefaultTlsMode || 'master');
-      } else {
-        setMasterLogLevelInput('master');
-        setMasterTlsModeInput('master');
-      }
       setShowToken(false);
     } else {
+      // Reset fields when dialog is closed
       setNameInput('');
       setApiUrlInput('http://localhost:3000/api/v1');
       setTokenInput('');
-      setMasterLogLevelInput('master');
-      setMasterTlsModeInput('master');
       setShowToken(false);
     }
-  }, [open, currentConfig, isEditing]);
+  }, [open, currentConfig]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (nameInput.trim() && apiUrlInput.trim() && tokenInput.trim()) {
       const configToSave: Omit<NamedApiConfig, 'id'> & { id?: string } = {
-        id: currentConfig?.id, 
+        id: currentConfig?.id,
         name: nameInput.trim(),
         apiUrl: apiUrlInput.trim(),
         token: tokenInput.trim(),
+        // masterDefaultLogLevel and masterDefaultTlsMode are intentionally omitted.
+        // The useApiConfig hook will default them to 'master' if they're not present.
       };
-      if (isEditing) {
-        configToSave.masterDefaultLogLevel = masterLogLevelInput;
-        configToSave.masterDefaultTlsMode = masterTlsModeInput;
-      }
-      // If not editing, masterDefaultLogLevel and masterDefaultTlsMode are not included,
-      // useApiConfig will default them to 'master'.
       onSave(configToSave);
       onOpenChange(false);
     }
@@ -110,7 +94,7 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 id="api-url"
                 value={apiUrlInput}
                 onChange={(e) => setApiUrlInput(e.target.value)}
-                placeholder="例: http://localhost:3000/api/v1" 
+                placeholder="例: http://localhost:3000/api/v1"
                 required
                 className="font-sans"
               />
@@ -139,52 +123,6 @@ export function ApiConfigDialog({ open, onOpenChange, onSave, currentConfig, isE
                 </Button>
               </div>
             </div>
-
-            {isEditing && (
-              <>
-                <div className="my-3 border-t border-border"></div>
-                <p className="text-sm text-muted-foreground font-sans pb-2">
-                  以下字段用于配置此主控在 NodePanel 中的默认启动参数参考值。
-                </p>
-
-                <div className="space-y-1">
-                  <Label htmlFor="master-log-level" className="font-sans flex items-center">
-                    <Info size={14} className="mr-1.5 text-muted-foreground" />
-                    NodePanel 参考: 默认日志级别
-                  </Label>
-                  <Select value={masterLogLevelInput} onValueChange={(value) => setMasterLogLevelInput(value as MasterLogLevel)}>
-                    <SelectTrigger className="font-sans text-sm">
-                      <SelectValue placeholder="选择日志级别" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="master">主控实际配置</SelectItem>
-                      <SelectItem value="debug">Debug</SelectItem>
-                      <SelectItem value="info">Info</SelectItem>
-                      <SelectItem value="warn">Warn</SelectItem>
-                      <SelectItem value="error">Error</SelectItem>
-                      <SelectItem value="event">Event</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="master-tls-mode" className="font-sans flex items-center">
-                    <Info size={14} className="mr-1.5 text-muted-foreground" />
-                    NodePanel 参考: 默认TLS模式
-                  </Label>
-                  <Select value={masterTlsModeInput} onValueChange={(value) => setMasterTlsModeInput(value as MasterTlsMode)}>
-                    <SelectTrigger className="font-sans text-sm">
-                      <SelectValue placeholder="选择TLS模式" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (
-                        <SelectItem key={val} value={val}>{lab === "主控配置" ? "主控实际配置" : lab}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
           </div>
           <DialogFooter className="font-sans">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
