@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react'; // useRef removed as aliasInputRef is no longer needed
 import {
   Table,
   TableBody,
@@ -30,6 +30,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
 import { useInstanceAliases } from '@/hooks/use-instance-aliases';
+import { EditAliasDialog } from './EditAliasDialog';
 
 
 function formatBytes(bytes: number) {
@@ -54,7 +55,7 @@ interface InstanceListProps {
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog, onOpenCreateInstanceDialog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getAlias, setAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
+  const { setAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
@@ -63,9 +64,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
-  const [editingAliasValue, setEditingAliasValue] = useState<string>("");
-  const aliasInputRef = useRef<HTMLInputElement>(null);
+  const [isEditAliasDialogOpen, setIsEditAliasDialogOpen] = useState(false);
+  const [editingAliasContext, setEditingAliasContext] = useState<{ id: string; alias?: string } | null>(null);
 
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
@@ -117,7 +117,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
       });
       onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
-      removeAlias(instanceId); 
+      removeAlias(instanceId);
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
@@ -222,40 +222,21 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     setIsBulkDeleteDialogOpen(false);
   };
 
-  const handleStartEditAlias = (instanceId: string, currentAlias: string | undefined) => {
+  const handleOpenEditAliasDialog = (instanceId: string, currentAlias: string | undefined) => {
     if (instanceId === '********') return;
-    setEditingAliasId(instanceId);
-    setEditingAliasValue(currentAlias || "");
-    setTimeout(() => aliasInputRef.current?.focus(), 0);
+    setEditingAliasContext({ id: instanceId, alias: currentAlias });
+    setIsEditAliasDialogOpen(true);
   };
 
-  const handleSaveAlias = () => {
-    if (editingAliasId) {
-      const trimmedAlias = editingAliasValue.trim();
-      setAlias(editingAliasId, trimmedAlias);
-      toast({
-        title: '别名已更新',
-        description: trimmedAlias ? `实例 ${editingAliasId.substring(0,8)}... 的别名已设为 "${trimmedAlias}"。` : `实例 ${editingAliasId.substring(0,8)}... 的别名已清除。`,
-      });
-      onLog?.(trimmedAlias ? `为实例 ${editingAliasId.substring(0,8)}... 设置别名: "${trimmedAlias}"` : `已清除实例 ${editingAliasId.substring(0,8)}... 的别名`, 'INFO');
-    }
-    setEditingAliasId(null);
-  };
-
-  const handleCancelEditAlias = () => {
-    setEditingAliasId(null);
-  };
-
-  const handleAliasInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditingAliasValue(e.target.value);
-  };
-
-  const handleAliasInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSaveAlias();
-    } else if (e.key === 'Escape') {
-      handleCancelEditAlias();
-    }
+  const handleSaveAliasFromDialog = (instanceId: string, newAlias: string) => {
+    setAlias(instanceId, newAlias);
+    toast({
+      title: '别名已更新',
+      description: newAlias ? `实例 ${instanceId.substring(0,8)}... 的别名已设为 "${newAlias}"。` : `实例 ${instanceId.substring(0,8)}... 的别名已清除。`,
+    });
+    onLog?.(newAlias ? `为实例 ${instanceId.substring(0,8)}... 设置别名: "${newAlias}"` : `已清除实例 ${instanceId.substring(0,8)}... 的别名`, 'INFO');
+    setIsEditAliasDialogOpen(false);
+    setEditingAliasContext(null);
   };
 
 
@@ -334,8 +315,8 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
         const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
 
-        if (isSingleEnded) { 
-            targetStringToCopy = parsedUrl.targetAddress || "N/A"; 
+        if (isSingleEnded) {
+            targetStringToCopy = parsedUrl.targetAddress || "N/A";
             copyTargetTitle = "客户端单端转发目标地址";
             displayTargetAddress = (
                <span
@@ -347,13 +328,13 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 </span>
             );
 
-            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || ''); 
+            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
             const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
             if (clientMasterApiHost && clientLocalListeningPort) {
                 tunnelStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
                 copyTunnelTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
             } else {
-                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`; 
+                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`;
                 copyTunnelTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
             }
             displayTunnelAddress = (
@@ -366,14 +347,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                </span>
             );
 
-        } else { 
-            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || ''); 
+        } else {
+            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
             const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
              if (clientMasterApiHost && clientLocalForwardPort) {
                 targetStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
                 copyTunnelTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
             } else if (clientLocalForwardPort) {
-                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`; 
+                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`;
                 copyTunnelTitle = `客户端本地转发 (主控地址未知)`;
             } else {
                 targetStringToCopy = parsedUrl.targetAddress || "N/A (解析失败)";
@@ -389,7 +370,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                </span>
             );
 
-            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A"; 
+            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
             copyTunnelTitle = "客户端连接的服务端隧道地址";
             displayTunnelAddress = (
                <span
@@ -408,7 +389,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow
         key={instance.id}
         className="text-foreground/90 hover:text-foreground"
-        onDoubleClick={() => instance.id !== '********' && setSelectedInstanceForDetails(instance)}
+        onDoubleClick={instance.id !== '********' ? () => handleOpenEditAliasDialog(instance.id, currentAlias) : () => setSelectedInstanceForDetails(instance)}
         data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
       >
         <TableCell className="w-10">
@@ -422,32 +403,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           ) : null}
         </TableCell>
         <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
-        <TableCell 
+        <TableCell
             className="text-xs font-sans truncate max-w-[150px]"
             title={currentAlias || "双击编辑别名"}
-            onDoubleClick={() => handleStartEditAlias(instance.id, currentAlias)}
+            onDoubleClick={(e) => {
+                e.stopPropagation(); // Prevent row's onDoubleClick if targeting alias cell specifically for edit
+                if (instance.id !== '********') handleOpenEditAliasDialog(instance.id, currentAlias);
+            }}
         >
-          {editingAliasId === instance.id ? (
-            <div className="flex items-center">
-                <Input
-                    ref={aliasInputRef}
-                    type="text"
-                    value={editingAliasValue}
-                    onChange={handleAliasInputChange}
-                    onKeyDown={handleAliasInputKeyDown}
-                    onBlur={handleSaveAlias}
-                    className="h-7 text-xs p-1"
-                    maxLength={50}
-                />
-            </div>
-          ) : (
-            <>
-              {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
-              currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
-              (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
-              }
-            </>
-          )}
+            {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
+            currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
+            (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
+            }
         </TableCell>
         <TableCell>
           {instance.id === '********' ? (
@@ -534,7 +501,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             )}
             <button
                 className="p-2 rounded-md hover:bg-muted"
-                onClick={() => setSelectedInstanceForDetails(instance)}
+                onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDetails(instance);}}
                 aria-label="查看详情"
             >
                 <Eye className="h-4 w-4" />
@@ -542,7 +509,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             {instance.id !== '********' && (
               <button
                   className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
-                  onClick={() => setSelectedInstanceForDelete(instance)}
+                  onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDelete(instance);}}
                   aria-label="删除"
                   disabled={isBulkDeleting || deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
               >
@@ -710,7 +677,18 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         isLoading={isBulkDeleting}
         onConfirmDelete={handleConfirmBulkDelete}
       />
+      {editingAliasContext && (
+        <EditAliasDialog
+            open={isEditAliasDialogOpen}
+            onOpenChange={(open) => {
+                setIsEditAliasDialogOpen(open);
+                if (!open) setEditingAliasContext(null);
+            }}
+            instanceId={editingAliasContext.id}
+            currentAlias={editingAliasContext.alias}
+            onSave={handleSaveAliasFromDialog}
+        />
+      )}
     </Card>
   );
 }
-
