@@ -29,7 +29,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import type { AppLogEntry } from './EventLog';
-import { MasterInfoCells } from './MasterInfoCells'; // Import the new component
+import { MasterInfoCells } from './MasterInfoCells';
 
 interface ConnectionsManagerProps {
   onLog?: (message: string, type: AppLogEntry['type']) => void;
@@ -78,7 +78,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
       description: `已连接到 “${config?.name}”。`,
     });
     onLog?.(`活动主控已切换至: "${config?.name}"`, 'INFO');
-    window.location.href = '/'; // Force reload to ensure all components pick up new active config
+    window.location.href = '/'; 
   };
 
   const handleDeleteConfirm = () => {
@@ -129,7 +129,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
         const content = e.target?.result;
         if (typeof content !== 'string') throw new Error("无法读取文件内容。");
         
-        const importedConfigsUntyped = JSON.parse(content) as any[]; // Read as any first
+        const importedConfigsUntyped = JSON.parse(content) as any[]; 
         if (!Array.isArray(importedConfigsUntyped)) throw new Error("导入文件格式无效，应为JSON数组。");
 
         let importedCount = 0;
@@ -147,10 +147,11 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
             if (existingConfig) {
               skippedCount++;
             } else {
-              const { prefixPath, ...restOfImportedConfig } = importedConfig; // Destructure out prefixPath
               const configToAdd: Omit<NamedApiConfig, 'id'> & { id?: string } = {
-                ...restOfImportedConfig, // Use the rest
-                id: importedConfig.id, // Keep original ID for matching
+                id: importedConfig.id, 
+                name: importedConfig.name,
+                apiUrl: importedConfig.apiUrl,
+                token: importedConfig.token,
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
               };
@@ -249,8 +250,10 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                 <TableHead className="w-[60px] text-center font-sans">状态</TableHead>
                 <TableHead className="font-sans">主控名称</TableHead>
                 <TableHead className="font-sans">主控 API 地址</TableHead>
-                <TableHead className="font-sans">主控版本</TableHead>
+                <TableHead className="font-sans">版本</TableHead>
                 <TableHead className="font-sans">系统信息</TableHead>
+                <TableHead className="font-sans">日志级别</TableHead>
+                <TableHead className="font-sans">TLS模式</TableHead>
                 <TableHead className="text-right w-[250px] font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
