@@ -13,20 +13,21 @@ interface InstanceStatusBadgeProps {
 
 export function InstanceStatusBadge({ status, compact = false }: InstanceStatusBadgeProps) {
   if (compact) {
-    let colorClass = 'bg-yellow-400'; // Default for unknown
+    let color = 'bg-yellow-400 dark:bg-yellow-500'; // Default for unknown
     let tooltipText = '未知';
+    const triangleSize = "24px"; // Size of the SVG container, triangle will fill this
 
     switch (status) {
       case 'running':
-        colorClass = 'bg-green-500';
+        color = 'fill-green-500 dark:fill-green-600';
         tooltipText = '运行中';
         break;
       case 'stopped':
-        colorClass = 'bg-gray-500';
+        color = 'fill-gray-500 dark:fill-gray-600';
         tooltipText = '已停止';
         break;
       case 'error':
-        colorClass = 'bg-destructive';
+        color = 'fill-destructive';
         tooltipText = '错误';
         break;
     }
@@ -34,7 +35,12 @@ export function InstanceStatusBadge({ status, compact = false }: InstanceStatusB
       <TooltipProvider delayDuration={100}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className={`h-3 w-3 rounded-full ${colorClass}`} />
+            <div className="absolute top-0 right-0" style={{ width: triangleSize, height: triangleSize }}>
+              <svg width={triangleSize} height={triangleSize} viewBox="0 0 20 20" className="overflow-visible">
+                {/* Triangle points: top-left, top-right, bottom-right of the SVG box */}
+                <polygon points="0,0 20,0 20,20" className={color} />
+              </svg>
+            </div>
           </TooltipTrigger>
           <TooltipContent className="text-xs font-sans p-1.5">
             {tooltipText}
