@@ -91,6 +91,9 @@ export default function HomePage() {
         let importedCount = 0;
         let skippedCount = 0;
         let invalidCount = 0;
+        let firstNewlyImportedConfig: NamedApiConfig | null = null;
+
+        const currentActiveConfigBeforeImport = activeApiConfig; // Capture state before updates
 
         importedConfigsUntyped.forEach(importedConfig => {
           if (
@@ -99,6 +102,8 @@ export default function HomePage() {
             typeof importedConfig.apiUrl === 'string' &&
             typeof importedConfig.token === 'string'
           ) {
+            // Check against the most up-to-date list from the hook, 
+            // though for "existing" check, initial apiConfigsList is fine.
             const existingConfig = apiConfigsList.find(c => c.id === importedConfig.id);
             if (existingConfig) {
               skippedCount++;
@@ -111,7 +116,10 @@ export default function HomePage() {
                 masterDefaultLogLevel: importedConfig.masterDefaultLogLevel || 'master',
                 masterDefaultTlsMode: importedConfig.masterDefaultTlsMode || 'master',
               };
-              addOrUpdateApiConfig(configToAdd);
+              const savedConfig = addOrUpdateApiConfig(configToAdd);
+              if (importedCount === 0) { // If this is the first *newly* imported config
+                firstNewlyImportedConfig = savedConfig;
+              }
               importedCount++;
             }
           } else {
@@ -129,17 +137,14 @@ export default function HomePage() {
           description: importSummary,
         });
         addPageLog(`主控配置导入完成: ${importSummary}`, 'INFO');
-        if (importedCount > 0 && !activeApiConfig) {
-            // If configs were imported and none was active, try to set the first imported/available one as active
-            const firstAvailable = apiConfigsList.find(c => c.id === importedConfigsUntyped.find(ic => ic.id)?.id) || apiConfigsList[0];
-            if (firstAvailable) {
-                setActiveApiConfigId(firstAvailable.id);
-                 toast({
-                    title: '主控已激活',
-                    description: `“${firstAvailable.name}”已自动激活。`,
-                });
-                addPageLog(`主控 "${firstAvailable.name}" 已自动激活。`, 'INFO');
-            }
+
+        if (firstNewlyImportedConfig && !currentActiveConfigBeforeImport) {
+            setActiveApiConfigId(firstNewlyImportedConfig.id);
+             toast({
+                title: '主控已激活',
+                description: `“${firstNewlyImportedConfig.name}”已自动激活。`,
+            });
+            addPageLog(`主控 "${firstNewlyImportedConfig.name}" 已自动激活。`, 'INFO');
         }
 
       } catch (error: any) {
@@ -271,3 +276,4 @@ export default function HomePage() {
     </AppLayout>
   );
 }
+
