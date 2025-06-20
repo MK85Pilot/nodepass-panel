@@ -426,6 +426,29 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                       {isLoadingAliases ? <Skeleton className="h-3 w-16 mt-1"/> : currentAlias || <span className="italic">设置别名...</span>}
                     </div>
                   )}
+                  <div className="flex items-center space-x-2 mt-2">
+                    {instance.id === '********' ? (
+                      <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+                        <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant={instance.type === 'server' ? 'default' : 'accent'}
+                        className="items-center whitespace-nowrap text-xs font-sans"
+                      >
+                        {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                        {instance.type === 'server' ? '服务端' : '客户端'}
+                      </Badge>
+                    )}
+                    {instance.id === '********' ? (
+                        <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+                          <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                          可用
+                        </Badge>
+                      ) : (
+                        <InstanceStatusBadge status={instance.status} />
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center space-x-0.5 flex-shrink-0">
@@ -446,55 +469,30 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 )}
               </div>
             </CardHeader>
-            <CardContent className="p-3 text-xs space-y-1.5 border-t">
-              <div className="flex items-center space-x-2 mb-2">
-                {instance.id === '********' ? (
-                  <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                    <KeyRound className="h-3 w-3 mr-1" />API 密钥
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant={instance.type === 'server' ? 'default' : 'accent'}
-                    className="items-center whitespace-nowrap text-xs font-sans"
-                  >
-                    {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                    {instance.type === 'server' ? '服务端' : '客户端'}
-                  </Badge>
-                )}
-                {instance.id === '********' ? (
-                    <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-                      <CheckCircle className="mr-1 h-3.5 w-3.5" />
-                      可用
-                    </Badge>
-                  ) : (
-                    <InstanceStatusBadge status={instance.status} />
-                )}
-              </div>
-              {instance.id !== '********' && (
-                <>
-                  <div title={copyTunnelTitle}>
-                    <strong className="font-medium text-muted-foreground">隧道:</strong>
-                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
-                      {displayTunnelAddress}
-                    </span>
-                  </div>
-                  <div title={copyTargetTitle}>
-                    <strong className="font-medium text-muted-foreground">目标:</strong>
-                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
-                      {displayTargetAddress}
-                    </span>
-                  </div>
-                  <div>
-                    <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
-                    <span className="font-mono ml-1">
-                      <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
-                      <span className="text-muted-foreground mx-1">/</span>
-                      <ArrowUp className="inline-block h-3 w-3 mr-0.5 text-green-500" />{formatBytes(totalTx)}
-                    </span>
-                  </div>
-                </>
-              )}
-            </CardContent>
+            {instance.id !== '********' && (
+              <CardContent className="p-3 text-xs space-y-1.5 border-t">
+                <div title={copyTunnelTitle}>
+                  <strong className="font-medium text-muted-foreground">隧道:</strong>
+                  <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
+                    {displayTunnelAddress}
+                  </span>
+                </div>
+                <div title={copyTargetTitle}>
+                  <strong className="font-medium text-muted-foreground">目标:</strong>
+                  <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
+                    {displayTargetAddress}
+                  </span>
+                </div>
+                <div>
+                  <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
+                  <span className="font-mono ml-1">
+                    <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
+                    <span className="text-muted-foreground mx-1">/</span>
+                    <ArrowUp className="inline-block h-3 w-3 mr-0.5 text-green-500" />{formatBytes(totalTx)}
+                  </span>
+                </div>
+              </CardContent>
+            )}
           </Card>
         );
       } else {
@@ -768,4 +766,5 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
 
