@@ -85,12 +85,10 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
             >
             NodePass
           </a> 驱动
-        </div>
-        <div className="mt-1 text-xs font-mono">
+          <span className="font-mono mx-1">|</span>
           版本: 1.0.3
         </div>
       </footer>
     </div>
   );
 }
-
