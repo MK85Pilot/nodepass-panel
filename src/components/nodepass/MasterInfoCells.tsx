@@ -65,12 +65,15 @@ export function MasterInfoCells({ apiConfig }: MasterInfoCellsProps) {
     );
   }
 
+  const systemInfoDisplay = `${data.os} ${data.arch}`;
+
   return (
     <>
-      <TableCell className="text-xs font-mono" title={data.version}>{data.version}</TableCell>
-      <TableCell className="text-xs font-mono truncate max-w-[200px]" title={`${data.system_info}, ${data.go_version}`}>
-        {data.system_info}, {data.go_version}
+      <TableCell className="text-xs font-mono" title={data.ver}>{data.ver}</TableCell>
+      <TableCell className="text-xs font-mono truncate max-w-[200px]" title={systemInfoDisplay}>
+        {systemInfoDisplay}
       </TableCell>
     </>
   );
 }
+

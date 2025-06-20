@@ -28,8 +28,16 @@ export interface InstanceEvent {
 }
 
 export interface MasterInfo {
-  version: string;
-  system_info: string; // e.g., "Linux arm64"
-  go_version: string; // e.g., "go1.21.0"
-  // Add other fields if the /info endpoint provides more
+  ver: string;         // e.g., "v1.4.0"
+  os: string;          // e.g., "linux"
+  arch: string;        // e.g., "amd64"
+  log: string;         // e.g., "info"
+  tls: string;         // e.g., "1"
+  crt?: string;        // Optional, e.g., ""
+  key?: string;        // Optional, e.g., ""
+  // Other fields from NodePass /info can be added here if needed
+  // For example, if the Go version was previously part of system_info:
+  go_version?: string; // Retaining this for potential future use if separate from os/arch
+  system_info?: string; // Potentially deprecated if os/arch are preferred
 }
+
