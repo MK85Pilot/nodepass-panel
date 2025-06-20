@@ -23,7 +23,7 @@ import type { Node } from './topologyTypes';
 
 const initialZoomLevel = 0.5;
 
-interface ToolbarWrapperProps {
+interface ToolbarWrapperPropsInternal { // Renamed for clarity within this file
   onCenterView: (instance: ReturnType<typeof useReactFlow>) => void;
   onClearCanvas: () => void;
   onSubmitTopology: () => void;
@@ -31,9 +31,11 @@ interface ToolbarWrapperProps {
   canSubmit: boolean;
   isSubmitting: boolean;
   isRefreshingCounts?: boolean;
+  isMobile?: boolean; // Added
+  onToggleMobilePalette?: () => void; // Added
 }
 
-const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
+const ToolbarWrapper: React.FC<ToolbarWrapperPropsInternal> = ({
   onCenterView,
   onClearCanvas,
   onSubmitTopology,
@@ -41,6 +43,8 @@ const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
   canSubmit,
   isSubmitting,
   isRefreshingCounts,
+  isMobile, // Added
+  onToggleMobilePalette, // Added
 }) => {
   const reactFlowInstance = useReactFlow();
   return (
@@ -52,6 +56,8 @@ const ToolbarWrapper: React.FC<ToolbarWrapperProps> = ({
       canSubmit={canSubmit}
       isSubmitting={isSubmitting}
       isRefreshingCounts={isRefreshingCounts}
+      isMobile={isMobile} // Pass down
+      onToggleMobilePalette={onToggleMobilePalette} // Pass down
     />
   );
 };
@@ -81,6 +87,8 @@ interface TopologyCanvasWrapperProps {
   onPaneClick: () => void;
   onNodeClick?: NodeMouseHandler;
   customNodeTypes: NodeTypes;
+  isMobile?: boolean; // Added
+  onToggleMobilePalette?: () => void; // Added
 }
 
 export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
@@ -88,7 +96,8 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
   reactFlowWrapperRef, onCenterView, onClearCanvas, onTriggerSubmitTopology,
   onTriggerRefreshAllInstanceCounts,
   canSubmit, isSubmitting, isRefreshingCounts, onNodeDropOnCanvas, onNodeContextMenu,
-  onEdgeContextMenu, onPaneClick, onNodeClick, customNodeTypes
+  onEdgeContextMenu, onPaneClick, onNodeClick, customNodeTypes,
+  isMobile, onToggleMobilePalette // Destructure new props
 }) => {
   const { resolvedTheme } = useTheme();
   const [isClient, setIsClient] = useState(false);
@@ -170,6 +179,8 @@ export const TopologyCanvasWrapper: React.FC<TopologyCanvasWrapperProps> = ({
             canSubmit={canSubmit}
             isSubmitting={isSubmitting}
             isRefreshingCounts={isRefreshingCounts}
+            isMobile={isMobile} // Pass down
+            onToggleMobilePalette={onToggleMobilePalette} // Pass down
           />
         </Panel>
         {memoizedMiniMap}

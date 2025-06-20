@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { LocateFixed, Trash2, Send, RefreshCw } from 'lucide-react'; 
+import { LocateFixed, Trash2, Send, RefreshCw, PanelLeft } from 'lucide-react'; 
 
 interface TopologyToolbarProps {
   onCenterView: () => void;
@@ -13,6 +13,8 @@ interface TopologyToolbarProps {
   canSubmit: boolean;
   isSubmitting?: boolean;
   isRefreshingCounts?: boolean;
+  isMobile?: boolean;
+  onToggleMobilePalette?: () => void;
 }
 
 export function TopologyToolbar({
@@ -23,9 +25,17 @@ export function TopologyToolbar({
   canSubmit,
   isSubmitting,
   isRefreshingCounts,
+  isMobile,
+  onToggleMobilePalette,
 }: TopologyToolbarProps) {
   return (
     <div className="flex flex-row flex-wrap gap-2 items-center">
+      {isMobile && onToggleMobilePalette && (
+        <Button onClick={onToggleMobilePalette} size="sm" variant="outline" className="font-sans">
+          <PanelLeft className="mr-2 h-4 w-4" />
+          组件面板
+        </Button>
+      )}
       <Button onClick={onRefreshAllInstanceCounts} size="sm" variant="outline" className="font-sans" disabled={isSubmitting || isRefreshingCounts}>
         <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshingCounts ? 'animate-spin' : ''}`} />
         {isRefreshingCounts ? "刷新中..." : "刷新计数"}

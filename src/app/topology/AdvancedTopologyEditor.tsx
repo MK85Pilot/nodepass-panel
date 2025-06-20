@@ -18,7 +18,7 @@ import {
   type NodeProps,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIconLucide, Edit3, Trash2, RefreshCw, Smartphone, X } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIconLucide, Edit3, Trash2, RefreshCw, Smartphone, X, PanelLeft } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
@@ -42,6 +42,7 @@ import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIG
 import { calculateClientTunnelAddressForServer } from './topologyLogic';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 
 const initialNodes: Node[] = [];
@@ -90,6 +91,7 @@ export function AdvancedTopologyEditor() {
 
   const isMobile = useIsMobile();
   const [showMobileInfoAlert, setShowMobileInfoAlert] = useState(true);
+  const [isPaletteDrawerOpen, setIsPaletteDrawerOpen] = useState(false);
 
 
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
@@ -931,25 +933,32 @@ export function AdvancedTopologyEditor() {
 
         if (node.data.role === 'S') {
             const sNode = node;
-            const outgoingEdgeToC = allCurrentEdges.find(edge => edge.source === sNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
-            const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === sNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            let sTargetAddressForUrl = sNode.data.targetAddress;
+            // Check if S is part of U -> S -> C (reverse tunnel for U's traffic via S to C)
+            const isReverseTunnelChain = allCurrentEdges.some(edgeFromU =>
+                edgeFromU.source === allCurrentNodes.find(uNode => uNode.data.role === 'U')?.id &&
+                edgeFromU.target === sNode.id &&
+                allCurrentEdges.some(edgeToC =>
+                    edgeToC.source === sNode.id &&
+                    allCurrentNodes.find(cNode => cNode.id === edgeToC.target)?.data.role === 'C'
+                )
+            );
 
-            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C chain
+            let sTargetAddressForUrl = sNode.data.targetAddress;
+            if (isReverseTunnelChain) {
                 const sListenPortStr = extractPort(sNode.data.tunnelAddress || "");
                 if (sListenPortStr) {
                     const sListenPortNum = parseInt(sListenPortStr, 10);
-                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`;
+                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`; // S forwards to an intermediate port for C
                     localOnLog(`U->S->C 链 (反向): 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl}。C 将连接此 S 的 ${sNode.data.tunnelAddress}，并转发到 C 自己的目标地址。`, 'INFO');
                 } else {
                     localOnLog(`警告: U->S->C 链 (反向) 中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其配置的业务目标地址。`, 'WARN');
-                    sTargetAddressForUrl = sNode.data.targetAddress; // Fallback
                 }
             }
+
             const sSubmission = prepareServerUrlParams({
                 instanceType: "服务端",
                 tunnelAddress: sNode.data.tunnelAddress,
-                targetAddress: sTargetAddressForUrl,
+                targetAddress: sTargetAddressForUrl, // Use potentially modified target address
                 logLevel: (sNode.data.logLevel as any),
                 tlsMode: (sNode.data.tlsMode as any),
                 certPath: sNode.data.certPath,
@@ -1281,29 +1290,63 @@ export function AdvancedTopologyEditor() {
         </Alert>
       )}
       <div className="flex flex-row flex-grow h-full overflow-hidden">
-        <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
-          <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
-            <div className="flex flex-col p-3">
-              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
-                <ListTree size={16} className="mr-2 text-primary" />
-                主控列表
-              </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-              <ScrollArea className="flex-grow pr-1 max-h-60">
-                <MastersPalette />
+        {!isMobile && (
+            <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
+            <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
+                <div className="flex flex-col p-3">
+                <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                    <ListTree size={16} className="mr-2 text-primary" />
+                    主控列表
+                </h2>
+                <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
+                <ScrollArea className="flex-grow pr-1 max-h-60">
+                    <MastersPalette />
+                </ScrollArea>
+                </div>
+                <Separator className="my-0" />
+                <div className="flex flex-col p-3">
+                <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                    <Puzzle size={16} className="mr-2 text-primary" />
+                    组件卡片
+                </h2>
+                <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
+                <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
+                </div>
+            </div>
+            </ScrollArea>
+        )}
+
+        {isMobile && (
+          <Sheet open={isPaletteDrawerOpen} onOpenChange={setIsPaletteDrawerOpen}>
+            <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
+              <SheetHeader className="p-3 border-b">
+                <SheetTitle className="font-title text-base">组件与主控</SheetTitle>
+              </SheetHeader>
+              <ScrollArea className="flex-grow">
+                <div className="p-3 space-y-4">
+                  <div>
+                    <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                      <ListTree size={16} className="mr-2 text-primary" />
+                      主控列表
+                    </h2>
+                    <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
+                    <MastersPalette />
+                  </div>
+                  <Separator />
+                  <div>
+                    <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
+                      <Puzzle size={16} className="mr-2 text-primary" />
+                      组件卡片
+                    </h2>
+                    <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
+                    <ComponentsPalette />
+                  </div>
+                </div>
               </ScrollArea>
-            </div>
-            <Separator className="my-0" />
-            <div className="flex flex-col p-3">
-              <h2 className="text-sm font-semibold font-title mb-1 flex items-center">
-                <Puzzle size={16} className="mr-2 text-primary" />
-                组件卡片
-              </h2>
-              <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
-              <div className="flex-grow overflow-y-auto pr-1"><ComponentsPalette /></div>
-            </div>
-          </div>
-        </ScrollArea>
+            </SheetContent>
+          </Sheet>
+        )}
+
         <div className="flex-grow flex flex-col overflow-hidden p-2">
           <div className="flex-grow relative">
             <div className="absolute inset-0">
@@ -1318,6 +1361,8 @@ export function AdvancedTopologyEditor() {
                 isRefreshingCounts={isRefreshingCounts}
                 onNodeDropOnCanvas={handleNodeDroppedOnCanvas} onNodeContextMenu={onNodeContextMenu} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={onPaneClick}
                 customNodeTypes={memoizedNodeTypes}
+                isMobile={isMobile}
+                onToggleMobilePalette={() => setIsPaletteDrawerOpen(true)}
               />
             </div>
           </div>
@@ -1369,6 +1414,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-
-    
-
