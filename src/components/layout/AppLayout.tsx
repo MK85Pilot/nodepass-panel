@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,12 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
   const { toast } = useToast();
   const [isApiConfigDialogOpen, setIsApiConfigDialogOpen] = React.useState(false);
   const [editingApiConfig, setEditingApiConfig] = React.useState<NamedApiConfig | null>(null);
+  const [uiRenderTime, setUiRenderTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Set client-side render time to avoid hydration mismatch
+    setUiRenderTime(new Date().toLocaleString());
+  }, []);
 
   const handleSaveApiConfig = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const isNew = !configToSave.id;
@@ -73,16 +79,21 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
         isEditing={!!editingApiConfig}
         // onLog prop will be handled by the parent if needed, or ApiConfigDialog can log itself
       />
-      <footer className="py-6 text-center text-sm text-muted-foreground border-t border-border bg-muted/30">
-        NodePanel &copy; {new Date().getFullYear()} | 
-        由 <a 
-            href="https://github.com/yosebyte/nodepass" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-          NodePass
-        </a> 驱动
+      <footer className="py-6 text-center text-xs sm:text-sm text-muted-foreground border-t border-border bg-muted/30">
+        <div className="font-sans">
+          NodePanel &copy; {new Date().getFullYear()} | 
+          由 <a 
+              href="https://github.com/yosebyte/nodepass" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+            NodePass
+          </a> 驱动
+        </div>
+        <div className="mt-1 text-xs font-mono">
+          版本: 1.0.3 | 页面渲染时间: {uiRenderTime || '加载中...'}
+        </div>
       </footer>
     </div>
   );
