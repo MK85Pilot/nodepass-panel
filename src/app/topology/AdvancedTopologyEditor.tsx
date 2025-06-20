@@ -52,9 +52,9 @@ const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2;
 const initialActiveHandles = {
   S: { top: true, bottom: true, left: false, right: false },
   C: { top: true, bottom: true, left: false, right: false },
-  U: { top: false, bottom: true, left: false, right: false }, 
-  T: { top: true, bottom: false, left: false, right: false }, 
-  M: { top: true, bottom: true, left: true, right: true }, 
+  U: { top: false, bottom: true, left: false, right: false },
+  T: { top: true, bottom: false, left: false, right: false },
+  M: { top: true, bottom: true, left: true, right: true },
 };
 
 export function AdvancedTopologyEditor() {
@@ -126,13 +126,13 @@ export function AdvancedTopologyEditor() {
  const getOptimalHandlesForConnection = useCallback((sourceNode: Node, targetNode: Node): { sourceHandle: string, targetHandle: string } => {
     let sh: Position, th: Position;
 
-    const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) - 
+    const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) -
                (sourceNode.positionAbsolute!.y + (sourceNode.height! / 2));
 
-    if (dy >= 0) { 
+    if (dy >= 0) {
         sh = Position.Bottom;
         th = Position.Top;
-    } else { 
+    } else {
         sh = Position.Top;
         th = Position.Bottom;
     }
@@ -146,14 +146,14 @@ export function AdvancedTopologyEditor() {
     if (targetNode.data.role === 'T') {
         th = Position.Top;
         if (sourceNode.data.role === 'S' || sourceNode.data.role === 'C') {
-             if (dy >= 0) { 
+             if (dy >= 0) {
                 sh = Position.Bottom;
-            } else { 
+            } else {
                 sh = Position.Top;
             }
         }
     }
-    
+
     if (sourceNode.data.role === 'U' && targetNode.data.role === 'T') {
         sh = Position.Bottom;
         th = Position.Top;
@@ -184,7 +184,7 @@ export function AdvancedTopologyEditor() {
         } else if (n.data.role === 'S' || n.data.role === 'C') {
             newActiveHandles = { top: true, bottom: true, left: false, right: false };
         }
-        
+
         newActiveHandles.left = false;
         newActiveHandles.right = false;
 
@@ -192,7 +192,7 @@ export function AdvancedTopologyEditor() {
       }
       return n;
     });
-  }, []); 
+  }, []);
 
   const handleOpenEditNodeDialog = useCallback((node: Node) => {
     setContextMenu(null);
@@ -499,33 +499,33 @@ export function AdvancedTopologyEditor() {
       }
 
       const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
-      
+
       const newEdgeBase: Edge = {
         ...params,
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        style: { strokeWidth: 3.5 },
+        style: { strokeWidth: 3.5 }, // Thicker line
         markerEnd: { type: MarkerType.ArrowClosed },
         type: 'smoothstep',
       };
 
-      if (sourceRole === 'S' && targetRole === 'C') {
+      if (sourceRole === 'S' && targetRole === 'C') { // S -> C link
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--primary))';
-      } else if (sourceRole === 'C' && targetRole === 'S') {
+        newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // Blue for S->C
+      } else if (sourceRole === 'C' && targetRole === 'S') { // C -> S link
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--accent))';
+        newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // Cyan for C->S
       } else if (
-        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) ||
-        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')
+        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) || // U -> S or U -> C
+        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')    // S -> T or C -> T
       ) {
         newEdgeBase.animated = true;
-        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))'; // Specific color for U->S/C and S/C->T links
-      } else {
-        newEdgeBase.animated = false; // Other connections (e.g., C-C)
+        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))'; // Yellowish for U-S/C and S/C-T links
+      } else { // Other connections (e.g., C-C)
+        newEdgeBase.animated = false;
         newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))';
       }
 
@@ -620,7 +620,7 @@ export function AdvancedTopologyEditor() {
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 1; 
+    let numDetails = 1;
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
@@ -779,8 +779,8 @@ export function AdvancedTopologyEditor() {
              logLevel: 'master',
              isExpanded: false,
              activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
-             tunnelKey: "", 
-             minPoolSize: undefined, 
+             tunnelKey: "",
+             minPoolSize: undefined,
              maxPoolSize: undefined,
           };
 
@@ -794,7 +794,7 @@ export function AdvancedTopologyEditor() {
             newNodeData.tunnelAddress = `remote-server.example.com:${10000 + currentCounter}`;
             newNodeData.targetAddress = `[::]:${3000 + currentCounter + 1}`;
             newNodeData.logLevel = parentMContainer?.data.defaultLogLevel || 'master';
-            newNodeData.tlsMode = 'master'; 
+            newNodeData.tlsMode = 'master';
           } else if (nodeRole === 'T') {
             newNodeData.targetAddress = `192.168.1.20:${8080 + currentCounter}`;
           }
@@ -854,10 +854,10 @@ export function AdvancedTopologyEditor() {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-                newData.minPoolSize = undefined; 
+                newData.minPoolSize = undefined;
                 newData.maxPoolSize = undefined;
             } else { // C
-                newData.isSingleEndedForwardC = false; 
+                newData.isSingleEndedForwardC = false;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
             }
@@ -899,103 +899,131 @@ export function AdvancedTopologyEditor() {
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
-    // const allCurrentEdges = getEdges(); // Edges no longer needed for instanceType label
+    const allCurrentEdges = getEdges();
 
     for (const node of allCurrentNodes) {
-      if (node.data.role === 'S' || node.data.role === 'C') {
-        let masterId: string | undefined;
-        let masterConfigForNode: NamedApiConfig | null = null;
+      if (node.data.role !== 'S' && node.data.role !== 'C') continue;
 
-        const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
-        if (parentMNode) {
-            masterId = parentMNode.data.masterId;
-            masterConfigForNode = masterId ? getApiConfigById(masterId) : null;
+      const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
+      if (!parentMNode || !parentMNode.data.masterId) {
+        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
+        continue;
+      }
+      const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
+      if (!masterConfigForNode) {
+        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
+        continue;
+      }
+
+      let urlParams: BuildUrlParams | null = null;
+      const nodeLabelForDialog = node.data.label.replace(/^服务端\s*|^客户端\s*/, '');
+
+      if (node.data.role === 'S') {
+        const isEntryS = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
+        let sListenAddress = node.data.tunnelAddress;
+        let sTargetAddressForUrl = node.data.targetAddress;
+
+        if (isEntryS) {
+          const connectedCEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
+          if (connectedCEdge) {
+            const cNode = allCurrentNodes.find(n => n.id === connectedCEdge.target);
+            if (cNode && cNode.data.tunnelAddress) {
+              sTargetAddressForUrl = cNode.data.tunnelAddress;
+            } else {
+              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S后C地址缺失' } } : n));
+              continue;
+            }
+          } else {
+            const connectedTEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'T');
+            if (connectedTEdge) {
+                const tNode = allCurrentNodes.find(n => n.id === connectedTEdge.target);
+                if (tNode && tNode.data.targetAddress) {
+                    sTargetAddressForUrl = tNode.data.targetAddress;
+                } else if (node.data.targetAddress) {
+                    sTargetAddressForUrl = node.data.targetAddress;
+                } else {
+                    setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'U->S后T地址缺失' } } : n));
+                    continue;
+                }
+            } else if (node.data.targetAddress) {
+                sTargetAddressForUrl = node.data.targetAddress;
+            } else {
+                setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'U->S后目标不明确' } } : n));
+                continue;
+            }
+          }
         }
 
-        if (!masterId || !masterConfigForNode) {
-          setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
+        if (!sListenAddress || !sTargetAddressForUrl) {
+          setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S地址不完整' } } : n));
           continue;
         }
+        urlParams = {
+          instanceType: "服务端",
+          tunnelAddress: sListenAddress,
+          targetAddress: sTargetAddressForUrl,
+          logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+          tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
+          certPath: node.data.certPath,
+          keyPath: node.data.keyPath,
+          tunnelKey: node.data.tunnelKey,
+        };
 
-        let urlParams: BuildUrlParams | null = null;
-        const instanceTypeForBuild: "客户端" | "服务端" = node.data.role === 'S' ? "服务端" : "客户端";
+      } else if (node.data.role === 'C') {
+        let cTunnelAddressForUrl = node.data.tunnelAddress;
+        let cTargetAddressForUrl = node.data.targetAddress;
 
-        if (node.data.role === 'S') {
-          if (!node.data.targetAddress || !node.data.tunnelAddress) {
-            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
+        if (node.data.isSingleEndedForwardC) {
+          if (!cTunnelAddressForUrl || !cTargetAddressForUrl) {
+             setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C单端转发地址不完整' } } : n));
+             continue;
+          }
+          urlParams = {
+            instanceType: "客户端",
+            isSingleEndedForward: true,
+            tunnelAddress: cTunnelAddressForUrl,
+            targetAddress: cTargetAddressForUrl,
+            logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+            tlsMode: '0',
+            tunnelKey: node.data.tunnelKey,
+            minPoolSize: node.data.minPoolSize,
+            maxPoolSize: node.data.maxPoolSize,
+          };
+        } else { // Regular C (tunnel mode)
+          if (!cTunnelAddressForUrl || !cTargetAddressForUrl) {
+            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C隧道地址不完整' } } : n));
             continue;
           }
           urlParams = {
-            instanceType: instanceTypeForBuild,
-            tunnelAddress: node.data.tunnelAddress,
-            targetAddress: node.data.targetAddress,
+            instanceType: "客户端",
+            isSingleEndedForward: false,
+            tunnelAddress: cTunnelAddressForUrl,
+            targetAddress: cTargetAddressForUrl,
             logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-            tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
+            tlsMode: (node.data.tlsMode as any) || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
             tunnelKey: node.data.tunnelKey,
+            minPoolSize: node.data.minPoolSize,
+            maxPoolSize: node.data.maxPoolSize,
           };
-        } else if (node.data.role === 'C') {
-          if (node.data.isSingleEndedForwardC) {
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '单端转发地址不完整' } } : n));
-              continue;
-            }
-            urlParams = {
-              instanceType: instanceTypeForBuild,
-              isSingleEndedForward: true,
-              tunnelAddress: node.data.tunnelAddress, 
-              targetAddress: node.data.targetAddress, 
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: '0', 
-              tunnelKey: node.data.tunnelKey,
-              minPoolSize: node.data.minPoolSize,
-              maxPoolSize: node.data.maxPoolSize,
-            };
-          } else { 
-            if (!node.data.tunnelAddress || !node.data.targetAddress) {
-              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
-              continue;
-            }
-            urlParams = {
-              instanceType: instanceTypeForBuild,
-              isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress, 
-              targetAddress: node.data.targetAddress, 
-              logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || 'master', 
-              certPath: node.data.certPath,
-              keyPath: node.data.keyPath,
-              tunnelKey: node.data.tunnelKey,
-              minPoolSize: node.data.minPoolSize,
-              maxPoolSize: node.data.maxPoolSize,
-            };
-          }
         }
+      }
 
-        if (urlParams) {
-          const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
-
-          let instanceTypeForDialog: InstanceUrlConfigWithName['instanceType'];
-          if (node.data.role === 'S') {
-            instanceTypeForDialog = "服务端";
-          } else { // C node
-            instanceTypeForDialog = "客户端";
-          }
-
-          instancesToCreate.push({
-            nodeId: node.id,
-            nodeLabel: node.data.label,
-            masterId: masterConfigForNode.id,
-            masterName: masterConfigForNode.name,
-            url: finalUrl,
-            instanceType: instanceTypeForDialog
-          });
-        }
+      if (urlParams) {
+        const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
+        instancesToCreate.push({
+          nodeId: node.id,
+          nodeLabel: nodeLabelForDialog,
+          masterId: masterConfigForNode.id,
+          masterName: masterConfigForNode.name,
+          url: finalUrl,
+          instanceType: node.data.role === 'S' ? "服务端" : "客户端",
+        });
       }
     }
     return instancesToCreate;
-  }, [getNodes, getApiConfigById, setNodesInternal, activeApiConfig]);
+  }, [getNodes, getEdges, getApiConfigById, setNodesInternal]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {

@@ -14,21 +14,21 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, onLog }: AppLayoutProps) {
-  const { 
-    activeApiConfig, 
-    addOrUpdateApiConfig, 
-    clearActiveApiConfig, 
-    setActiveApiConfigId 
+  const {
+    activeApiConfig,
+    addOrUpdateApiConfig,
+    clearActiveApiConfig,
+    setActiveApiConfigId
   } = useApiConfig();
   const { toast } = useToast();
   const [isApiConfigDialogOpen, setIsApiConfigDialogOpen] = React.useState(false);
   const [editingApiConfig, setEditingApiConfig] = React.useState<NamedApiConfig | null>(null);
-  
+
 
   const handleSaveApiConfig = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const isNew = !configToSave.id;
     const savedConfig = addOrUpdateApiConfig(configToSave);
-    setActiveApiConfigId(savedConfig.id); 
+    setActiveApiConfigId(savedConfig.id);
     setEditingApiConfig(null);
     setIsApiConfigDialogOpen(false);
     const actionText = isNew ? '添加' : '更新';
@@ -38,13 +38,13 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
     });
     onLog?.(`主控 "${savedConfig.name}" 已${actionText}并激活。`, 'SUCCESS');
   };
-  
+
   const handleOpenApiConfigDialog = (configToEdit?: NamedApiConfig | null) => {
     setEditingApiConfig(configToEdit || null);
     setIsApiConfigDialogOpen(true);
   };
 
-  const handleClearActiveConfig = () => { 
+  const handleClearActiveConfig = () => {
     if (activeApiConfig) {
       onLog?.(`断开与主控 "${activeApiConfig.name}" 的连接。`, 'INFO');
     }
@@ -57,9 +57,9 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <Header 
+      <Header
         onManageApiConfigs={handleOpenApiConfigDialog}
-        hasActiveApiConfig={!!activeApiConfig} 
+        hasActiveApiConfig={!!activeApiConfig}
         onClearActiveConfig={handleClearActiveConfig} // Changed from onLogout to onClearActiveConfig
         onLog={onLog}
       />
@@ -79,9 +79,9 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
           <span>NodePanel &copy; {new Date().getFullYear()}</span>
           <span className="mx-1.5">&bull;</span>
           <span>
-            由 <a 
-                href="https://github.com/yosebyte/nodepass" 
-                target="_blank" 
+            由 <a
+                href="https://github.com/yosebyte/nodepass"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-primary hover:text-primary/80 transition-colors"
               >
@@ -89,7 +89,7 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
             </a> 驱动
           </span>
           <span className="mx-1.5">&bull;</span>
-          <span>版本: 1.0.4</span>
+          <span>版本: 1.0.5</span>
         </div>
       </footer>
     </div>

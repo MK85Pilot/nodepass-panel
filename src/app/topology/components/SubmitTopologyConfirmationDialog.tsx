@@ -10,11 +10,11 @@ import type { BuildUrlParams } from '@/components/nodepass/create-instance-dialo
 
 export interface InstanceUrlConfigWithName {
   nodeId: string;
-  nodeLabel: string;
+  nodeLabel: string; // This will now be the #ID part, e.g., "#5"
   masterId: string;
   masterName: string;
   url: string;
-  instanceType: "服务端" | "客户端"; // Simplified instance type
+  instanceType: "服务端" | "客户端";
 }
 
 interface SubmitTopologyConfirmationDialogProps {
@@ -62,7 +62,9 @@ export function SubmitTopologyConfirmationDialog({
               <ul className="space-y-1 text-xs">
                 {masterInstances.map(instance => (
                   <li key={instance.nodeId} className="font-mono p-1.5 bg-background rounded shadow-sm border border-border/50">
-                    <div className="font-semibold text-foreground">{instance.instanceType}: <span className="text-muted-foreground">{instance.nodeLabel} (ID: {instance.nodeId.substring(0,8)}...)</span></div>
+                    <div className="font-semibold text-foreground">
+                      {instance.instanceType}: <span className="text-muted-foreground">{instance.nodeLabel} (ID: {instance.nodeId.substring(0,8)}...)</span>
+                    </div>
                     <div className="truncate text-blue-600 dark:text-blue-400" title={instance.url}>{instance.url}</div>
                   </li>
                 ))}
@@ -70,7 +72,7 @@ export function SubmitTopologyConfirmationDialog({
             </div>
           ))}
         </ScrollArea>
-        
+
         <DialogFooter className="font-sans pt-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             取消
@@ -93,4 +95,3 @@ export function SubmitTopologyConfirmationDialog({
     </Dialog>
   );
 }
-
