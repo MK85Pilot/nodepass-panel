@@ -903,6 +903,7 @@ export function AdvancedTopologyEditor() {
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
       if (type === 'WARN') toast({ title: "配置警告", description: message, variant: "warning" });
+      // INFO logs for this function are not shown as toasts, but could be logged to console or a page log if needed
     };
 
     for (const node of allCurrentNodes) {
@@ -922,53 +923,51 @@ export function AdvancedTopologyEditor() {
         let urlParams: BuildUrlParams | null = null;
         const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
 
-        if (node.data.role === 'S') { // S-Node
+        if (node.data.role === 'S') {
             const sNode = node;
             const outgoingEdgeToC = allCurrentEdges.find(edge => edge.source === sNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
             const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === sNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
 
-            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C
-                const sSubmission = prepareServerUrlParams({
-                    instanceType: "服务端",
-                    tunnelAddress: sNode.data.tunnelAddress, // S listens for U
-                    targetAddress: sNode.data.targetAddress, // S forwards to its own configured target
-                    logLevel: (sNode.data.logLevel as any),
-                    tlsMode: (sNode.data.tlsMode as any),
-                    certPath: sNode.data.certPath,
-                    keyPath: sNode.data.keyPath,
-                    tunnelKey: sNode.data.tunnelKey,
-                }, localOnLog);
-                if (sSubmission) urlParams = sSubmission.serverParams;
+            let sTargetAddressForUrl = sNode.data.targetAddress;
 
-            } else { // Standard S-node or S->T
-                 const sSubmission = prepareServerUrlParams({
-                    instanceType: "服务端",
-                    tunnelAddress: sNode.data.tunnelAddress,
-                    targetAddress: sNode.data.targetAddress,
-                    logLevel: (sNode.data.logLevel as any),
-                    tlsMode: (sNode.data.tlsMode as any),
-                    certPath: sNode.data.certPath,
-                    keyPath: sNode.data.keyPath,
-                    tunnelKey: sNode.data.tunnelKey,
-                }, localOnLog);
-                 if (sSubmission) urlParams = sSubmission.serverParams;
+            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C chain (reverse tunnel style for U's traffic)
+                const sListenPortStr = extractPort(sNode.data.tunnelAddress || "");
+                if (sListenPortStr) {
+                    const sListenPortNum = parseInt(sListenPortStr, 10);
+                    // S forwards to an intermediate port (e.g., S_Listen_Port + 1).
+                    // C, when connecting to S's main listen port, will handle traffic from this intermediate port
+                    // and forward it to its own configured targetAddress (which points to T).
+                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`;
+                    localOnLog(`U->S->C 链: 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl} (基于其监听端口 ${sListenPortStr})。`, 'INFO');
+                } else {
+                    localOnLog(`警告: U->S->C 链中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其默认配置的目标地址。`, 'WARN');
+                    sTargetAddressForUrl = sNode.data.targetAddress; // Fallback
+                }
             }
-        } else if (node.data.role === 'C') { // C-Node
-            const cNode = node;
-            // const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            // const incomingEdgeFromS = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
-            // const sourceSNodeForIncoming = incomingEdgeFromS ? allCurrentNodes.find(n => n.id === incomingEdgeFromS.source) : null;
-            // const isSFromU = sourceSNodeForIncoming ? allCurrentEdges.some(edge => edge.target === sourceSNodeForIncoming.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U') : false;
+            // If S is directly connected to T (S->T), or U->S (no C), sTargetAddressForUrl remains sNode.data.targetAddress (its configured one).
+            // If U->C->S, this S-node logic isn't hit for the S in that chain; C-node logic handles its connection to S.
 
-            // For C-nodes, the logic mostly relies on its own configuration (isSingleEndedForwardC, tunnelAddress, targetAddress)
-            // which should have been set correctly by the Edit dialog or onConnect.
+            const sSubmission = prepareServerUrlParams({
+                instanceType: "服务端",
+                tunnelAddress: sNode.data.tunnelAddress, // S listens for U or other clients
+                targetAddress: sTargetAddressForUrl,
+                logLevel: (sNode.data.logLevel as any),
+                tlsMode: (sNode.data.tlsMode as any),
+                certPath: sNode.data.certPath,
+                keyPath: sNode.data.keyPath,
+                tunnelKey: sNode.data.tunnelKey,
+            }, localOnLog);
+            if (sSubmission) urlParams = sSubmission.serverParams;
+
+        } else if (node.data.role === 'C') {
+            const cNode = node;
             const cSubmission = prepareClientUrlParams({
                 instanceType: "客户端",
                 isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
-                tunnelAddress: cNode.data.tunnelAddress,
-                targetAddress: cNode.data.targetAddress,
+                tunnelAddress: cNode.data.tunnelAddress, // For tunnel client: S_ADDR. For single-ended: C_LOCAL_LISTEN
+                targetAddress: cNode.data.targetAddress, // For tunnel client: C_LOCAL_LISTEN. For single-ended: C_REMOTE_TARGET
                 logLevel: (cNode.data.logLevel as any),
-                tlsMode: (cNode.data.tlsMode as any),
+                tlsMode: (cNode.data.tlsMode as any), // Only relevant for tunnel client connecting to S
                 certPath: cNode.data.certPath,
                 keyPath: cNode.data.keyPath,
                 tunnelKey: cNode.data.tunnelKey,
@@ -977,6 +976,7 @@ export function AdvancedTopologyEditor() {
             }, masterConfigForNode, localOnLog);
             if (cSubmission) urlParams = cSubmission.clientParams;
         }
+
 
         if (urlParams) {
             const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
