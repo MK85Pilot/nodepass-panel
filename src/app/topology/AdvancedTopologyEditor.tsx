@@ -61,7 +61,7 @@ const initialActiveHandles = {
 };
 
 export function AdvancedTopologyEditor() {
-  const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges } = useReactFlow();
+  const { deleteElements, fitView, getNodes, getEdges, setEdges: setReactFlowEdges, project } = useReactFlow();
   const [nodesInternal, setNodesInternal, onNodesChangeInternalCallback] = useNodesState<Node>(initialNodes);
   const [edgesInternal, setEdgesInternal, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const [nodeIdCounter, setNodeIdCounter] = useState(0);
@@ -933,9 +933,8 @@ export function AdvancedTopologyEditor() {
 
         if (node.data.role === 'S') {
             const sNode = node;
-            // Check if S is part of U -> S -> C (reverse tunnel for U's traffic via S to C)
-            const isReverseTunnelChain = allCurrentEdges.some(edgeFromU =>
-                edgeFromU.source === allCurrentNodes.find(uNode => uNode.data.role === 'U')?.id &&
+            const isReverseTunnelForU = allCurrentEdges.some(edgeFromU =>
+                allCurrentNodes.find(uNode => uNode.id === edgeFromU.source)?.data.role === 'U' &&
                 edgeFromU.target === sNode.id &&
                 allCurrentEdges.some(edgeToC =>
                     edgeToC.source === sNode.id &&
@@ -944,14 +943,14 @@ export function AdvancedTopologyEditor() {
             );
 
             let sTargetAddressForUrl = sNode.data.targetAddress;
-            if (isReverseTunnelChain) {
+            if (isReverseTunnelForU) {
                 const sListenPortStr = extractPort(sNode.data.tunnelAddress || "");
                 if (sListenPortStr) {
                     const sListenPortNum = parseInt(sListenPortStr, 10);
-                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`; // S forwards to an intermediate port for C
+                    sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`;
                     localOnLog(`U->S->C 链 (反向): 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl}。C 将连接此 S 的 ${sNode.data.tunnelAddress}，并转发到 C 自己的目标地址。`, 'INFO');
                 } else {
-                    localOnLog(`警告: U->S->C 链 (反向) 中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其配置的业务目标地址。`, 'WARN');
+                     localOnLog(`警告: U->S->C 链 (反向) 中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其配置的业务目标地址。`, 'WARN');
                 }
             }
 
@@ -971,7 +970,7 @@ export function AdvancedTopologyEditor() {
             const cNode = node;
             const cSubmission = prepareClientUrlParams({
                 instanceType: "客户端",
-                isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
+                isSingleEndedForwardC: !!cNode.data.isSingleEndedForwardC,
                 tunnelAddress: cNode.data.tunnelAddress,
                 targetAddress: cNode.data.targetAddress,
                 logLevel: (cNode.data.logLevel as any),
@@ -1268,6 +1267,28 @@ export function AdvancedTopologyEditor() {
     });
   };
 
+  const handleAddItemFromMobilePalette = useCallback((
+    type: DraggableNodeType | 'master',
+    itemData?: NamedApiConfig
+  ) => {
+    if (!reactFlowWrapperRef.current) {
+      toast({ title: "无法添加节点", description: "编辑器未完全加载。", variant: "warning" });
+      return;
+    }
+    const reactFlowBounds = reactFlowWrapperRef.current.getBoundingClientRect();
+    const centerX = reactFlowBounds.width / 2;
+    const centerY = reactFlowBounds.height / 2;
+
+    const projectedPosition = project({ x: centerX, y: centerY });
+
+    // Apply a small random offset to prevent stacking if multiple items are added quickly
+    projectedPosition.x += (Math.random() - 0.5) * 10;
+    projectedPosition.y += (Math.random() - 0.5) * 10;
+
+    handleNodeDroppedOnCanvas(type, projectedPosition, itemData);
+    setIsPaletteDrawerOpen(false); // Close drawer after adding
+  }, [project, handleNodeDroppedOnCanvas, toast, setIsPaletteDrawerOpen]);
+
 
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
@@ -1321,6 +1342,7 @@ export function AdvancedTopologyEditor() {
             <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
               <SheetHeader className="p-3 border-b">
                 <SheetTitle className="font-title text-base">组件与主控</SheetTitle>
+                 <SheetDescription className="text-xs font-sans text-left pt-1">点按项目以将其添加到画布中央。</SheetDescription>
               </SheetHeader>
               <ScrollArea className="flex-grow">
                 <div className="p-3 space-y-4">
@@ -1329,8 +1351,8 @@ export function AdvancedTopologyEditor() {
                       <ListTree size={16} className="mr-2 text-primary" />
                       主控列表
                     </h2>
-                    <p className="text-xs text-muted-foreground font-sans mb-2">拖拽主控到画布。</p>
-                    <MastersPalette />
+                    <p className="text-xs text-muted-foreground font-sans mb-2">点按主控以添加到画布。</p>
+                    <MastersPalette isMobileClickToAdd={isMobile} onItemClick={handleAddItemFromMobilePalette} />
                   </div>
                   <Separator />
                   <div>
@@ -1338,8 +1360,8 @@ export function AdvancedTopologyEditor() {
                       <Puzzle size={16} className="mr-2 text-primary" />
                       组件卡片
                     </h2>
-                    <p className="text-xs text-muted-foreground font-sans mb-2">拖拽实例到主控内部。</p>
-                    <ComponentsPalette />
+                    <p className="text-xs text-muted-foreground font-sans mb-2">点按实例以添加到主控内部或画布。</p>
+                    <ComponentsPalette isMobileClickToAdd={isMobile} onItemClick={handleAddItemFromMobilePalette} />
                   </div>
                 </div>
               </ScrollArea>

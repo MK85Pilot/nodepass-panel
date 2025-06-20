@@ -3,25 +3,24 @@
 
 import React from 'react';
 import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
-import { Cog, RefreshCw, Loader2 } from 'lucide-react'; // MoreVertical removed
+import { Cog, RefreshCw, Loader2 } from 'lucide-react'; 
 import { Skeleton } from '@/components/ui/skeleton';
-// Button and DropdownMenu components are no longer needed here
 import { useQuery } from '@tanstack/react-query';
 import { nodePassApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-// parseNodePassUrl, extractHostname, isWildcardHostname removed as they are not used for total count
 
 interface MasterPaletteItemProps {
   config: NamedApiConfig;
+  isMobileClickToAdd?: boolean;
+  onItemClick?: (type: 'master', data: NamedApiConfig) => void;
 }
 
-const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
+const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config, isMobileClickToAdd, onItemClick }) => {
   const { getApiRootUrl, getToken } = useApiConfig();
   const { toast } = useToast();
-  // queryClient removed as individual refresh is no longer here
 
   const { data: instanceCounts, isLoading: isLoadingInstances, error, refetch } = useQuery<
-    { totalInstanceCount: number }, // Updated return type
+    { totalInstanceCount: number }, 
     Error
   >({
     queryKey: ['masterInstancesCount', config.id],
@@ -48,25 +47,33 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   });
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, masterConfig: NamedApiConfig) => {
+    if (isMobileClickToAdd) return;
     event.dataTransfer.setData('application/nodepass-master-config', JSON.stringify(masterConfig));
     event.dataTransfer.effectAllowed = 'move';
+  };
+  
+  const handleClick = (masterConfig: NamedApiConfig) => {
+    if (isMobileClickToAdd && onItemClick) {
+      onItemClick('master', masterConfig);
+    }
   };
 
   const countsDisplay = isLoadingInstances
     ? <Loader2 className="h-3 w-3 animate-spin ml-1" />
     : error
-    ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={() => refetch()} title="点击重试计数"/>
+    ? <RefreshCw className="h-3 w-3 ml-1 text-destructive cursor-pointer" onClick={(e) => { e.stopPropagation(); refetch(); }} title="点击重试计数"/>
     : instanceCounts
-    ? `(${instanceCounts.totalInstanceCount} 个实例)` // Updated display format
+    ? `(${instanceCounts.totalInstanceCount} 个实例)` 
     : '';
 
 
   return (
     <div
-      draggable={true}
-      onDragStart={(event) => handleDragStart(event, config)}
-      className="group flex items-center justify-between p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing transition-colors text-xs font-sans shadow-sm"
-      title={`拖拽主控 "${config.name}" 到画布`}
+      draggable={!isMobileClickToAdd}
+      onDragStart={!isMobileClickToAdd ? (event) => handleDragStart(event, config) : undefined}
+      onClick={isMobileClickToAdd ? () => handleClick(config) : undefined}
+      className={`group flex items-center justify-between p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 transition-colors text-xs font-sans shadow-sm ${isMobileClickToAdd ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
+      title={isMobileClickToAdd ? `点按添加主控 "${config.name}" 到画布` :`拖拽主控 "${config.name}" 到画布`}
     >
       <div className="flex items-center truncate">
         <Cog className="mr-2 h-4 w-4 text-primary flex-shrink-0" />
@@ -77,8 +84,12 @@ const MasterPaletteItem: React.FC<MasterPaletteItemProps> = ({ config }) => {
   );
 };
 
+interface MastersPaletteProps {
+  isMobileClickToAdd?: boolean;
+  onItemClick?: (type: 'master', data: NamedApiConfig) => void;
+}
 
-export function MastersPalette() {
+export function MastersPalette({ isMobileClickToAdd, onItemClick }: MastersPaletteProps) {
   const { apiConfigsList, isLoading } = useApiConfig();
 
   return (
@@ -97,6 +108,8 @@ export function MastersPalette() {
             <MasterPaletteItem
               key={config.id}
               config={config}
+              isMobileClickToAdd={isMobileClickToAdd}
+              onItemClick={onItemClick}
             />
           ))}
         </div>
@@ -104,6 +117,3 @@ export function MastersPalette() {
     </div>
   );
 }
-    
-
-    

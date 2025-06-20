@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon } from 'lucide-react'; // Renamed Smartphone to ClientIcon
+import type { NamedApiConfig } from '@/hooks/use-api-key';
 
 export type DraggableNodeType = 'S' | 'C' | 'T' | 'U';
 
@@ -21,10 +22,22 @@ const componentItems: ComponentItem[] = [
   { type: 'T', label: '目标服务', icon: Globe, colorClass: 'text-orange-500', description: '最终流量目标设备/服务' },
 ];
 
-export function ComponentsPalette() {
+interface ComponentsPaletteProps {
+  isMobileClickToAdd?: boolean;
+  onItemClick?: (type: DraggableNodeType, data?: NamedApiConfig) => void;
+}
+
+export function ComponentsPalette({ isMobileClickToAdd, onItemClick }: ComponentsPaletteProps) {
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, type: DraggableNodeType) => {
+    if (isMobileClickToAdd) return; // Prevent drag if in click mode
     event.dataTransfer.setData('application/nodepass-component-type', type);
     event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleClick = (type: DraggableNodeType) => {
+    if (isMobileClickToAdd && onItemClick) {
+      onItemClick(type);
+    }
   };
 
   return (
@@ -32,10 +45,11 @@ export function ComponentsPalette() {
       {componentItems.map((item) => (
         <div
           key={item.type}
-          draggable={true}
-          onDragStart={(event) => handleDragStart(event, item.type)}
-          className="flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 cursor-grab active:cursor-grabbing transition-colors text-xs font-sans shadow-sm"
-          title={`拖拽 ${item.label} 到画布`}
+          draggable={!isMobileClickToAdd}
+          onDragStart={!isMobileClickToAdd ? (event) => handleDragStart(event, item.type) : undefined}
+          onClick={isMobileClickToAdd ? () => handleClick(item.type) : undefined}
+          className={`flex items-center p-2 border rounded-md bg-card text-card-foreground hover:bg-muted/50 transition-colors text-xs font-sans shadow-sm ${isMobileClickToAdd ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
+          title={isMobileClickToAdd ? `点按添加 ${item.label} 到画布` : `拖拽 ${item.label} 到画布`}
         >
           <item.icon className={`mr-2 h-4 w-4 ${item.colorClass} flex-shrink-0`} />
           <div className="truncate">
@@ -47,6 +61,3 @@ export function ComponentsPalette() {
     </div>
   );
 }
-    
-
-    
