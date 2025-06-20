@@ -899,7 +899,7 @@ export function AdvancedTopologyEditor() {
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
-    const allCurrentEdges = getEdges();
+    // const allCurrentEdges = getEdges(); // Edges no longer needed for instanceType label
 
     for (const node of allCurrentNodes) {
       if (node.data.role === 'S' || node.data.role === 'C') {
@@ -977,18 +977,10 @@ export function AdvancedTopologyEditor() {
           const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
 
           let instanceTypeForDialog: InstanceUrlConfigWithName['instanceType'];
-          const isEntry = allCurrentEdges.some(edge => {
-            if (edge.target === node.id) {
-              const sourceNode = allCurrentNodes.find(n => n.id === edge.source);
-              return sourceNode?.data.role === 'U';
-            }
-            return false;
-          });
-
           if (node.data.role === 'S') {
-            instanceTypeForDialog = isEntry ? "入口(s)" : "出口(s)";
+            instanceTypeForDialog = "服务端";
           } else { // C node
-            instanceTypeForDialog = isEntry ? "入口(c)" : "出口(c)";
+            instanceTypeForDialog = "客户端";
           }
 
           instancesToCreate.push({
@@ -1003,7 +995,7 @@ export function AdvancedTopologyEditor() {
       }
     }
     return instancesToCreate;
-  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, activeApiConfig]);
+  }, [getNodes, getApiConfigById, setNodesInternal, activeApiConfig]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {
@@ -1365,3 +1357,4 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+

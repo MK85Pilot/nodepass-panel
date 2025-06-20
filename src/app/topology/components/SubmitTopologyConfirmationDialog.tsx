@@ -14,7 +14,7 @@ export interface InstanceUrlConfigWithName {
   masterId: string;
   masterName: string;
   url: string;
-  instanceType: "入口(c)" | "出口(s)" | "入口(s)" | "出口(c)";
+  instanceType: "服务端" | "客户端"; // Simplified instance type
 }
 
 interface SubmitTopologyConfirmationDialogProps {
@@ -93,3 +93,4 @@ export function SubmitTopologyConfirmationDialog({
     </Dialog>
   );
 }
+
