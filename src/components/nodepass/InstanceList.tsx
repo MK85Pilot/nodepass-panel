@@ -389,7 +389,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       <TableRow
         key={instance.id}
         className="text-foreground/90 hover:text-foreground"
-        onDoubleClick={instance.id !== '********' ? () => handleOpenEditAliasDialog(instance.id, currentAlias) : () => setSelectedInstanceForDetails(instance)}
+        onDoubleClick={() => setSelectedInstanceForDetails(instance)}
         data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
       >
         <TableCell className="w-10">
@@ -407,8 +407,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             className="text-xs font-sans truncate max-w-[150px]"
             title={currentAlias || "双击编辑别名"}
             onDoubleClick={(e) => {
-                e.stopPropagation(); // Prevent row's onDoubleClick if targeting alias cell specifically for edit
-                if (instance.id !== '********') handleOpenEditAliasDialog(instance.id, currentAlias);
+                if (instance.id !== '********') {
+                    e.stopPropagation();
+                    handleOpenEditAliasDialog(instance.id, currentAlias);
+                }
             }}
         >
             {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
@@ -692,3 +694,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
