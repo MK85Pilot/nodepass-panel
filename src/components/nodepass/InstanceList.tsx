@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -11,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil, MoreVertical } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil, MoreVertical, Play, Square, RotateCcw } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 // InstanceControls is no longer directly used in mobile card, its logic is merged into DropdownMenu
@@ -69,12 +70,14 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedInstanceIds, setSelectedInstanceIds] = useState(new Set<string>());
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const [isEditAliasDialogOpen, setIsEditAliasDialogOpen] = useState(false);
   const [editingAliasContext, setEditingAliasContext] = useState<{ id: string; alias?: string } | null>(null);
+
+  // Desktop-only selection state
+  const [desktopSelectedInstanceIds, setDesktopSelectedInstanceIds] = useState(new Set<string>());
 
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
@@ -130,7 +133,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
       setSelectedInstanceForDelete(null);
-      setSelectedInstanceIds(prev => {
+      setDesktopSelectedInstanceIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(instanceId);
         return newSet;
@@ -182,19 +185,19 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const handleSelectAllInstances = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
-      setSelectedInstanceIds(new Set(deletableInstances.map(inst => inst.id)));
+      setDesktopSelectedInstanceIds(new Set(deletableInstances.map(inst => inst.id)));
     } else {
-      setSelectedInstanceIds(new Set());
+      setDesktopSelectedInstanceIds(new Set());
     }
   };
 
   const handleConfirmBulkDelete = async () => {
-    if (selectedInstanceIds.size === 0) return;
+    if (desktopSelectedInstanceIds.size === 0) return;
     setIsBulkDeleting(true);
-    onLog?.(`开始批量删除 ${selectedInstanceIds.size} 个实例...`, 'ACTION');
+    onLog?.(`开始批量删除 ${desktopSelectedInstanceIds.size} 个实例...`, 'ACTION');
 
     const results = await Promise.allSettled(
-      Array.from(selectedInstanceIds).map(id => deleteInstanceMutation.mutateAsync(id))
+      Array.from(desktopSelectedInstanceIds).map(id => deleteInstanceMutation.mutateAsync(id))
     );
 
     let successCount = 0;
@@ -214,7 +217,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
     queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic'] });
-    setSelectedInstanceIds(new Set());
+    setDesktopSelectedInstanceIds(new Set());
     setIsBulkDeleting(false);
     setIsBulkDeleteDialogOpen(false);
   };
@@ -337,19 +340,17 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderMobileSkeletons = () => {
     return Array.from({ length: 2 }).map((_, i) => (
-        <Card key={`skeleton-card-${i}`} className="relative mb-4">
-          <Skeleton className="absolute top-0 right-0 h-5 w-5" />
+        <Card key={`skeleton-card-${i}`} className="relative mb-4 overflow-hidden">
+          <InstanceStatusBadge status="running" compact={true} /> {/* Placeholder for badge position */}
           <CardHeader className="p-3">
             <div className="flex justify-between items-start">
-                <div className="flex-grow min-w-0 pr-4">
+                <div className="flex-grow min-w-0 pr-2">
                     <Skeleton className="h-5 w-3/4 mb-1" />
                     <Skeleton className="h-4 w-1/2" />
                 </div>
                 <div className="flex flex-col items-end space-y-1 flex-shrink-0 ml-2">
-                    <Skeleton className="h-5 w-16" />
-                    <div className="flex items-center space-x-0">
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                    </div>
+                    <Skeleton className="h-6 w-20" />
+                    <Skeleton className="h-8 w-8" />
                 </div>
             </div>
           </CardHeader>
@@ -363,7 +364,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   };
 
   const handleSelectInstance = (instanceId: string) => {
-    setSelectedInstanceIds(prev => {
+    setDesktopSelectedInstanceIds(prev => { // Only for desktop
       const newSet = new Set(prev);
       if (newSet.has(instanceId)) {
         newSet.delete(instanceId);
@@ -417,85 +418,85 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
             {!isApiKeyInstance && (
               <InstanceStatusBadge status={instance.status} compact={true} />
             )}
-            <CardHeader className="p-3">
-                <div className="flex justify-between items-center">
-                    {/* Left: Alias & ID */}
-                    <div className="flex-grow min-w-0 pr-2">
-                        <div
-                            className="text-sm font-semibold cursor-pointer hover:text-primary truncate"
-                            onClick={() => !isApiKeyInstance && handleOpenEditAliasDialog(instance.id, currentAlias)}
-                            title={isApiKeyInstance ? "API Key" : (isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名"))}
-                        >
-                        {isApiKeyInstance ? 
-                            <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : 
-                            (isLoadingAliases ? <Skeleton className="h-5 w-24"/> : currentAlias || <span className="italic text-muted-foreground">设置别名...</span>)
-                        }
-                        </div>
-                        {!isApiKeyInstance && (
-                            <div
-                                className="font-mono text-xs text-muted-foreground/70 cursor-pointer hover:text-primary truncate"
-                                onClick={() => handleCopyToClipboard(instance.id, "ID")}
-                                title={`实例ID: ${instance.id} (点击复制)`}
-                            >
-                                {instance.id}
-                            </div>
-                        )}
+            <CardHeader className="p-3 pb-2">
+              <div className="flex justify-between items-start space-x-2">
+                {/* Left: Alias & ID */}
+                <div className="flex-grow min-w-0">
+                  <div
+                    className="text-sm font-semibold cursor-pointer hover:text-primary truncate"
+                    onClick={() => !isApiKeyInstance && handleOpenEditAliasDialog(instance.id, currentAlias)}
+                    title={isApiKeyInstance ? "API Key" : (isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名"))}
+                  >
+                    {isApiKeyInstance ?
+                      <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> :
+                      (isLoadingAliases ? <Skeleton className="h-5 w-24" /> : currentAlias || <span className="italic text-muted-foreground">设置别名...</span>)
+                    }
+                  </div>
+                  {!isApiKeyInstance && (
+                    <div
+                      className="font-mono text-xs text-muted-foreground/70 cursor-pointer hover:text-primary truncate"
+                      onClick={() => handleCopyToClipboard(instance.id, "ID")}
+                      title={`实例ID: ${instance.id} (点击复制)`}
+                    >
+                      {instance.id}
                     </div>
-
-                    {/* Right: Type Badge & Manage Button */}
-                    {!isApiKeyInstance && (
-                        <div className="flex items-center space-x-2 flex-shrink-0">
-                            <Badge
-                                variant={instance.type === 'server' ? 'default' : 'accent'}
-                                className="items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans"
-                            >
-                                {instance.type === 'server' ? <ServerIcon size={10} className="mr-0.5" /> : <SmartphoneIcon size={10} className="mr-0.5" />}
-                                {instance.type === 'server' ? '服务端' : '客户端'}
-                            </Badge>
-                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" title="管理实例">
-                                        <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                    onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'start'})}
-                                    disabled={instance.status === 'running' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
-                                    >
-                                    <Play className="mr-2 h-4 w-4" /> 启动
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                    onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'stop'})}
-                                    disabled={instance.status === 'stopped' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
-                                    >
-                                    <Square className="mr-2 h-4 w-4" /> 停止
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                    onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'restart'})}
-                                    disabled={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-                                    >
-                                    <RotateCcw className="mr-2 h-4 w-4" /> 重启
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => setSelectedInstanceForDetails(instance)}>
-                                    <Eye className="mr-2 h-4 w-4" /> 查看详情
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                    onClick={() => setSelectedInstanceForDelete(instance)}
-                                    disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
-                                    className="text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10"
-                                    >
-                                    <Trash2 className="mr-2 h-4 w-4" /> 删除
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    )}
+                  )}
                 </div>
+
+                {/* Right: Type Badge & Manage Button */}
+                {!isApiKeyInstance && (
+                  <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                     <Badge
+                        variant={instance.type === 'server' ? 'default' : 'accent'}
+                        className="items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans"
+                      >
+                        {instance.type === 'server' ? <ServerIcon size={10} className="mr-0.5" /> : <SmartphoneIcon size={10} className="mr-0.5" />}
+                        {instance.type === 'server' ? '服务端' : '客户端'}
+                      </Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="管理实例">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'start' })}
+                          disabled={instance.status === 'running' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
+                        >
+                          <Play className="mr-2 h-4 w-4" /> 启动
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'stop' })}
+                          disabled={instance.status === 'stopped' || (updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id)}
+                        >
+                          <Square className="mr-2 h-4 w-4" /> 停止
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => updateInstanceMutation.mutate({ instanceId: instance.id, action: 'restart' })}
+                          disabled={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" /> 重启
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setSelectedInstanceForDetails(instance)}>
+                          <Eye className="mr-2 h-4 w-4" /> 查看详情
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setSelectedInstanceForDelete(instance)}
+                          disabled={deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
+                          className="text-destructive hover:!text-destructive focus:!text-destructive focus:!bg-destructive/10"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> 删除
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             {!isApiKeyInstance && (
-              <CardContent className="p-3 text-xs space-y-1.5">
+              <CardContent className="p-3 pt-1 text-xs space-y-1.5">
                 <div title={copyTunnelTitle}>
                   <strong className="font-medium text-muted-foreground">隧道:</strong>
                   <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
@@ -527,12 +528,12 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 key={instance.id}
                 className="text-foreground/90 hover:text-foreground"
                 onDoubleClick={() => setSelectedInstanceForDetails(instance)}
-                data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
+                data-state={desktopSelectedInstanceIds.has(instance.id) ? "selected" : ""}
             >
                 <TableCell className="w-10">
                 {instance.id !== '********' && (
                     <Checkbox
-                    checked={selectedInstanceIds.has(instance.id)}
+                    checked={desktopSelectedInstanceIds.has(instance.id)}
                     onCheckedChange={() => handleSelectInstance(instance.id)}
                     aria-label={`选择实例 ${instance.id}`}
                     disabled={isBulkDeleting}
@@ -668,16 +669,16 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
-           {!isMobile && deletableInstances.length > 0 && (
+           {!isMobile && deletableInstances.length > 0 && desktopSelectedInstanceIds.size > 0 && (
             <Button
               variant="destructive"
               size="sm"
               onClick={() => setIsBulkDeleteDialogOpen(true)}
-              disabled={isBulkDeleting || selectedInstanceIds.size === 0}
+              disabled={isBulkDeleting || desktopSelectedInstanceIds.size === 0}
               className="font-sans h-9 w-full sm:w-auto"
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              删除选中 ({selectedInstanceIds.size})
+              删除选中 ({desktopSelectedInstanceIds.size})
             </Button>
           )}
           <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
@@ -723,9 +724,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                       {!isMobile && deletableInstances.length > 0 && (
                         <Checkbox
                           checked={
-                            selectedInstanceIds.size === deletableInstances.length  && deletableInstances.length > 0
+                            desktopSelectedInstanceIds.size === deletableInstances.length  && deletableInstances.length > 0
                               ? true
-                              : selectedInstanceIds.size > 0
+                              : desktopSelectedInstanceIds.size > 0
                               ? "indeterminate"
                               : false
                           }
@@ -771,7 +772,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       {!isMobile && 
         <BulkDeleteInstancesDialog
             selectedInstances={
-            instances?.filter(inst => selectedInstanceIds.has(inst.id))
+            instances?.filter(inst => desktopSelectedInstanceIds.has(inst.id))
                 .map(inst => ({ id: inst.id, url: inst.url }))
             || []
             }
@@ -796,4 +797,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
