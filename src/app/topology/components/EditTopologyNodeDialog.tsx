@@ -12,9 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Node, CustomNodeData, MasterSubRole } from '../topologyTypes';
-import { extractHostname, extractPort, formatHostForDisplay } from '@/lib/url-utils';
 import { MASTER_TLS_MODE_DISPLAY_MAP } from '@/components/nodepass/create-instance-dialog/constants';
-import { useApiConfig, type NamedApiConfig } from '@/hooks/use-api-key';
+import { useApiConfig } from '@/hooks/use-api-key';
 
 interface EditTopologyNodeDialogProps {
   open: boolean;
@@ -52,6 +51,7 @@ const serverSchema = baseSchema.extend({
   tlsModeS: z.enum(["master", "0", "1", "2"]),
   certPathS: z.optional(z.string()),
   keyPathS: z.optional(z.string()),
+  tunnelKeyS: z.string().optional(),
 });
 
 const clientSchema = z.object({
@@ -62,9 +62,11 @@ const clientSchema = z.object({
   localListenAddressC_Single: z.optional(z.string()),
   remoteTargetAddressC_Single: z.optional(z.string()),
   logLevelC: z.enum(["master", "debug", "info", "warn", "error", "event"]),
-  // tlsModeC, certPathC, keyPathC removed
+  tunnelKeyC: z.string().optional(),
+  minPoolSizeC: z.coerce.number().int("最小连接池必须是整数。").positive("最小连接池必须是正数。").optional().or(z.literal("").transform(() => undefined)),
+  maxPoolSizeC: z.coerce.number().int("最大连接池必须是整数。").positive("最大连接池必须是正数。").optional().or(z.literal("").transform(() => undefined)),
 }).superRefine((data, ctx) => {
-    const effectiveIsSingleEnded = data.isSingleEndedForwardC; // In schema refinement, canClientBeSingleEnded is not available, assume checkbox reflects possibility
+    const effectiveIsSingleEnded = data.isSingleEndedForwardC;
 
     if (effectiveIsSingleEnded) {
         if (!data.localListenAddressC_Single || !hostPortRegex.test(data.localListenAddressC_Single)) {
@@ -80,6 +82,13 @@ const clientSchema = z.object({
         if (data.localListenAddressC_Normal && data.localListenAddressC_Normal.trim() !== "" && !hostPortRegex.test(data.localListenAddressC_Normal)) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, message: `本地监听地址无效 (${hostPortErrorMsg})。`, path: ["localListenAddressC_Normal"] });
         }
+    }
+    if (data.minPoolSizeC !== undefined && data.maxPoolSizeC !== undefined && data.minPoolSizeC >= data.maxPoolSizeC) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "最小连接池必须小于最大连接池。",
+            path: ["minPoolSizeC"],
+        });
     }
 });
 
@@ -107,7 +116,7 @@ export function EditTopologyNodeDialog({
   const currentSchema = useMemo(() => {
     if (role === 'M') return masterSchema;
     if (role === 'S') return serverSchema;
-    if (role === 'C') return clientSchema; // clientSchema no longer has TLS fields
+    if (role === 'C') return clientSchema;
     return tuSchema;
   }, [role]);
 
@@ -144,6 +153,7 @@ export function EditTopologyNodeDialog({
           tlsModeS: (data.tlsMode as any) || "master",
           certPathS: data.certPath || "",
           keyPathS: data.keyPath || "",
+          tunnelKeyS: data.tunnelKey || "",
         };
       } else if (role === 'C') {
         const isEffectivelySingleEndedForDefaults = canClientBeSingleEnded ? !!data.isSingleEndedForwardC : false;
@@ -152,7 +162,9 @@ export function EditTopologyNodeDialog({
           label: data.label,
           isSingleEndedForwardC: isEffectivelySingleEndedForDefaults,
           logLevelC: (data.logLevel as any) || "master",
-          // No TLS defaults for client
+          tunnelKeyC: data.tunnelKey || "",
+          minPoolSizeC: data.minPoolSize || undefined,
+          maxPoolSizeC: data.maxPoolSize || undefined,
         };
         if (isEffectivelySingleEndedForDefaults) {
           (defaultVals as any).localListenAddressC_Single = data.tunnelAddress || "";
@@ -204,6 +216,7 @@ export function EditTopologyNodeDialog({
         tlsMode: values.tlsModeS,
         certPath: values.tlsModeS === "2" ? values.certPathS : "",
         keyPath: values.tlsModeS === "2" ? values.keyPathS : "",
+        tunnelKey: values.tunnelKeyS?.trim() || undefined,
       };
     } else if (role === 'C' && 'logLevelC' in values) {
       const finalIsSingleEndedDataValue = canClientBeSingleEnded ? values.isSingleEndedForwardC : false;
@@ -212,9 +225,12 @@ export function EditTopologyNodeDialog({
         label: values.label,
         isSingleEndedForwardC: finalIsSingleEndedDataValue,
         logLevel: values.logLevelC,
-        tlsMode: undefined, // Explicitly clear TLS mode for clients
-        certPath: undefined, // Explicitly clear cert path for clients
-        keyPath: undefined, // Explicitly clear key path for clients
+        tlsMode: finalIsSingleEndedDataValue ? "0" : values.tlsModeC || "master",
+        certPath: (finalIsSingleEndedDataValue || values.tlsModeC !== '2') ? "" : values.certPathC,
+        keyPath: (finalIsSingleEndedDataValue || values.tlsModeC !== '2') ? "" : values.keyPathC,
+        tunnelKey: values.tunnelKeyC?.trim() || undefined,
+        minPoolSize: values.minPoolSizeC,
+        maxPoolSize: values.maxPoolSizeC,
       };
       if (finalIsSingleEndedDataValue) {
         updatedData.tunnelAddress = values.localListenAddressC_Single;
@@ -239,9 +255,10 @@ export function EditTopologyNodeDialog({
     : role === 'T' ? "编辑 目标服务"
     : "编辑 用户";
   const watchedMasterSubRole = role === 'M' ? form.watch('masterSubRoleM') : undefined;
-
   const renderClientAsSingleEnded = canClientBeSingleEnded ? form.watch('isSingleEndedForwardC') : false;
   const watchedServerTlsMode = role === 'S' ? form.watch('tlsModeS') : undefined;
+  const watchedClientTlsMode = (role === 'C' && !renderClientAsSingleEnded) ? form.watch('tlsModeC') : undefined;
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -310,6 +327,12 @@ export function EditTopologyNodeDialog({
                   <FormDescription className="font-sans text-xs">此主控内S/C节点的默认TLS模式。</FormDescription>
                   <FormMessage /></FormItem>)} />
               </>
+            )}
+
+            {(role === 'S' || role === 'C') && (
+               <FormField control={form.control} name={role === 'S' ? 'tunnelKeyS' : 'tunnelKeyC'} render={({ field }) => (
+                <FormItem><FormLabel className="font-sans">隧道密钥 (可选)</FormLabel><FormControl><Input {...field} placeholder="默认: 端口派生密钥" className="font-mono" /></FormControl>
+                <FormDescription className="font-sans text-xs">留空则使用端口派生的密钥。</FormDescription><FormMessage /></FormItem>)} />
             )}
 
             {role === 'S' && (
@@ -384,7 +407,22 @@ export function EditTopologyNodeDialog({
                 )}
                 <FormField control={form.control} name="logLevelC" render={({ field }) => (
                   <FormItem><FormLabel className="font-sans">日志级别</FormLabel><Select onValueChange={field.onChange} value={field.value as string}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="master">主控默认</SelectItem><SelectItem value="debug">Debug</SelectItem><SelectItem value="info">Info</SelectItem><SelectItem value="warn">Warn</SelectItem><SelectItem value="error">Error</SelectItem><SelectItem value="event">Event</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                {/* TLS Mode section removed for Client nodes */}
+                {!renderClientAsSingleEnded && (
+                   <FormField control={form.control} name="tlsModeC" render={({ field }) => (
+                      <FormItem><FormLabel className="font-sans">TLS模式 (连接至服务端)</FormLabel><Select onValueChange={field.onChange} value={(field.value as string) || 'master'}><FormControl><SelectTrigger className="font-sans"><SelectValue /></SelectTrigger></FormControl><SelectContent>{Object.entries(MASTER_TLS_MODE_DISPLAY_MAP).map(([val, lab]) => (<SelectItem key={val} value={val}>{lab}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                )}
+                {watchedClientTlsMode === '2' && !renderClientAsSingleEnded && (
+                  <>
+                    <FormField control={form.control} name="certPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">证书路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-cert.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="keyPathC" render={({ field }) => (<FormItem><FormLabel className="font-sans">密钥路径 (TLS 2)</FormLabel><FormControl><Input {...field} placeholder="/path/to/client-key.pem" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                  </>
+                )}
+                 <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="minPoolSizeC" render={({ field }) => (
+                        <FormItem><FormLabel className="font-sans">最小连接池</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="例: 64" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="maxPoolSizeC" render={({ field }) => (
+                        <FormItem><FormLabel className="font-sans">最大连接池</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} value={field.value ?? ""} placeholder="例: 8192" className="font-mono" /></FormControl><FormMessage /></FormItem>)} />
+                </div>
               </>
             )}
 

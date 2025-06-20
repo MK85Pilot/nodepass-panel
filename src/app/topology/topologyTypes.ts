@@ -13,27 +13,30 @@ export interface CustomNodeData {
   label: string;
   role: NodeRole;
   icon?: React.ElementType;
-  masterSubRole?: MasterSubRole; 
-  nodeType?: string; 
-  masterId?: string; 
-  masterName?: string; 
-  representedMasterId?: string; 
-  representedMasterName?: string; 
-  isContainer?: boolean; 
-  parentNode?: string; 
-  isDefaultClient?: boolean; 
-  isSingleEndedForwardC?: boolean; 
-  apiUrl?: string; 
-  defaultLogLevel?: string; 
-  defaultTlsMode?: string; 
-  tunnelAddress?: string; 
-  targetAddress?: string; 
+  masterSubRole?: MasterSubRole;
+  nodeType?: string;
+  masterId?: string;
+  masterName?: string;
+  representedMasterId?: string;
+  representedMasterName?: string;
+  isContainer?: boolean;
+  parentNode?: string;
+  isDefaultClient?: boolean;
+  isSingleEndedForwardC?: boolean;
+  apiUrl?: string;
+  defaultLogLevel?: string;
+  defaultTlsMode?: string;
+  tunnelAddress?: string;
+  targetAddress?: string;
   submissionStatus?: 'pending' | 'success' | 'error';
   submissionMessage?: string;
-  logLevel?: string; 
-  tlsMode?: string; 
-  certPath?: string; 
-  keyPath?: string; 
+  logLevel?: string;
+  tlsMode?: string;
+  certPath?: string;
+  keyPath?: string;
+  tunnelKey?: string; // Added for S and C nodes
+  minPoolSize?: number; // Added for C nodes
+  maxPoolSize?: number; // Added for C nodes
 
   remoteMasterIdForTunnel?: string;
   remoteServerListenAddress?: string;
@@ -43,6 +46,12 @@ export interface CustomNodeData {
   originalInstanceUrl?: string;
 
   isExpanded?: boolean; // For S/C node expansion
+  activeHandles?: { // Added to manage active handles dynamically
+    top: boolean;
+    bottom: boolean;
+    left: boolean;
+    right: boolean;
+  };
 }
 
 export interface Node extends ReactFlowNode<CustomNodeData> {
@@ -55,7 +64,7 @@ export interface TopologyContextMenu {
   type: 'node' | 'edge';
   top: number;
   left: number;
-  data: Node | import('reactflow').Edge; 
+  data: Node | import('reactflow').Edge;
 }
 
 // Default dimensions for different node states
@@ -63,3 +72,4 @@ export const ICON_ONLY_NODE_SIZE = 48;
 export const EXPANDED_SC_NODE_WIDTH = 200;
 export const EXPANDED_SC_NODE_BASE_HEIGHT = 40; // Base height, will grow with content
 export const DETAIL_LINE_HEIGHT = 18; // Estimated height per detail line
+

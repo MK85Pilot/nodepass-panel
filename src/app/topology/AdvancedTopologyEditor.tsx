@@ -30,9 +30,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { nodePassApi, type Instance as ApiInstanceType, getEventsUrl } from '@/lib/api';
+import { nodePassApi, getEventsUrl } from '@/lib/api';
 import { buildUrlFromFormValues, type BuildUrlParams } from '@/components/nodepass/create-instance-dialog/utils';
-import { extractPort, parseNodePassUrl, isWildcardHostname } from '@/lib/url-utils';
+import { extractPort, parseNodePassUrl } from '@/lib/url-utils'; // parseNodePassUrl now used
 import { SubmitTopologyConfirmationDialog, type InstanceUrlConfigWithName } from './components/SubmitTopologyConfirmationDialog';
 import { EditTopologyNodeDialog } from './components/EditTopologyNodeDialog';
 
@@ -52,9 +52,9 @@ const M_NODE_SCALE_FACTOR_PER_CHILD = 1.2;
 const initialActiveHandles = {
   S: { top: true, bottom: true, left: false, right: false },
   C: { top: true, bottom: true, left: false, right: false },
-  U: { top: false, bottom: true, left: false, right: false }, // Can only connect from bottom
-  T: { top: true, bottom: false, left: false, right: false }, // Can only connect to top
-  M: { top: true, bottom: true, left: true, right: true }, // Master nodes are containers
+  U: { top: false, bottom: true, left: false, right: false }, 
+  T: { top: true, bottom: false, left: false, right: false }, 
+  M: { top: true, bottom: true, left: true, right: true }, 
 };
 
 export function AdvancedTopologyEditor() {
@@ -129,38 +129,31 @@ export function AdvancedTopologyEditor() {
     const dy = (targetNode.positionAbsolute!.y + (targetNode.height! / 2)) - 
                (sourceNode.positionAbsolute!.y + (sourceNode.height! / 2));
 
-    // Determine basic vertical preference
-    if (dy >= 0) { // Target is below or at same level
+    if (dy >= 0) { 
         sh = Position.Bottom;
         th = Position.Top;
-    } else { // Target is above
+    } else { 
         sh = Position.Top;
         th = Position.Bottom;
     }
 
-    // Override for U (source)
     if (sourceNode.data.role === 'U') {
         sh = Position.Bottom;
-        // If U connects to S/C, target S/C should connect on Top
         if (targetNode.data.role === 'S' || targetNode.data.role === 'C') {
             th = Position.Top;
         }
     }
-    // Override for T (target)
     if (targetNode.data.role === 'T') {
         th = Position.Top;
-        // If S/C connects to T, source S/C should connect from Bottom
         if (sourceNode.data.role === 'S' || sourceNode.data.role === 'C') {
-            // Re-evaluate source handle based on relative position to T if T dictates Top
-             if (dy >= 0) { // Target T is below or at same level
+             if (dy >= 0) { 
                 sh = Position.Bottom;
-            } else { // Target T is above
+            } else { 
                 sh = Position.Top;
             }
         }
     }
     
-    // This case should be caught by connection validation, but handles it defensively
     if (sourceNode.data.role === 'U' && targetNode.data.role === 'T') {
         sh = Position.Bottom;
         th = Position.Top;
@@ -183,7 +176,7 @@ export function AdvancedTopologyEditor() {
         let newActiveHandles = { ...initialActiveHandles[n.data.role as keyof typeof initialActiveHandles] };
 
         if (relevantConnections.length === 0) {
-          // No change from initialActiveHandles if no relevant connections
+          // No change from initialActiveHandles
         } else if (n.data.role === 'U') {
             newActiveHandles = { top: false, bottom: true, left: false, right: false };
         } else if (n.data.role === 'T') {
@@ -505,18 +498,32 @@ export function AdvancedTopologyEditor() {
         return;
       }
 
-
       const { sourceHandle, targetHandle } = getOptimalHandlesForConnection(sourceNode, targetNode);
-      const newEdgeBase = {
+      
+      const newEdgeBase: Edge = {
         ...params,
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        animated: true,
-        style: { strokeDasharray: '5 5' },
-        type: 'smoothstep',
+        style: { strokeWidth: 2.5 }, // Default thickness
         markerEnd: { type: MarkerType.ArrowClosed },
+        type: 'smoothstep',
       };
+
+      if ((sourceRole === 'S' && targetRole === 'C') || (sourceRole === 'C' && targetRole === 'S')) {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.strokeDasharray = '5 5';
+        if (sourceRole === 'S' && targetRole === 'C') {
+          newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // S -> C color
+        } else {
+          newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // C -> S color
+        }
+      } else {
+        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))'; // Other connections
+        newEdgeBase.animated = false;
+        newEdgeBase.style!.strokeDasharray = undefined;
+      }
+
 
       let nodesToUpdateForAddress: Node[] = [];
       let clientNodeForUpdate: Node | null = null;
@@ -552,7 +559,7 @@ export function AdvancedTopologyEditor() {
                                 tunnelAddress: newClientTunnelAddress,
                                 targetAddress: newClientTargetAddress,
                                 isSingleEndedForwardC: false,
-                                tlsMode: n.data.tlsMode || 'master'
+                                tlsMode: n.data.tlsMode || 'master' // Or determine appropriate TLS
                             }
                         };
                     }
@@ -600,7 +607,7 @@ export function AdvancedTopologyEditor() {
         setEdgesAndUpdateHandles((eds) => addEdge(newEdgeBase, eds));
       }
     },
-    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection, updateAffectedNodeHandles]
+    [getNodes, getEdges, setNodesInternal, setEdgesAndUpdateHandles, toast, getApiConfigById, getOptimalHandlesForConnection]
   );
 
   const onSelectionChange = useCallback(({ nodes: selectedNodesList }: { nodes: Node[]; edges: Edge[] }) => {
@@ -608,7 +615,7 @@ export function AdvancedTopologyEditor() {
   }, []);
 
   const calculateExpandedNodeHeight = (data: CustomNodeData): number => {
-    let numDetails = 1; // Label is always there (even if combined with icon initially)
+    let numDetails = 1; 
     if (data.tunnelAddress) numDetails++;
     if (data.targetAddress) numDetails++;
     if (data.submissionStatus) numDetails++;
@@ -767,6 +774,7 @@ export function AdvancedTopologyEditor() {
              logLevel: 'master',
              isExpanded: false,
              activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
+             tunnelKey: "", // Initialize tunnelKey
           };
 
           if (nodeRole === 'S') {
@@ -779,7 +787,9 @@ export function AdvancedTopologyEditor() {
             newNodeData.tunnelAddress = `remote-server.example.com:${10000 + currentCounter}`;
             newNodeData.targetAddress = `[::]:${3000 + currentCounter + 1}`;
             newNodeData.logLevel = parentMContainer?.data.defaultLogLevel || 'master';
-            newNodeData.tlsMode = 'master';
+            newNodeData.tlsMode = 'master'; // Default for client (non-single-ended)
+            newNodeData.minPoolSize = undefined; // Initialize pool sizes
+            newNodeData.maxPoolSize = undefined;
           } else if (nodeRole === 'T') {
             newNodeData.targetAddress = `192.168.1.20:${8080 + currentCounter}`;
           }
@@ -839,10 +849,13 @@ export function AdvancedTopologyEditor() {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-            } else {
-                newData.isSingleEndedForwardC = false;
+                newData.minPoolSize = undefined; // S nodes don't have pool size
+                newData.maxPoolSize = undefined;
+            } else { // C
+                newData.isSingleEndedForwardC = false; // Default to non-single-ended when role changes to C
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
+                // min/maxPoolSize can remain or be defaulted for C nodes if needed
             }
             return { ...node, data: newData };
         }
@@ -868,7 +881,6 @@ export function AdvancedTopologyEditor() {
     toast({ title: "正在刷新主控实例计数...", description: "请稍候。" });
     try {
       await queryClient.invalidateQueries({ queryKey: ['masterInstancesCount'] });
-      // Allow some time for invalidation and refetch to kick in
       await new Promise(resolve => setTimeout(resolve, 1000));
       toast({ title: "实例计数已刷新", description: "主控列表中的实例数量已更新。" });
     } catch (error) {
@@ -916,6 +928,7 @@ export function AdvancedTopologyEditor() {
             tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
             certPath: node.data.certPath,
             keyPath: node.data.keyPath,
+            tunnelKey: node.data.tunnelKey,
           };
         } else if (node.data.role === 'C') {
           if (node.data.isSingleEndedForwardC) {
@@ -926,14 +939,15 @@ export function AdvancedTopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: true,
-              tunnelAddress: node.data.tunnelAddress,
-              targetAddress: node.data.targetAddress,
+              tunnelAddress: node.data.tunnelAddress, // Local listen for single-ended
+              targetAddress: node.data.targetAddress, // Remote target for single-ended
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || '0',
-              certPath: node.data.certPath,
-              keyPath: node.data.keyPath,
+              tlsMode: '0', // Single-ended client typically doesn't use TLS for its local listen
+              tunnelKey: node.data.tunnelKey,
+              minPoolSize: node.data.minPoolSize,
+              maxPoolSize: node.data.maxPoolSize,
             };
-          } else {
+          } else { // Regular client (tunnel mode)
             if (!node.data.tunnelAddress || !node.data.targetAddress) {
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
               continue;
@@ -941,12 +955,15 @@ export function AdvancedTopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress,
-              targetAddress: node.data.targetAddress,
+              tunnelAddress: node.data.tunnelAddress, // Remote server tunnel address
+              targetAddress: node.data.targetAddress, // Local forward address
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
+              tlsMode: (node.data.tlsMode as any) || 'master', // Client TLS to server
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
+              tunnelKey: node.data.tunnelKey,
+              minPoolSize: node.data.minPoolSize,
+              maxPoolSize: node.data.maxPoolSize,
             };
           }
         }
@@ -1085,7 +1102,7 @@ export function AdvancedTopologyEditor() {
             }
         }
 
-        if (isInterMasterLinkForThisC) {
+        if (isInterMasterLinkForThisC) { // If it's an inter-master client link, it cannot be single-ended.
             mergedData.isSingleEndedForwardC = false;
         }
     }
@@ -1327,4 +1344,3 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
-

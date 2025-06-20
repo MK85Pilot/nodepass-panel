@@ -4,7 +4,7 @@ import type { MasterLogLevel, MasterTlsMode } from '@/hooks/use-api-key';
 
 export interface ParsedNodePassUrlForTopology {
   scheme: 'server' | 'client' | null;
-  tunnelKey?: string; // Added tunnelKey
+  tunnelKey?: string;
   tunnelAddress: string | null; // host:port
   targetAddress: string | null; // host:port or just port for client local
   params: URLSearchParams;
@@ -12,24 +12,26 @@ export interface ParsedNodePassUrlForTopology {
   tlsMode: MasterTlsMode | null;
   certPath: string | null;
   keyPath: string | null;
-  minPoolSize?: number; // Added minPoolSize
-  maxPoolSize?: number; // Added maxPoolSize
+  minPoolSize?: number;
+  maxPoolSize?: number;
 }
 
 /**
  * Parses a NodePass URL string into its components, specifically for topology needs.
- * This is a simplified version and might need adjustments based on exact URL structures used in topology.
  */
 export function parseNodePassUrlForTopology(url: string): ParsedNodePassUrlForTopology {
   const result: ParsedNodePassUrlForTopology = {
     scheme: null,
+    tunnelKey: undefined,
     tunnelAddress: null,
     targetAddress: null,
     params: new URLSearchParams(),
-    logLevel: 'master', // Default
-    tlsMode: null,    // Default
+    logLevel: 'master', 
+    tlsMode: null,    
     certPath: null,
     keyPath: null,
+    minPoolSize: undefined,
+    maxPoolSize: undefined,
   };
 
   if (!url) return result;
@@ -39,16 +41,14 @@ export function parseNodePassUrlForTopology(url: string): ParsedNodePassUrlForTo
     if (schemeMatch && (schemeMatch[1] === 'server' || schemeMatch[1] === 'client')) {
       result.scheme = schemeMatch[1] as 'server' | 'client';
     } else {
-      // Basic inference if scheme is missing (can be ambiguous)
       result.scheme = url.includes("?tls=") || url.includes("&tls=") ? "server" : "client";
     }
 
     let restOfUrl = schemeMatch ? url.substring(schemeMatch[0].length) : url;
 
-    // Extract tunnelKey (username part)
     const atSignIndex = restOfUrl.indexOf('@');
     if (atSignIndex !== -1) {
-      result.tunnelKey = restOfUrl.substring(0, atSignIndex);
+      result.tunnelKey = decodeURIComponent(restOfUrl.substring(0, atSignIndex));
       restOfUrl = restOfUrl.substring(atSignIndex + 1);
     }
 
@@ -56,17 +56,14 @@ export function parseNodePassUrlForTopology(url: string): ParsedNodePassUrlForTo
     const pathPart = parts[0];
     const queryPart = parts[1];
 
-    // Parse addresses from pathPart
-    // Example: host:port/targethost:targetport OR host:port/targetport (for client local forward)
     const addresses = pathPart.split('/');
     if (addresses.length > 0) {
-      result.tunnelAddress = addresses[0].trim() || null; // This is the primary host:port
+      result.tunnelAddress = addresses[0].trim() || null;
     }
     if (addresses.length > 1) {
-      result.targetAddress = addresses.slice(1).join('/').trim() || null; // This can be host:port or just port
+      result.targetAddress = addresses.slice(1).join('/').trim() || null;
     }
 
-    // Parse query parameters
     if (queryPart) {
       result.params = new URLSearchParams(queryPart);
       const log = result.params.get('log');
@@ -96,7 +93,6 @@ export function parseNodePassUrlForTopology(url: string): ParsedNodePassUrlForTo
     }
   } catch (e) {
     console.error("Error parsing NodePass URL for topology:", url, e);
-    // Return defaults or partially parsed data
   }
   return result;
 }
