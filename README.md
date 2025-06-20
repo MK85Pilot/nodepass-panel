@@ -5,6 +5,7 @@
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
   <img src="https://img.shields.io/github/last-commit/NodePassProject/NodePanel" alt="GitHub last commit">
+  <img src="https://img.shields.io/badge/Version-1.0.3-blue.svg" alt="Version 1.0.3">
 </p>
 
 这是一个由 [NodePass (yosebyte/nodepass)](https://github.com/yosebyte/nodepass) 强力驱动的前端管理面板，提供了一个用户友好的WebUI来管理您的 NodePass 服务。
