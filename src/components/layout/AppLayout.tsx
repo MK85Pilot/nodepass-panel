@@ -76,17 +76,20 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
       />
       <footer className="py-6 text-center text-xs sm:text-sm text-muted-foreground border-t border-border bg-muted/30">
         <div className="font-sans">
-          NodePanel &copy; {new Date().getFullYear()} | 
-          由 <a 
-              href="https://github.com/yosebyte/nodepass" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-            NodePass
-          </a> 驱动
-          <span className="font-mono mx-1">|</span>
-          版本: 1.0.3
+          <span>NodePanel &copy; {new Date().getFullYear()}</span>
+          <span className="mx-1.5">&bull;</span>
+          <span>
+            由 <a 
+                href="https://github.com/yosebyte/nodepass" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+              NodePass
+            </a> 驱动
+          </span>
+          <span className="mx-1.5">&bull;</span>
+          <span>版本: 1.0.3</span>
         </div>
       </footer>
     </div>
