@@ -24,7 +24,6 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
   const [isApiConfigDialogOpen, setIsApiConfigDialogOpen] = React.useState(false);
   const [editingApiConfig, setEditingApiConfig] = React.useState<NamedApiConfig | null>(null);
   
-  // Removed uiRenderTime state
 
   const handleSaveApiConfig = (configToSave: Omit<NamedApiConfig, 'id'> & { id?: string }) => {
     const isNew = !configToSave.id;
@@ -55,8 +54,6 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
       description: '活动主控连接已断开。',
     });
   };
-
-  const buildTime = process.env.NEXT_PUBLIC_BUILD_TIME || 'N/A';
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -90,9 +87,10 @@ export function AppLayout({ children, onLog }: AppLayoutProps) {
           </a> 驱动
         </div>
         <div className="mt-1 text-xs font-mono">
-          版本: 1.0.3 | 构建时间: {buildTime}
+          版本: 1.0.3
         </div>
       </footer>
     </div>
   );
 }
+
