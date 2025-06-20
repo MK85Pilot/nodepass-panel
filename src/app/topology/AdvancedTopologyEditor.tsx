@@ -902,132 +902,103 @@ export function AdvancedTopologyEditor() {
     const allCurrentEdges = getEdges();
 
     for (const node of allCurrentNodes) {
-        if (node.data.role !== 'S' && node.data.role !== 'C') continue;
+      if (node.data.role !== 'S' && node.data.role !== 'C') continue;
 
-        const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
-        if (!parentMNode || !parentMNode.data.masterId) {
-            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
-            continue;
-        }
-        const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
-        if (!masterConfigForNode) {
-            setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
-            continue;
-        }
+      const parentMNode = allCurrentNodes.find(n => n.id === node.parentNode);
+      if (!parentMNode || !parentMNode.data.masterId) {
+        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置丢失' } } : n));
+        continue;
+      }
+      const masterConfigForNode = getApiConfigById(parentMNode.data.masterId);
+      if (!masterConfigForNode) {
+        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '主控配置未找到' } } : n));
+        continue;
+      }
 
-        let urlParams: BuildUrlParams | null = null;
-        const nodeLabelForDialog = node.data.label.replace(/^服务端\s*|^客户端\s*/, '');
-        let instanceTypeForDialog: "服务端" | "客户端" = node.data.role === 'S' ? "服务端" : "客户端";
+      let urlParams: BuildUrlParams | null = null;
+      const nodeLabelForDialog = node.data.label.replace(/^(服务端|客户端)\s*/, '').trim();
+      let instanceTypeForDialog: "服务端" | "客户端" = node.data.role === 'S' ? "服务端" : "客户端";
 
-        if (node.data.role === 'S') {
-            const isEntryS = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            let sListenAddress = node.data.tunnelAddress;
-            let sTargetAddressForUrl = node.data.targetAddress;
+      const isEntryFromU = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
 
-            if (isEntryS) { // U -> S (S is an entry point)
-                instanceTypeForDialog = "服务端"; // No change needed here for label
-                const connectedCEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
-                if (connectedCEdge) { // S -> C
-                    const cNode = allCurrentNodes.find(n => n.id === connectedCEdge.target);
-                    if (cNode && cNode.data.tunnelAddress) { // C's tunnelAddress is its listen address for single-ended
-                        sTargetAddressForUrl = cNode.data.tunnelAddress;
-                    } else {
-                        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S后C地址缺失' } } : n)); continue;
-                    }
-                } else { // S -> T or S is standalone
-                    const connectedTEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'T');
-                    if (connectedTEdge) {
-                        const tNode = allCurrentNodes.find(n => n.id === connectedTEdge.target);
-                        sTargetAddressForUrl = (tNode && tNode.data.targetAddress) ? tNode.data.targetAddress : node.data.targetAddress;
-                    } else {
-                        sTargetAddressForUrl = node.data.targetAddress; // S is last, use its own target
-                    }
-                    if (!sTargetAddressForUrl) {
-                        setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S目标地址缺失' } } : n)); continue;
-                    }
-                }
-            } else { // S is not an entry point (e.g., C -> S)
-                 instanceTypeForDialog = "服务端"; // No change needed here for label
-                // sTargetAddressForUrl remains node.data.targetAddress (S forwards to its configured target)
-                if (!sTargetAddressForUrl) {
-                     setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '非入口S目标缺失' } } : n)); continue;
-                }
+      if (node.data.role === 'S') {
+        let sListenAddress = node.data.tunnelAddress;
+        let sTargetAddressForUrl = node.data.targetAddress;
+
+        if (isEntryFromU) { // U -> S (S is entry for "reverse tunnel" U->S->C->T or simple U->S->T)
+          const connectedCEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
+          if (connectedCEdge) { // U -> S -> C chain
+            const cNode = allCurrentNodes.find(n => n.id === connectedCEdge.target);
+            if (cNode && cNode.data.tunnelAddress) {
+              sTargetAddressForUrl = cNode.data.tunnelAddress; // S targets C's listening address
+            } else {
+              setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S后C监听地址缺失' } } : n)); continue;
             }
-            if (!sListenAddress) {
-                setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S监听地址缺失' } } : n)); continue;
-            }
-            urlParams = {
-                instanceType: "服务端",
-                tunnelAddress: sListenAddress,
-                targetAddress: sTargetAddressForUrl!,
-                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-                tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
-                certPath: node.data.certPath,
-                keyPath: node.data.keyPath,
-                tunnelKey: node.data.tunnelKey,
-            };
-
-        } else if (node.data.role === 'C') {
-            let cTunnelAddress = node.data.tunnelAddress;
-            let cTargetAddress = node.data.targetAddress;
-            let cIsSingleEnded = node.data.isSingleEndedForwardC === true; // Explicitly from dialog
-
-            const isEntryC = allCurrentEdges.some(edge => edge.target === node.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            const isPrecededByEntryS = allCurrentEdges.some(edge => {
-                if (edge.target === node.id) {
-                    const sourceSNode = allCurrentNodes.find(n => n.id === edge.source && n.data.role === 'S');
-                    if (sourceSNode) {
-                        return allCurrentEdges.some(sEdge => sEdge.target === sourceSNode.id && allCurrentNodes.find(uN => uN.id === sEdge.source)?.data.role === 'U');
-                    }
-                }
-                return false;
-            });
-
-            if (isEntryC) { // U -> C (C is an entry point)
-                instanceTypeForDialog = "客户端";
-                // cIsSingleEnded remains node.data.isSingleEndedForwardC (from dialog)
-                // C's tunnelAddress is its connect-to-S address (if tunnel mode) or its listen address (if single-ended)
-                // C's targetAddress is its local listen port (if tunnel mode) or its remote forward target (if single-ended)
-            } else if (isPrecededByEntryS) { // U -> S -> C (C must be single-ended)
-                instanceTypeForDialog = "客户端";
-                cIsSingleEnded = true; // Override: C in U->S->C chain acts as single-ended forwarder
-                // cTunnelAddress is C's listen address (for S to connect to)
-                // cTargetAddress is C's remote forward target (e.g., T's address)
-            } else { // Other C cases (C-C, C-S where S is not entry)
-                 instanceTypeForDialog = "客户端";
-                // cIsSingleEnded remains node.data.isSingleEndedForwardC (from dialog)
-            }
-            
-            if (!cTunnelAddress || !cTargetAddress) {
-                 setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址不完整' } } : n)); continue;
-            }
-
-            urlParams = {
-                instanceType: "客户端",
-                isSingleEndedForward: cIsSingleEnded,
-                tunnelAddress: cTunnelAddress,
-                targetAddress: cTargetAddress,
-                logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-                tlsMode: (node.data.tlsMode as any) || 'master',
-                certPath: node.data.certPath,
-                keyPath: node.data.keyPath,
-                tunnelKey: node.data.tunnelKey,
-                minPoolSize: node.data.minPoolSize,
-                maxPoolSize: node.data.maxPoolSize,
-            };
+          } else { // U -> S -> T or U -> S (standalone)
+            const connectedTEdge = allCurrentEdges.find(edge => edge.source === node.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'T');
+            if (connectedTEdge) {
+              const tNode = allCurrentNodes.find(n => n.id === connectedTEdge.target);
+              sTargetAddressForUrl = (tNode && tNode.data.targetAddress) ? tNode.data.targetAddress : node.data.targetAddress;
+            } // else sTargetAddressForUrl remains node.data.targetAddress
+          }
         }
+        // If S is not entry (e.g. C -> S), sListenAddress and sTargetAddressForUrl remain as per node.data
 
-        if (urlParams) {
-            const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
-            instancesToCreate.push({
-                nodeId: node.id,
-                nodeLabel: nodeLabelForDialog,
-                masterId: masterConfigForNode.id,
-                masterName: masterConfigForNode.name,
-                url: finalUrl,
-                instanceType: instanceTypeForDialog,
-            });
+        if (!sListenAddress) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S监听地址缺失' } } : n)); continue; }
+        if (!sTargetAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'S目标地址缺失' } } : n)); continue; }
+
+        urlParams = {
+          instanceType: "服务端",
+          tunnelAddress: sListenAddress, targetAddress: sTargetAddressForUrl,
+          logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+          tlsMode: (node.data.tlsMode as any) || masterConfigForNode.masterDefaultTlsMode || 'master',
+          certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
+        };
+
+      } else if (node.data.role === 'C') {
+        let cIsSingleEndedEffective = !!node.data.isSingleEndedForwardC; // Default to dialog setting
+        let cTunnelAddressForUrl = node.data.tunnelAddress;
+        let cTargetAddressForUrl = node.data.targetAddress;
+
+        const isExitCInReverseTunnel = allCurrentEdges.some(edge => { // U -> S -> C (this C)
+          if (edge.target === node.id) {
+            const sourceSNode = allCurrentNodes.find(n => n.id === edge.source && n.data.role === 'S');
+            return sourceSNode && allCurrentEdges.some(sEdge => sEdge.target === sourceSNode.id && allCurrentNodes.find(uN => uN.id === sEdge.source)?.data.role === 'U');
+          } return false;
+        });
+
+        const isEntryCInForwardTunnel = isEntryFromU; // U -> C (this C)
+
+        if (isExitCInReverseTunnel) { // U -> S -> C (C is exit)
+          cIsSingleEndedEffective = true; // C must listen for S and forward to T
+                                        // C's tunnelAddress is its listen, C's targetAddress is T's address
+        } else if (isEntryCInForwardTunnel) { // U -> C (C is entry)
+           cIsSingleEndedEffective = true; // C must listen for U and forward to S/T
+                                         // C's tunnelAddress is its listen, C's targetAddress is S/T's address
         }
+        // If C is not an entry from U, and not an exit in U->S->C, it uses its dialog setting for isSingleEndedForwardC
+
+        if (!cTunnelAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址缺失(隧道/监听)' } } : n)); continue; }
+        if (!cTargetAddressForUrl) { setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: 'C地址缺失(目标/本地)' } } : n)); continue; }
+
+        urlParams = {
+          instanceType: "客户端", isSingleEndedForward: cIsSingleEndedEffective,
+          tunnelAddress: cTunnelAddressForUrl, targetAddress: cTargetAddressForUrl,
+          logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
+          tlsMode: cIsSingleEndedEffective ? '0' : ((node.data.tlsMode as any) || 'master'),
+          certPath: node.data.certPath, keyPath: node.data.keyPath, tunnelKey: node.data.tunnelKey,
+          minPoolSize: node.data.minPoolSize, maxPoolSize: node.data.maxPoolSize,
+        };
+      }
+
+      if (urlParams) {
+        const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
+        instancesToCreate.push({
+          nodeId: node.id, nodeLabel: nodeLabelForDialog,
+          masterId: masterConfigForNode.id, masterName: masterConfigForNode.name,
+          url: finalUrl, instanceType: instanceTypeForDialog,
+        });
+      }
     }
     return instancesToCreate;
   }, [getNodes, getEdges, getApiConfigById, setNodesInternal]);
@@ -1392,4 +1363,5 @@ export function AdvancedTopologyEditor() {
     </div>
   );
 }
+
 
