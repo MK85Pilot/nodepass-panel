@@ -505,7 +505,7 @@ export function AdvancedTopologyEditor() {
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        style: { strokeWidth: 3.5 }, // Increased thickness
+        style: { strokeWidth: 3.5 },
         markerEnd: { type: MarkerType.ArrowClosed },
         type: 'smoothstep',
       };
@@ -513,15 +513,20 @@ export function AdvancedTopologyEditor() {
       if (sourceRole === 'S' && targetRole === 'C') {
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // S -> C (e.g., blue)
+        newEdgeBase.style!.stroke = 'hsl(var(--primary))';
       } else if (sourceRole === 'C' && targetRole === 'S') {
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // C -> S (e.g., cyan/teal)
+        newEdgeBase.style!.stroke = 'hsl(var(--accent))';
+      } else if (
+        (sourceRole === 'U' && (targetRole === 'S' || targetRole === 'C')) ||
+        ((sourceRole === 'S' || sourceRole === 'C') && targetRole === 'T')
+      ) {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.stroke = 'hsl(var(--chart-4))'; // Specific color for U->S/C and S/C->T links
       } else {
-        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))'; // Other connections (U-S, U-C, S-T, C-T, C-C)
-        newEdgeBase.animated = false;
-        newEdgeBase.style!.strokeDasharray = undefined;
+        newEdgeBase.animated = false; // Other connections (e.g., C-C)
+        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))';
       }
 
 
@@ -774,7 +779,9 @@ export function AdvancedTopologyEditor() {
              logLevel: 'master',
              isExpanded: false,
              activeHandles: { ...initialActiveHandles[nodeRole as keyof typeof initialActiveHandles] },
-             tunnelKey: "", // Initialize tunnelKey
+             tunnelKey: "", 
+             minPoolSize: undefined, 
+             maxPoolSize: undefined,
           };
 
           if (nodeRole === 'S') {
@@ -787,9 +794,7 @@ export function AdvancedTopologyEditor() {
             newNodeData.tunnelAddress = `remote-server.example.com:${10000 + currentCounter}`;
             newNodeData.targetAddress = `[::]:${3000 + currentCounter + 1}`;
             newNodeData.logLevel = parentMContainer?.data.defaultLogLevel || 'master';
-            newNodeData.tlsMode = 'master'; // Default for client (non-single-ended)
-            newNodeData.minPoolSize = undefined; // Initialize pool sizes
-            newNodeData.maxPoolSize = undefined;
+            newNodeData.tlsMode = 'master'; 
           } else if (nodeRole === 'T') {
             newNodeData.targetAddress = `192.168.1.20:${8080 + currentCounter}`;
           }
@@ -849,13 +854,12 @@ export function AdvancedTopologyEditor() {
                 newData.isSingleEndedForwardC = undefined;
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("remote")) newData.tunnelAddress = `[::]:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("[")) newData.targetAddress = `127.0.0.1:${3000 + nodeIdCounter}`;
-                newData.minPoolSize = undefined; // S nodes don't have pool size
+                newData.minPoolSize = undefined; 
                 newData.maxPoolSize = undefined;
             } else { // C
-                newData.isSingleEndedForwardC = false; // Default to non-single-ended when role changes to C
+                newData.isSingleEndedForwardC = false; 
                 if (!newData.tunnelAddress || newData.tunnelAddress.startsWith("[")) newData.tunnelAddress = `remote.server.com:${10000 + nodeIdCounter}`;
                 if (!newData.targetAddress || newData.targetAddress.startsWith("127")) newData.targetAddress = `[::]:${3000 + nodeIdCounter + 1}`;
-                // min/maxPoolSize can remain or be defaulted for C nodes if needed
             }
             return { ...node, data: newData };
         }
@@ -940,15 +944,15 @@ export function AdvancedTopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: true,
-              tunnelAddress: node.data.tunnelAddress, // Local listen for single-ended
-              targetAddress: node.data.targetAddress, // Remote target for single-ended
+              tunnelAddress: node.data.tunnelAddress, 
+              targetAddress: node.data.targetAddress, 
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: '0', // Single-ended client typically doesn't use TLS for its local listen
+              tlsMode: '0', 
               tunnelKey: node.data.tunnelKey,
               minPoolSize: node.data.minPoolSize,
               maxPoolSize: node.data.maxPoolSize,
             };
-          } else { // Regular client (tunnel mode)
+          } else { 
             if (!node.data.tunnelAddress || !node.data.targetAddress) {
               setNodesInternal(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, submissionStatus: 'error', submissionMessage: '地址不完整' } } : n));
               continue;
@@ -956,10 +960,10 @@ export function AdvancedTopologyEditor() {
             urlParams = {
               instanceType: instanceTypeForBuild,
               isSingleEndedForward: false,
-              tunnelAddress: node.data.tunnelAddress, // Remote server tunnel address
-              targetAddress: node.data.targetAddress, // Local forward address
+              tunnelAddress: node.data.tunnelAddress, 
+              targetAddress: node.data.targetAddress, 
               logLevel: (node.data.logLevel as any) || masterConfigForNode.masterDefaultLogLevel || 'info',
-              tlsMode: (node.data.tlsMode as any) || 'master', // Client TLS to server
+              tlsMode: (node.data.tlsMode as any) || 'master', 
               certPath: node.data.certPath,
               keyPath: node.data.keyPath,
               tunnelKey: node.data.tunnelKey,
