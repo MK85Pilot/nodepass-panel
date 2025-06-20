@@ -505,21 +505,21 @@ export function AdvancedTopologyEditor() {
         sourceHandle,
         targetHandle,
         id: `edge-${uuidv4()}`,
-        style: { strokeWidth: 2.5 }, // Default thickness
+        style: { strokeWidth: 3.5 }, // Increased thickness
         markerEnd: { type: MarkerType.ArrowClosed },
         type: 'smoothstep',
       };
 
-      if ((sourceRole === 'S' && targetRole === 'C') || (sourceRole === 'C' && targetRole === 'S')) {
+      if (sourceRole === 'S' && targetRole === 'C') {
         newEdgeBase.animated = true;
         newEdgeBase.style!.strokeDasharray = '5 5';
-        if (sourceRole === 'S' && targetRole === 'C') {
-          newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // S -> C color
-        } else {
-          newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // C -> S color
-        }
+        newEdgeBase.style!.stroke = 'hsl(var(--primary))'; // S -> C (e.g., blue)
+      } else if (sourceRole === 'C' && targetRole === 'S') {
+        newEdgeBase.animated = true;
+        newEdgeBase.style!.strokeDasharray = '5 5';
+        newEdgeBase.style!.stroke = 'hsl(var(--accent))'; // C -> S (e.g., cyan/teal)
       } else {
-        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))'; // Other connections
+        newEdgeBase.style!.stroke = 'hsl(var(--muted-foreground))'; // Other connections (U-S, U-C, S-T, C-T, C-C)
         newEdgeBase.animated = false;
         newEdgeBase.style!.strokeDasharray = undefined;
       }
@@ -895,6 +895,7 @@ export function AdvancedTopologyEditor() {
   const prepareInstancesForSubmission = useCallback((): InstanceUrlConfigWithName[] => {
     const instancesToCreate: InstanceUrlConfigWithName[] = [];
     const allCurrentNodes = getNodes();
+    const allCurrentEdges = getEdges();
 
     for (const node of allCurrentNodes) {
       if (node.data.role === 'S' || node.data.role === 'C') {
@@ -970,19 +971,35 @@ export function AdvancedTopologyEditor() {
 
         if (urlParams) {
           const finalUrl = buildUrlFromFormValues(urlParams, masterConfigForNode);
+
+          let instanceTypeForDialog: InstanceUrlConfigWithName['instanceType'];
+          const isEntry = allCurrentEdges.some(edge => {
+            if (edge.target === node.id) {
+              const sourceNode = allCurrentNodes.find(n => n.id === edge.source);
+              return sourceNode?.data.role === 'U';
+            }
+            return false;
+          });
+
+          if (node.data.role === 'S') {
+            instanceTypeForDialog = isEntry ? "入口(s)" : "出口(s)";
+          } else { // C node
+            instanceTypeForDialog = isEntry ? "入口(c)" : "出口(c)";
+          }
+
           instancesToCreate.push({
             nodeId: node.id,
             nodeLabel: node.data.label,
             masterId: masterConfigForNode.id,
             masterName: masterConfigForNode.name,
             url: finalUrl,
-            instanceType: node.data.role === 'S' ? '出口(s)' : '入口(c)'
+            instanceType: instanceTypeForDialog
           });
         }
       }
     }
     return instancesToCreate;
-  }, [getNodes, getApiConfigById, setNodesInternal, activeApiConfig]);
+  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, activeApiConfig]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {
