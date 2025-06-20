@@ -927,12 +927,11 @@ export function AdvancedTopologyEditor() {
             const outgoingEdgeToC = allCurrentEdges.find(edge => edge.source === sNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
             const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === sNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
 
-            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C (S is entry for U, target is C's listener)
-                const targetCNode = allCurrentNodes.find(n => n.id === outgoingEdgeToC.target)!;
+            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C
                 const sSubmission = prepareServerUrlParams({
                     instanceType: "服务端",
                     tunnelAddress: sNode.data.tunnelAddress, // S listens for U
-                    targetAddress: targetCNode.data.tunnelAddress, // S forwards to C's listener
+                    targetAddress: sNode.data.targetAddress, // S forwards to its own configured target
                     logLevel: (sNode.data.logLevel as any),
                     tlsMode: (sNode.data.tlsMode as any),
                     certPath: sNode.data.certPath,
@@ -956,62 +955,27 @@ export function AdvancedTopologyEditor() {
             }
         } else if (node.data.role === 'C') { // C-Node
             const cNode = node;
-            const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-            const incomingEdgeFromS = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
-            const sourceSNodeForIncoming = incomingEdgeFromS ? allCurrentNodes.find(n => n.id === incomingEdgeFromS.source) : null;
-            const isSFromU = sourceSNodeForIncoming ? allCurrentEdges.some(edge => edge.target === sourceSNodeForIncoming.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U') : false;
+            // const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
+            // const incomingEdgeFromS = allCurrentEdges.find(edge => edge.target === cNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'S');
+            // const sourceSNodeForIncoming = incomingEdgeFromS ? allCurrentNodes.find(n => n.id === incomingEdgeFromS.source) : null;
+            // const isSFromU = sourceSNodeForIncoming ? allCurrentEdges.some(edge => edge.target === sourceSNodeForIncoming.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U') : false;
 
-            if (incomingEdgeFromU) { // U -> C (C is entry for U, single-ended)
-                const cSubmission = prepareClientUrlParams({
-                    instanceType: "客户端",
-                    isSingleEndedForward: true, // C acts as single-ended forwarder here
-                    tunnelAddress: cNode.data.tunnelAddress, // C listens for U
-                    targetAddress: cNode.data.targetAddress, // C forwards to next (S or T)
-                    logLevel: (cNode.data.logLevel as any),
-                    tlsMode: '0', // Single-ended listener typically no TLS
-                    certPath: cNode.data.certPath,
-                    keyPath: cNode.data.keyPath,
-                    tunnelKey: cNode.data.tunnelKey,
-                    minPoolSize: cNode.data.minPoolSize,
-                    maxPoolSize: cNode.data.maxPoolSize,
-                }, masterConfigForNode, localOnLog);
-                if (cSubmission) urlParams = cSubmission.clientParams;
-
-            } else if (isSFromU && sourceSNodeForIncoming) { // U -> S -> C (C is exit, acts as tunnel client to S)
-                const sMasterConfig = getApiConfigById(allCurrentNodes.find(n => n.id === sourceSNodeForIncoming.parentNode)?.data.masterId!);
-                const sNodeReachableAddress = calculateClientTunnelAddressForServer(sourceSNodeForIncoming.data, sMasterConfig);
-                
-                const cSubmission = prepareClientUrlParams({
-                    instanceType: "客户端",
-                    isSingleEndedForward: false, // C is a tunnel client
-                    tunnelAddress: sNodeReachableAddress, // C connects to S's reachable address
-                    targetAddress: cNode.data.targetAddress, // C's local forward to T
-                    logLevel: (cNode.data.logLevel as any),
-                    tlsMode: (cNode.data.tlsMode as any), // TLS for connection to S
-                    certPath: cNode.data.certPath,
-                    keyPath: cNode.data.keyPath,
-                    tunnelKey: cNode.data.tunnelKey,
-                    minPoolSize: cNode.data.minPoolSize,
-                    maxPoolSize: cNode.data.maxPoolSize,
-                }, masterConfigForNode, localOnLog);
-                 if (cSubmission) urlParams = cSubmission.clientParams;
-
-            } else { // Standard C-node (tunnel or single-ended based on its own dialog setting)
-                const cSubmission = prepareClientUrlParams({
-                    instanceType: "客户端",
-                    isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
-                    tunnelAddress: cNode.data.tunnelAddress,
-                    targetAddress: cNode.data.targetAddress,
-                    logLevel: (cNode.data.logLevel as any),
-                    tlsMode: (cNode.data.tlsMode as any),
-                    certPath: cNode.data.certPath,
-                    keyPath: cNode.data.keyPath,
-                    tunnelKey: cNode.data.tunnelKey,
-                    minPoolSize: cNode.data.minPoolSize,
-                    maxPoolSize: cNode.data.maxPoolSize,
-                }, masterConfigForNode, localOnLog);
-                 if (cSubmission) urlParams = cSubmission.clientParams;
-            }
+            // For C-nodes, the logic mostly relies on its own configuration (isSingleEndedForwardC, tunnelAddress, targetAddress)
+            // which should have been set correctly by the Edit dialog or onConnect.
+            const cSubmission = prepareClientUrlParams({
+                instanceType: "客户端",
+                isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
+                tunnelAddress: cNode.data.tunnelAddress,
+                targetAddress: cNode.data.targetAddress,
+                logLevel: (cNode.data.logLevel as any),
+                tlsMode: (cNode.data.tlsMode as any),
+                certPath: cNode.data.certPath,
+                keyPath: cNode.data.keyPath,
+                tunnelKey: cNode.data.tunnelKey,
+                minPoolSize: cNode.data.minPoolSize,
+                maxPoolSize: cNode.data.maxPoolSize,
+            }, masterConfigForNode, localOnLog);
+            if (cSubmission) urlParams = cSubmission.clientParams;
         }
 
         if (urlParams) {
@@ -1026,7 +990,7 @@ export function AdvancedTopologyEditor() {
         }
     }
     return instancesToCreate;
-  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, toast, calculateClientTunnelAddressForServer]);
+  }, [getNodes, getEdges, getApiConfigById, setNodesInternal, toast]);
 
 
   const handleTriggerSubmitTopology = useCallback(async () => {
