@@ -18,7 +18,7 @@ import {
   type NodeProps,
 } from 'reactflow';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIcon, Edit3, Trash2, RefreshCw } from 'lucide-react';
+import { Server, Smartphone as ClientIcon, Globe, UserCircle2 as UserIcon, ListTree, Puzzle, Info as InfoIconLucide, Edit3, Trash2, RefreshCw, Smartphone, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TopologyCanvasWrapper } from './TopologyCanvas';
@@ -40,6 +40,8 @@ import type { Node, CustomNodeData, NodeRole, TopologyContextMenu } from './topo
 import { CardNode, MasterNode, nodeStyles } from './NodeRenderer';
 import { ICON_ONLY_NODE_SIZE, EXPANDED_SC_NODE_WIDTH, EXPANDED_SC_NODE_BASE_HEIGHT, DETAIL_LINE_HEIGHT } from './topologyTypes';
 import { calculateClientTunnelAddressForServer } from './topologyLogic';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const initialNodes: Node[] = [];
@@ -85,6 +87,10 @@ export function AdvancedTopologyEditor() {
 
   const handshakeLogRegex = /Tunnel handshaked:.*?in\s+(\d+)\s*ms/i;
   const sseHandshakeAbortControllerRef = useRef<AbortController | null>(null);
+
+  const isMobile = useIsMobile();
+  const [showMobileInfoAlert, setShowMobileInfoAlert] = useState(true);
+
 
   const updateMasterNodeDimensions = useCallback((masterNodeId: string, currentNodes: Node[]): Node[] => {
     const masterNode = currentNodes.find(n => n.id === masterNodeId);
@@ -211,11 +217,9 @@ export function AdvancedTopologyEditor() {
             hasS = allNodes.some(n => n.parentNode === targetParentNode.id && n.data.role === 'S');
         }
 
-        const incomingEdge = allEdges.find(edge => edge.target === node.id);
-        const outgoingEdge = allEdges.find(edge => edge.source === node.id);
-
-        if (incomingEdge && allNodes.find(n=> n.id === incomingEdge.source)?.data.role === 'S') {
-            const sourceSNode = allNodes.find(n => n.id === incomingEdge.source)!;
+        const incomingEdgeToC = allEdges.find(edge => edge.target === node.id && allNodes.find(n=> n.id === edge.source)?.data.role === 'S');
+        if (incomingEdgeToC) {
+            const sourceSNode = allNodes.find(n => n.id === incomingEdgeToC.source)!;
             const sourceParentNode = sourceSNode.parentNode ? allNodes.find(n => n.id === sourceSNode.parentNode) : undefined;
             const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
 
@@ -229,20 +233,23 @@ export function AdvancedTopologyEditor() {
                     toast({ title: '无法确定隧道地址', description: '无法自动计算源 S 节点的隧道地址。', variant: "warning" });
                 }
             }
-        } else if (outgoingEdge && allNodes.find(n=> n.id === outgoingEdge.target)?.data.role === 'S') {
-            const targetSNode = allNodes.find(n => n.id === outgoingEdge.target)!;
-            const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
-            const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
+        } else {
+            const outgoingEdgeFromC = allEdges.find(edge => edge.source === node.id && allNodes.find(n => n.id === edge.target)?.data.role === 'S');
+            if (outgoingEdgeFromC) {
+                 const targetSNode = allNodes.find(n => n.id === outgoingEdgeFromC.target)!;
+                 const targetParentNode = targetSNode.parentNode ? allNodes.find(n => n.id === targetSNode.parentNode) : undefined;
+                 const cNodeParentNode = node.parentNode ? allNodes.find(n => n.id === node.parentNode) : undefined;
 
-            if (targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
-                 isInterMaster = true;
-                 const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
-                 const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
-                 if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
-                    sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
-                } else {
-                    toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
-                }
+                 if(targetParentNode && cNodeParentNode && targetParentNode.data.masterId !== cNodeParentNode.data.masterId) {
+                    isInterMaster = true;
+                    const targetMasterConfig = getApiConfigById(targetParentNode.data.masterId!);
+                    const newClientTunnelAddress = calculateClientTunnelAddressForServer(targetSNode.data, targetMasterConfig);
+                    if (newClientTunnelAddress && newClientTunnelAddress.trim() !== "") {
+                        sourceInfo = { serverTunnelAddress: newClientTunnelAddress };
+                    } else {
+                         toast({ title: '无法确定隧道地址', description: '无法自动计算目标 S 节点的隧道地址。', variant: "warning" });
+                    }
+                 }
             }
         }
     }
@@ -903,7 +910,6 @@ export function AdvancedTopologyEditor() {
     const localOnLog = (message: string, type: 'INFO' | 'WARN' | 'ERROR') => {
       if (type === 'ERROR') toast({ title: "配置错误", description: message, variant: "destructive" });
       if (type === 'WARN') toast({ title: "配置警告", description: message, variant: "warning" });
-      // INFO logs for this function are not shown as toasts, but could be logged to console or a page log if needed
     };
 
     for (const node of allCurrentNodes) {
@@ -927,29 +933,22 @@ export function AdvancedTopologyEditor() {
             const sNode = node;
             const outgoingEdgeToC = allCurrentEdges.find(edge => edge.source === sNode.id && allCurrentNodes.find(n => n.id === edge.target)?.data.role === 'C');
             const incomingEdgeFromU = allCurrentEdges.find(edge => edge.target === sNode.id && allCurrentNodes.find(n => n.id === edge.source)?.data.role === 'U');
-
             let sTargetAddressForUrl = sNode.data.targetAddress;
 
-            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C chain (reverse tunnel style for U's traffic)
+            if (incomingEdgeFromU && outgoingEdgeToC) { // U -> S -> C chain
                 const sListenPortStr = extractPort(sNode.data.tunnelAddress || "");
                 if (sListenPortStr) {
                     const sListenPortNum = parseInt(sListenPortStr, 10);
-                    // S forwards to an intermediate port (e.g., S_Listen_Port + 1).
-                    // C, when connecting to S's main listen port, will handle traffic from this intermediate port
-                    // and forward it to its own configured targetAddress (which points to T).
                     sTargetAddressForUrl = `[::]:${sListenPortNum + 1}`;
-                    localOnLog(`U->S->C 链: 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl} (基于其监听端口 ${sListenPortStr})。`, 'INFO');
+                    localOnLog(`U->S->C 链 (反向): 服务端 ${sNode.data.label} 的目标地址推断为 ${sTargetAddressForUrl}。C 将连接此 S 的 ${sNode.data.tunnelAddress}，并转发到 C 自己的目标地址。`, 'INFO');
                 } else {
-                    localOnLog(`警告: U->S->C 链中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其默认配置的目标地址。`, 'WARN');
+                    localOnLog(`警告: U->S->C 链 (反向) 中的服务端 ${sNode.data.label} (${sNode.id.substring(0,8)}) 监听地址 (${sNode.data.tunnelAddress}) 无法解析端口。将使用其配置的业务目标地址。`, 'WARN');
                     sTargetAddressForUrl = sNode.data.targetAddress; // Fallback
                 }
             }
-            // If S is directly connected to T (S->T), or U->S (no C), sTargetAddressForUrl remains sNode.data.targetAddress (its configured one).
-            // If U->C->S, this S-node logic isn't hit for the S in that chain; C-node logic handles its connection to S.
-
             const sSubmission = prepareServerUrlParams({
                 instanceType: "服务端",
-                tunnelAddress: sNode.data.tunnelAddress, // S listens for U or other clients
+                tunnelAddress: sNode.data.tunnelAddress,
                 targetAddress: sTargetAddressForUrl,
                 logLevel: (sNode.data.logLevel as any),
                 tlsMode: (sNode.data.tlsMode as any),
@@ -964,10 +963,10 @@ export function AdvancedTopologyEditor() {
             const cSubmission = prepareClientUrlParams({
                 instanceType: "客户端",
                 isSingleEndedForward: !!cNode.data.isSingleEndedForwardC,
-                tunnelAddress: cNode.data.tunnelAddress, // For tunnel client: S_ADDR. For single-ended: C_LOCAL_LISTEN
-                targetAddress: cNode.data.targetAddress, // For tunnel client: C_LOCAL_LISTEN. For single-ended: C_REMOTE_TARGET
+                tunnelAddress: cNode.data.tunnelAddress,
+                targetAddress: cNode.data.targetAddress,
                 logLevel: (cNode.data.logLevel as any),
-                tlsMode: (cNode.data.tlsMode as any), // Only relevant for tunnel client connecting to S
+                tlsMode: (cNode.data.tlsMode as any),
                 certPath: cNode.data.certPath,
                 keyPath: cNode.data.keyPath,
                 tunnelKey: cNode.data.tunnelKey,
@@ -1263,6 +1262,24 @@ export function AdvancedTopologyEditor() {
 
   return (
     <div ref={editorContainerRef} className="flex flex-col flex-grow h-full relative">
+       {isMobile && showMobileInfoAlert && (
+        <Alert variant="default" className="mb-2 border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-700/60">
+          <Smartphone className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <AlertTitle className="font-title text-blue-700 dark:text-blue-300">移动设备优化提示</AlertTitle>
+          <AlertDescription className="text-blue-600 dark:text-blue-400 font-sans text-xs">
+            拓扑编辑器在桌面设备上体验更佳。移动端部分复杂操作可能受限。
+          </AlertDescription>
+           <Button
+            variant="ghost"
+            size="sm"
+            className="absolute top-2 right-2 h-6 w-6 p-0 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50"
+            onClick={() => setShowMobileInfoAlert(false)}
+            aria-label="关闭提示"
+          >
+            <X size={16} />
+          </Button>
+        </Alert>
+      )}
       <div className="flex flex-row flex-grow h-full overflow-hidden">
         <ScrollArea className="w-60 flex-shrink-0 border-r bg-muted/30 p-2">
           <div className="flex flex-col h-full bg-background rounded-lg shadow-md border">
@@ -1354,3 +1371,4 @@ export function AdvancedTopologyEditor() {
 }
 
     
+
