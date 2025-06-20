@@ -1,5 +1,5 @@
 
-import type { Instance as NodelessInstance, CreateInstanceRequest, UpdateInstanceRequest } from '@/types/nodepass'; // ModifyInstanceConfigRequest removed
+import type { Instance as NodelessInstance, CreateInstanceRequest, UpdateInstanceRequest, MasterInfo } from '@/types/nodepass';
 
 // Re-export Instance to avoid direct dependency on types/nodepass elsewhere if not needed.
 export type Instance = NodelessInstance;
@@ -96,6 +96,12 @@ export const nodePassApi = {
   deleteInstance: (id: string, apiRootUrl: string, token: string) => {
     checkApiRootUrl(apiRootUrl, `删除实例 ${id}`);
     return request<void>(`${apiRootUrl}/instances/${id}`, { method: 'DELETE' }, token);
+  },
+
+  getMasterInfo: (apiRootUrl: string, token: string) => {
+    checkApiRootUrl(apiRootUrl, '获取主控信息');
+    // Assuming the /info endpoint is directly off the apiRootUrl
+    return request<MasterInfo>(`${apiRootUrl}/info`, {}, token);
   },
 };
 

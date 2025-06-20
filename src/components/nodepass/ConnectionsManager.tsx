@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import type { AppLogEntry } from './EventLog';
+import { MasterInfoCells } from './MasterInfoCells'; // Import the new component
 
 interface ConnectionsManagerProps {
   onLog?: (message: string, type: AppLogEntry['type']) => void;
@@ -248,7 +249,8 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                 <TableHead className="w-[60px] text-center font-sans">状态</TableHead>
                 <TableHead className="font-sans">主控名称</TableHead>
                 <TableHead className="font-sans">主控 API 地址</TableHead>
-                {/* API Prefix column removed */}
+                <TableHead className="font-sans">主控版本</TableHead>
+                <TableHead className="font-sans">系统信息</TableHead>
                 <TableHead className="text-right w-[250px] font-sans">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -262,7 +264,7 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
                   </TableCell>
                   <TableCell className="font-medium break-all font-sans">{config.name}</TableCell>
                   <TableCell className="text-xs break-all font-mono">{config.apiUrl}</TableCell>
-                  {/* API Prefix TableCell removed */}
+                  <MasterInfoCells apiConfig={config} />
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-2">
                       <Button

@@ -18,8 +18,6 @@ export interface UpdateInstanceRequest {
   action: "start" | "stop" | "restart";
 }
 
-// ModifyInstanceConfigRequest interface removed
-
 // Add instanceDetails to InstanceEvent for structured data
 export interface InstanceEvent {
   type: 'initial' | 'create' | 'update' | 'delete' | 'log' | 'shutdown' | 'error';
@@ -27,4 +25,11 @@ export interface InstanceEvent {
   instanceDetails?: Instance;
   level?: string;
   timestamp: string;
+}
+
+export interface MasterInfo {
+  version: string;
+  system_info: string; // e.g., "Linux arm64"
+  go_version: string; // e.g., "go1.21.0"
+  // Add other fields if the /info endpoint provides more
 }
