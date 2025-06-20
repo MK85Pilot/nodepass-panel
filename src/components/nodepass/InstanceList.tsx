@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useRef } from 'react'; // useRef removed as aliasInputRef is no longer needed
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { BulkDeleteInstancesDialog } from './BulkDeleteInstancesDialog';
 import { useInstanceAliases } from '@/hooks/use-instance-aliases';
 import { EditAliasDialog } from './EditAliasDialog';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 function formatBytes(bytes: number) {
@@ -56,6 +57,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { setAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
+  const isMobile = useIsMobile();
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
@@ -239,350 +241,398 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     setEditingAliasContext(null);
   };
 
-
-  const renderSkeletons = () => {
-    return Array.from({ length: 3 }).map((_, i) => (
-      <TableRow key={`skeleton-${i}`}>
-        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-24" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-20" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-16" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-32" /></TableCell>{/*
-     */}<TableCell><Skeleton className="h-4 w-32" /></TableCell>{/*
-     */}<TableCell className="text-left">
-          <div className="text-left">
-            <Skeleton className="h-4 w-20 mb-1" />
-            <Skeleton className="h-4 w-20" />
-          </div>
-        </TableCell>{/*
-     */}<TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
-      </TableRow>
-    ));
-  };
-
-  const renderInstanceRow = (instance: Instance) => {
+  const getInstanceDisplayDetails = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
     const currentAlias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : undefined;
 
-
-    let displayTargetAddress: React.ReactNode = "N/A";
-    let copyTargetTitle = "目标地址";
+    let displayTargetAddress: React.ReactNode = <span className="text-xs font-mono text-muted-foreground">-</span>;
+    let copyTargetTitle = "目标地址 (不适用)";
     let targetStringToCopy = "";
 
-    let displayTunnelAddress: React.ReactNode = "N/A";
-    let copyTunnelTitle = "隧道地址";
+    let displayTunnelAddress: React.ReactNode = <span className="text-xs font-mono text-muted-foreground">-</span>;
+    let copyTunnelTitle = "隧道地址 (不适用)";
     let tunnelStringToCopy = "";
+
+    if (instance.id !== '********' && parsedUrl) {
+      if (instance.type === 'server') {
+          targetStringToCopy = parsedUrl.targetAddress || "N/A";
+          copyTargetTitle = "服务端目标地址 (业务数据)";
+          displayTargetAddress = (
+             <span
+              className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
+              onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
+              >
+              {targetStringToCopy}
+              </span>
+          );
+
+          tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
+          copyTunnelTitle = "服务端监听隧道地址";
+          displayTunnelAddress = (
+             <span
+              className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all"
+              onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
+              >
+              {tunnelStringToCopy}
+              </span>
+          );
+      } else if (instance.type === 'client' && activeApiConfig) {
+          const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
+          if (isSingleEnded) {
+              targetStringToCopy = parsedUrl.targetAddress || "N/A";
+              copyTargetTitle = "客户端单端转发目标地址";
+              displayTargetAddress = (
+                 <span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}>{targetStringToCopy}</span>
+              );
+              const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
+              const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
+              tunnelStringToCopy = (clientMasterApiHost && clientLocalListeningPort) ? `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}` : `${parsedUrl.tunnelAddress || '[::]:????'}`;
+              copyTunnelTitle = (clientMasterApiHost && clientLocalListeningPort) ? `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})` : `客户端本地监听 (单端模式, 主控地址未知)`;
+              displayTunnelAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if(tunnelStringToCopy && !tunnelStringToCopy.includes("????")) {handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}>{tunnelStringToCopy}</span>);
+          } else {
+              const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
+              const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
+              targetStringToCopy = (clientMasterApiHost && clientLocalForwardPort) ? `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}` : (clientLocalForwardPort ? `127.0.0.1:${clientLocalForwardPort}` : (parsedUrl.targetAddress || "N/A (解析失败)"));
+              copyTunnelTitle = (clientMasterApiHost && clientLocalForwardPort) ? `客户端本地转发 (主控: ${activeApiConfig.name})` : (clientLocalForwardPort ? `客户端本地转发 (主控地址未知)` : "客户端本地转发目标");
+              displayTargetAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTunnelTitle); }}}>{targetStringToCopy}</span>);
+              tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
+              copyTunnelTitle = "客户端连接的服务端隧道地址";
+              displayTunnelAddress = (<span className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150 break-all" onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}>{tunnelStringToCopy}</span>);
+          }
+      }
+    }
 
     const totalRx = instance.tcprx + instance.udprx;
     const totalTx = instance.tcptx + instance.udptx;
 
+    return {
+        parsedUrl,
+        currentAlias,
+        displayTargetAddress,
+        copyTargetTitle,
+        targetStringToCopy,
+        displayTunnelAddress,
+        copyTunnelTitle,
+        tunnelStringToCopy,
+        totalRx,
+        totalTx,
+    };
+  };
 
-    if (instance.id === '********') {
-      targetStringToCopy = "-";
-      copyTargetTitle = "目标地址 (不适用)";
-      displayTargetAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
-
-      tunnelStringToCopy = "-";
-      copyTunnelTitle = "隧道地址 (不适用)";
-      displayTunnelAddress = <span className="text-xs font-mono text-muted-foreground">-</span>;
-
-    } else if (instance.type === 'server' && parsedUrl) {
-        targetStringToCopy = parsedUrl.targetAddress || "N/A";
-        copyTargetTitle = "服务端目标地址 (业务数据)";
-        displayTargetAddress = (
-           <span
-            className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${targetStringToCopy}`}
-            onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
-            >
-            {targetStringToCopy}
-            </span>
-        );
-
-        tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
-        copyTunnelTitle = "服务端监听隧道地址";
-        displayTunnelAddress = (
-           <span
-            className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-            title={`点击复制: ${tunnelStringToCopy}`}
-            onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
-            >
-            {tunnelStringToCopy}
-            </span>
-        );
-
-    } else if (instance.type === 'client' && parsedUrl && activeApiConfig) {
-        const isSingleEnded = parsedUrl.scheme === 'client' && parsedUrl.targetAddress && parsedUrl.tunnelAddress && isWildcardHostname(extractHostname(parsedUrl.tunnelAddress));
-
-        if (isSingleEnded) {
-            targetStringToCopy = parsedUrl.targetAddress || "N/A";
-            copyTargetTitle = "客户端单端转发目标地址";
-            displayTargetAddress = (
-               <span
-                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                title={`点击复制: ${targetStringToCopy}`}
-                onClick={(e) => { e.stopPropagation(); if (targetStringToCopy !== "N/A") { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
-                >
-                {targetStringToCopy}
-                </span>
-            );
-
-            const clientLocalListeningPort = extractPort(parsedUrl.tunnelAddress || '');
-            const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
-            if (clientMasterApiHost && clientLocalListeningPort) {
-                tunnelStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalListeningPort}`;
-                copyTunnelTitle = `客户端本地监听 (单端模式, 主控: ${activeApiConfig.name})`;
-            } else {
-                tunnelStringToCopy = `${parsedUrl.tunnelAddress || '[::]:????'}`;
-                copyTunnelTitle = `客户端本地监听 (单端模式, 主控地址未知)`;
-            }
-            displayTunnelAddress = (
-               <span
-                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                title={`点击复制: ${tunnelStringToCopy}`}
-                onClick={(e) => { e.stopPropagation(); if(tunnelStringToCopy && !tunnelStringToCopy.includes("????")) {handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
-               >
-                 {tunnelStringToCopy}
-               </span>
-            );
-
-        } else {
-            const clientLocalForwardPort = extractPort(parsedUrl.targetAddress || '');
-            const clientMasterApiHost = extractHostname(activeApiConfig.apiUrl);
-             if (clientMasterApiHost && clientLocalForwardPort) {
-                targetStringToCopy = `${formatHostForDisplay(clientMasterApiHost)}:${clientLocalForwardPort}`;
-                copyTunnelTitle = `客户端本地转发 (主控: ${activeApiConfig.name})`;
-            } else if (clientLocalForwardPort) {
-                targetStringToCopy = `127.0.0.1:${clientLocalForwardPort}`;
-                copyTunnelTitle = `客户端本地转发 (主控地址未知)`;
-            } else {
-                targetStringToCopy = parsedUrl.targetAddress || "N/A (解析失败)";
-                copyTunnelTitle = "客户端本地转发目标";
-            }
-            displayTargetAddress = (
-               <span
-                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                title={`点击复制: ${targetStringToCopy}`}
-                onClick={(e) => { e.stopPropagation(); if(targetStringToCopy && !targetStringToCopy.startsWith("N/A")) {handleCopyToClipboard(targetStringToCopy, copyTunnelTitle); }}}
-               >
-                 {targetStringToCopy}
-               </span>
-            );
-
-            tunnelStringToCopy = parsedUrl.tunnelAddress || "N/A";
-            copyTunnelTitle = "客户端连接的服务端隧道地址";
-            displayTunnelAddress = (
-               <span
-                className="font-mono text-xs cursor-pointer hover:text-primary transition-colors duration-150"
-                title={`点击复制: ${tunnelStringToCopy}`}
-                onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy !== "N/A") { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
-                >
-                {tunnelStringToCopy}
-                </span>
-            );
-        }
-    }
-
-
-    return (
-      <TableRow
-        key={instance.id}
-        className="text-foreground/90 hover:text-foreground"
-        onDoubleClick={() => setSelectedInstanceForDetails(instance)}
-        data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
-      >
-        <TableCell className="w-10">
-          {instance.id !== '********' ? (
-            <Checkbox
-              checked={selectedInstanceIds.has(instance.id)}
-              onCheckedChange={() => handleSelectInstance(instance.id)}
-              aria-label={`选择实例 ${instance.id}`}
-              disabled={isBulkDeleting}
-            />
-          ) : null}
-        </TableCell>
-        <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
-        <TableCell
-            className="text-xs font-sans truncate max-w-[150px]"
-            title={currentAlias || "双击编辑别名"}
-            onDoubleClick={(e) => {
-                if (instance.id !== '********') {
-                    e.stopPropagation();
-                    handleOpenEditAliasDialog(instance.id, currentAlias);
-                }
-            }}
-        >
-            {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
-            currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
-            (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
-            }
-        </TableCell>
-        <TableCell>
-          {instance.id === '********' ? (
-            <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-              <KeyRound className="h-3 w-3 mr-1" />API 密钥
-            </Badge>
-          ) : (
-            <Badge
-              variant={instance.type === 'server' ? 'default' : 'accent'}
-              className="items-center whitespace-nowrap text-xs font-sans"
-            >
-              {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-              {instance.type === 'server' ? '服务端' : '客户端'}
-            </Badge>
-          )}
-        </TableCell>
-        <TableCell>
-          {instance.id === '********' ? (
-            <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-              <CheckCircle className="mr-1 h-3.5 w-3.5" />
-              可用
-            </Badge>
-          ) : (
-            <InstanceStatusBadge status={instance.status} />
-          )}
-        </TableCell>
-        <TableCell
-          className="truncate max-w-[200px] text-xs font-mono"
-          title={copyTunnelTitle}
-        >
-          {instance.id === '********' ? (
-             <span className="text-muted-foreground">-</span>
-          ) : (
-            <span
-              className="cursor-pointer hover:text-primary transition-colors duration-150"
-              onClick={(e) => { e.stopPropagation(); if (tunnelStringToCopy && tunnelStringToCopy !== "N/A" && !tunnelStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle); }}}
-            >
-             {displayTunnelAddress}
-            </span>
-          )}
-        </TableCell>
-        <TableCell
-          className="truncate max-w-[200px] text-xs font-mono"
-          title={copyTargetTitle}
-        >
-          {instance.id === '********' ? (
-             <span className="text-muted-foreground">-</span>
-          ) : (
-            <span
-              className="cursor-pointer hover:text-primary transition-colors duration-150"
-              onClick={(e) => { e.stopPropagation(); if (targetStringToCopy && targetStringToCopy !== "N/A" && !targetStringToCopy.startsWith("N/A (")) { handleCopyToClipboard(targetStringToCopy, copyTargetTitle); }}}
-            >
-              {displayTargetAddress}
-            </span>
-          )}
-        </TableCell>
+  const renderDesktopSkeletons = () => {
+    return Array.from({ length: 3 }).map((_, i) => (
+      <TableRow key={`skeleton-${i}`}>
+        <TableCell className="w-10"><Skeleton className="h-4 w-4" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
         <TableCell className="text-left">
-          <div className="text-xs whitespace-nowrap font-mono">
-            {instance.id === '********' ? (
-              <span className="text-muted-foreground">-</span>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <span className="flex items-center" title={`接收: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
-                  <ArrowDown className="h-3 w-3 mr-1 text-blue-500" />
-                  {formatBytes(totalRx)}
-                </span>
-                <span className="text-muted-foreground">/</span>
-                <span className="flex items-center" title={`发送: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
-                  <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
-                  {formatBytes(totalTx)}
-                </span>
-              </div>
-            )}
+          <div className="text-left">
+            <Skeleton className="h-4 w-20 mb-1" />
+            <Skeleton className="h-4 w-20" />
           </div>
         </TableCell>
-        <TableCell className="text-right">
-          <div className="flex justify-end items-center space-x-1">
-            {instance.id !== '********' && (
-              <InstanceControls
+        <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+      </TableRow>
+    ));
+  };
+
+  const renderMobileSkeletons = () => {
+    return Array.from({ length: 2 }).map((_, i) => (
+        <Card key={`skeleton-card-${i}`} className="mb-4">
+          <CardHeader className="p-3"><Skeleton className="h-6 w-3/4" /></CardHeader>
+          <CardContent className="p-3 space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-4/6" />
+          </CardContent>
+          <CardFooter className="p-3 flex justify-end"><Skeleton className="h-8 w-20" /></CardFooter>
+        </Card>
+    ));
+  };
+
+
+  const renderInstances = () => {
+    const instancesToRender = (apiKeyInstance ? [apiKeyInstance] : []).concat(otherInstances || []);
+    if (instancesToRender.length === 0) {
+        let message = "加载中或无可用实例数据。";
+        if (apiId && !isLoadingInstances && !instancesError) {
+            if (instances && instances.length === 0) {
+                message = `主控 "${activeApiConfig?.name || apiName}" 下无实例。`;
+            } else if (searchTerm) {
+                message = `在 "${activeApiConfig?.name || apiName}" 中未找到与 "${searchTerm}" 匹配的实例。`;
+            }
+        } else if (!apiId) {
+            message = "请选择活动主控以查看实例。";
+        } else if (instancesError) {
+            return null; // Error is handled above the content area
+        }
+        return isMobile ? (
+            <div className="text-center py-10 text-muted-foreground font-sans">{message}</div>
+        ) : (
+            <TableRow><TableCell colSpan={9} className="text-center h-24 font-sans">{message}</TableCell></TableRow>
+        );
+    }
+
+    return instancesToRender.map(instance => {
+      const {
+        currentAlias,
+        displayTargetAddress,
+        copyTargetTitle,
+        targetStringToCopy,
+        displayTunnelAddress,
+        copyTunnelTitle,
+        tunnelStringToCopy,
+        totalRx,
+        totalTx,
+      } = getInstanceDisplayDetails(instance);
+
+      if (isMobile) {
+        // Mobile Card Rendering
+        return (
+          <Card key={instance.id} className="mb-3 shadow-md card-hover-shadow">
+            <CardHeader className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start space-x-2 flex-grow min-w-0">
+                  {instance.id !== '********' && (
+                    <Checkbox
+                      checked={selectedInstanceIds.has(instance.id)}
+                      onCheckedChange={() => handleSelectInstance(instance.id)}
+                      aria-label={`选择实例 ${instance.id}`}
+                      className="mt-1 flex-shrink-0"
+                      disabled={isBulkDeleting}
+                    />
+                  )}
+                  {instance.id === '********' && <div className="w-4 flex-shrink-0"></div> /* Spacer for API Key */}
+                  <div className="flex-grow min-w-0">
+                    <div
+                      className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words"
+                      onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
+                      title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
+                    >
+                      {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
+                    </div>
+                    {instance.id !== '********' && (
+                      <div
+                        className="text-xs text-muted-foreground mt-0.5 cursor-pointer hover:text-primary truncate"
+                        onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
+                        title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
+                      >
+                        {isLoadingAliases ? <Skeleton className="h-3 w-16 mt-1"/> : currentAlias || <span className="italic">设置别名...</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                  {instance.id === '********' ? (
+                    <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+                      <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant={instance.type === 'server' ? 'default' : 'accent'}
+                      className="items-center whitespace-nowrap text-xs font-sans"
+                    >
+                      {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                      {instance.type === 'server' ? '服务端' : '客户端'}
+                    </Badge>
+                  )}
+                  {instance.id === '********' ? (
+                      <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+                        <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                        可用
+                      </Badge>
+                    ) : (
+                      <InstanceStatusBadge status={instance.status} />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-3 text-xs space-y-1.5 border-t">
+              <div title={`URL: ${instance.url} (点击复制)`}>
+                <strong className="font-medium text-muted-foreground">URL:</strong>
+                <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => handleCopyToClipboard(instance.url, "URL")}>
+                  {instance.url}
+                </span>
+              </div>
+              {instance.id !== '********' && (
+                <>
+                  <div title={copyTunnelTitle}>
+                    <strong className="font-medium text-muted-foreground">隧道:</strong>
+                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => tunnelStringToCopy && tunnelStringToCopy !== "N/A" && handleCopyToClipboard(tunnelStringToCopy, copyTunnelTitle)}>
+                      {displayTunnelAddress}
+                    </span>
+                  </div>
+                  <div title={copyTargetTitle}>
+                    <strong className="font-medium text-muted-foreground">目标:</strong>
+                    <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => targetStringToCopy && targetStringToCopy !== "N/A" && handleCopyToClipboard(targetStringToCopy, copyTargetTitle)}>
+                      {displayTargetAddress}
+                    </span>
+                  </div>
+                  <div>
+                    <strong className="font-medium text-muted-foreground">流量 (Rx/Tx):</strong>
+                    <span className="font-mono ml-1">
+                      <ArrowDown className="inline-block h-3 w-3 mr-0.5 text-blue-500" />{formatBytes(totalRx)}
+                      <span className="text-muted-foreground mx-1">/</span>
+                      <ArrowUp className="inline-block h-3 w-3 mr-0.5 text-green-500" />{formatBytes(totalTx)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+            <CardFooter className="p-3 pt-2 flex justify-end space-x-1 border-t">
+              {instance.id !== '********' && (
+                <InstanceControls
                   instance={instance}
                   onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
                   isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-              />
-            )}
-            <button
-                className="p-2 rounded-md hover:bg-muted"
-                onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDetails(instance);}}
-                aria-label="查看详情"
-            >
+                />
+              )}
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
                 <Eye className="h-4 w-4" />
-            </button>
-            {instance.id !== '********' && (
-              <button
-                  className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
-                  onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDelete(instance);}}
-                  aria-label="删除"
-                  disabled={isBulkDeleting || deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </TableCell>
-      </TableRow>
-    );
-  }
-
-  const getTableBodyContent = () => {
-    const rowsToRender: React.ReactNode[] = [];
-
-    if (isLoadingInstances && !instancesError) {
-      return renderSkeletons();
-    }
-
-    if (filteredInstances && filteredInstances.length > 0) {
-      if (apiKeyInstance) {
-        rowsToRender.push(renderInstanceRow(apiKeyInstance));
+              </Button>
+              {instance.id !== '********' && (
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} title="删除实例" disabled={isBulkDeleting || (deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </CardFooter>
+          </Card>
+        );
+      } else {
+        // Desktop Table Row Rendering
+        return (
+            <TableRow
+                key={instance.id}
+                className="text-foreground/90 hover:text-foreground"
+                onDoubleClick={() => setSelectedInstanceForDetails(instance)}
+                data-state={selectedInstanceIds.has(instance.id) ? "selected" : ""}
+            >
+                <TableCell className="w-10">
+                {instance.id !== '********' ? (
+                    <Checkbox
+                    checked={selectedInstanceIds.has(instance.id)}
+                    onCheckedChange={() => handleSelectInstance(instance.id)}
+                    aria-label={`选择实例 ${instance.id}`}
+                    disabled={isBulkDeleting}
+                    />
+                ) : null}
+                </TableCell>
+                <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
+                <TableCell
+                    className="text-xs font-sans truncate max-w-[150px]"
+                    title={isLoadingAliases ? "加载中..." : (currentAlias || "双击编辑别名")}
+                    onDoubleClick={(e) => {
+                        if (instance.id !== '********') {
+                            e.stopPropagation();
+                            handleOpenEditAliasDialog(instance.id, currentAlias);
+                        }
+                    }}
+                >
+                    {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
+                    currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
+                    (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
+                    }
+                </TableCell>
+                <TableCell>
+                {instance.id === '********' ? (
+                    <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+                    <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                    </Badge>
+                ) : (
+                    <Badge
+                    variant={instance.type === 'server' ? 'default' : 'accent'}
+                    className="items-center whitespace-nowrap text-xs font-sans"
+                    >
+                    {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                    {instance.type === 'server' ? '服务端' : '客户端'}
+                    </Badge>
+                )}
+                </TableCell>
+                <TableCell>
+                {instance.id === '********' ? (
+                    <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+                    <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                    可用
+                    </Badge>
+                ) : (
+                    <InstanceStatusBadge status={instance.status} />
+                )}
+                </TableCell>
+                <TableCell className="truncate max-w-[200px]" title={copyTunnelTitle}>{displayTunnelAddress}</TableCell>
+                <TableCell className="truncate max-w-[200px]" title={copyTargetTitle}>{displayTargetAddress}</TableCell>
+                <TableCell className="text-left">
+                <div className="text-xs whitespace-nowrap font-mono">
+                    {instance.id === '********' ? (
+                    <span className="text-muted-foreground">-</span>
+                    ) : (
+                    <div className="flex items-center space-x-2">
+                        <span className="flex items-center" title={`接收: TCP ${formatBytes(instance.tcprx)}, UDP ${formatBytes(instance.udprx)}`}>
+                        <ArrowDown className="h-3 w-3 mr-1 text-blue-500" />
+                        {formatBytes(totalRx)}
+                        </span>
+                        <span className="text-muted-foreground">/</span>
+                        <span className="flex items-center" title={`发送: TCP ${formatBytes(instance.tcptx)}, UDP ${formatBytes(instance.udptx)}`}>
+                        <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
+                        {formatBytes(totalTx)}
+                        </span>
+                    </div>
+                    )}
+                </div>
+                </TableCell>
+                <TableCell className="text-right">
+                <div className="flex justify-end items-center space-x-1">
+                    {instance.id !== '********' && (
+                    <InstanceControls
+                        instance={instance}
+                        onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                        isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+                    />
+                    )}
+                    <button
+                        className="p-2 rounded-md hover:bg-muted"
+                        onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDetails(instance);}}
+                        aria-label="查看详情"
+                    >
+                        <Eye className="h-4 w-4" />
+                    </button>
+                    {instance.id !== '********' && (
+                    <button
+                        className="p-2 rounded-md hover:bg-destructive/10 text-destructive"
+                        onClick={(e) => { e.stopPropagation(); setSelectedInstanceForDelete(instance);}}
+                        aria-label="删除"
+                        disabled={isBulkDeleting || deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                    )}
+                </div>
+                </TableCell>
+            </TableRow>
+        );
       }
-      if (otherInstances) {
-        otherInstances.forEach(instance => {
-            rowsToRender.push(renderInstanceRow(instance));
-        });
-      }
-    }
-
-    if (rowsToRender.length > 0) {
-      return rowsToRender;
-    }
-
-    let message = "加载中或无可用实例数据。";
-    if (apiId && !isLoadingInstances && !instancesError) {
-      if (instances && instances.length === 0) {
-          message = `主控 "${activeApiConfig?.name || apiName}" 下无实例。`;
-      } else if (searchTerm) {
-          message = `在 "${activeApiConfig?.name || apiName}" 中未找到与 "${searchTerm}" 匹配的实例。`;
-      }
-    } else if (!apiId) {
-        message = "请选择活动主控以查看实例。";
-    } else if (instancesError) {
-        return null;
-    }
-    return (
-      <TableRow>
-        <TableCell colSpan={9} className="text-center h-24 font-sans">
-          {message}
-        </TableCell>
-      </TableRow>
-    );
+    });
   };
 
 
   return (
     <Card className="shadow-lg mt-6">
-      <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+      <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <CardTitle className="font-title">实例概览 (主控: {apiName || 'N/A'})</CardTitle>
           <CardDescription className="font-sans">管理和监控 NodePass 实例。</CardDescription>
         </div>
-        <div className="flex items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
-           {selectedInstanceIds.size > 1 && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
+           {selectedInstanceIds.size > 0 && deletableInstances.length > 0 && (
             <Button
               variant="destructive"
               size="sm"
               onClick={() => setIsBulkDeleteDialogOpen(true)}
               disabled={isBulkDeleting}
-              className="font-sans h-9"
+              className="font-sans h-9 w-full sm:w-auto"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               删除选中 ({selectedInstanceIds.size})
@@ -598,13 +648,36 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
               className="pl-8 w-full font-sans h-9"
             />
           </div>
-          <Button onClick={onOpenCreateInstanceDialog} disabled={!apiRoot || !apiToken} className="font-sans h-9">
+          <Button onClick={onOpenCreateInstanceDialog} disabled={!apiRoot || !apiToken} className="font-sans h-9 w-full sm:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" />
             创建新实例
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+
+      {apiId && !instancesError && isMobile && deletableInstances.length > 0 && (
+        <div className="px-4 sm:px-6 pb-2 pt-0 flex items-center border-b">
+          <Checkbox
+            id="select-all-mobile"
+            checked={
+              deletableInstances.length > 0 &&
+              selectedInstanceIds.size === deletableInstances.length
+                ? true
+                : deletableInstances.length > 0 && selectedInstanceIds.size > 0
+                ? "indeterminate"
+                : false
+            }
+            onCheckedChange={handleSelectAllInstances}
+            aria-label="全选/取消全选实例"
+            disabled={deletableInstances.length === 0 || isBulkDeleting}
+          />
+          <label htmlFor="select-all-mobile" className="ml-2 text-sm font-medium text-muted-foreground font-sans">
+            全选 ({selectedInstanceIds.size} / {deletableInstances.length})
+          </label>
+        </div>
+      )}
+
+      <CardContent className={isMobile ? "pt-4 px-2 sm:px-4" : ""}>
         {!apiId && (
           <div className="text-center py-10 text-muted-foreground font-sans">
             请选择活动主控以查看实例。
@@ -617,40 +690,46 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </div>
         )}
         {apiId && !instancesError && (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={
-                      deletableInstances.length > 0 &&
-                      selectedInstanceIds.size === deletableInstances.length
-                        ? true
-                        : deletableInstances.length > 0 && selectedInstanceIds.size > 0
-                        ? "indeterminate"
-                        : false
-                    }
-                    onCheckedChange={handleSelectAllInstances}
-                    aria-label="全选/取消全选实例"
-                    disabled={deletableInstances.length === 0 || isBulkDeleting}
-                  />
-                </TableHead>
-                <TableHead className="font-sans">ID</TableHead>
-                <TableHead className="font-sans">别名</TableHead>
-                <TableHead className="font-sans">类型</TableHead>
-                <TableHead className="font-sans">状态</TableHead>
-                <TableHead className="font-sans">隧道地址</TableHead>
-                <TableHead className="font-sans">目标地址</TableHead>
-                <TableHead className="text-left whitespace-nowrap font-sans">实例用量</TableHead>
-                <TableHead className="text-right font-sans">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {getTableBodyContent()}
-            </TableBody>
-          </Table>
-        </div>
+          isMobile ? (
+            <div className="space-y-3">
+              {isLoadingInstances ? renderMobileSkeletons() : renderInstances()}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          deletableInstances.length > 0 &&
+                          selectedInstanceIds.size === deletableInstances.length
+                            ? true
+                            : deletableInstances.length > 0 && selectedInstanceIds.size > 0
+                            ? "indeterminate"
+                            : false
+                        }
+                        onCheckedChange={handleSelectAllInstances}
+                        aria-label="全选/取消全选实例"
+                        disabled={deletableInstances.length === 0 || isBulkDeleting}
+                      />
+                    </TableHead>
+                    <TableHead className="font-sans">ID</TableHead>
+                    <TableHead className="font-sans">别名</TableHead>
+                    <TableHead className="font-sans">类型</TableHead>
+                    <TableHead className="font-sans">状态</TableHead>
+                    <TableHead className="font-sans">隧道地址</TableHead>
+                    <TableHead className="font-sans">目标地址</TableHead>
+                    <TableHead className="text-left whitespace-nowrap font-sans">实例用量</TableHead>
+                    <TableHead className="text-right font-sans">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingInstances ? renderDesktopSkeletons() : renderInstances()}
+                </TableBody>
+              </Table>
+            </div>
+          )
         )}
       </CardContent>
 
@@ -694,4 +773,3 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
-
