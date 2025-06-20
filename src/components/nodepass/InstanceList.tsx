@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil, MoreVertical } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -343,13 +343,16 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderMobileSkeletons = () => {
     return Array.from({ length: 2 }).map((_, i) => (
         <Card key={`skeleton-card-${i}`} className="mb-4">
-          <CardHeader className="p-3"><Skeleton className="h-6 w-3/4" /></CardHeader>
-          <CardContent className="p-3 space-y-2">
+          <CardHeader className="p-3 flex flex-row items-start justify-between">
+            <div className="space-y-1"><Skeleton className="h-5 w-32" /><Skeleton className="h-3 w-24" /></div>
+            <Skeleton className="h-8 w-20" />
+          </CardHeader>
+          <CardContent className="p-3 space-y-2 border-t">
+            <div className="flex items-center space-x-2"><Skeleton className="h-5 w-16" /><Skeleton className="h-5 w-20" /></div>
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
             <Skeleton className="h-4 w-4/6" />
           </CardContent>
-          <CardFooter className="p-3 flex justify-end"><Skeleton className="h-8 w-20" /></CardFooter>
         </Card>
     ));
   };
@@ -394,69 +397,78 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         // Mobile Card Rendering
         return (
           <Card key={instance.id} className="mb-3 shadow-md card-hover-shadow">
-            <CardHeader className="p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start space-x-2 flex-grow min-w-0">
-                  {instance.id !== '********' && (
-                    <Checkbox
-                      checked={selectedInstanceIds.has(instance.id)}
-                      onCheckedChange={() => handleSelectInstance(instance.id)}
-                      aria-label={`选择实例 ${instance.id}`}
-                      className="mt-1 flex-shrink-0"
-                      disabled={isBulkDeleting}
-                    />
-                  )}
-                  {instance.id === '********' && <div className="w-4 flex-shrink-0"></div> /* Spacer for API Key */}
-                  <div className="flex-grow min-w-0">
-                    <div
-                      className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words"
-                      onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
-                      title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
-                    >
-                      {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
-                    </div>
-                    {instance.id !== '********' && (
-                      <div
-                        className="text-xs text-muted-foreground mt-0.5 cursor-pointer hover:text-primary truncate"
-                        onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
-                        title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
-                      >
-                        {isLoadingAliases ? <Skeleton className="h-3 w-16 mt-1"/> : currentAlias || <span className="italic">设置别名...</span>}
-                      </div>
-                    )}
+            <CardHeader className="p-3 flex flex-row items-start justify-between gap-2">
+              <div className="flex items-start space-x-2 flex-grow min-w-0">
+                {instance.id !== '********' && (
+                  <Checkbox
+                    checked={selectedInstanceIds.has(instance.id)}
+                    onCheckedChange={() => handleSelectInstance(instance.id)}
+                    aria-label={`选择实例 ${instance.id}`}
+                    className="mt-1 flex-shrink-0"
+                    disabled={isBulkDeleting}
+                  />
+                )}
+                {instance.id === '********' && <div className="w-4 flex-shrink-0"></div> /* Spacer for API Key */}
+                <div className="flex-grow min-w-0">
+                  <div
+                    className="font-mono text-sm font-semibold cursor-pointer hover:text-primary break-words"
+                    onClick={() => instance.id !== '********' && handleCopyToClipboard(instance.id, "ID")}
+                    title={instance.id !== '********' ? `实例ID: ${instance.id} (点击复制)`: `API Key实例`}
+                  >
+                    {instance.id === '********' ? <span className="flex items-center"><KeyRound className="h-4 w-4 mr-1.5 text-yellow-500" />API Key</span> : instance.id}
                   </div>
-                </div>
-                <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                  {instance.id === '********' ? (
-                    <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
-                      <KeyRound className="h-3 w-3 mr-1" />API 密钥
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant={instance.type === 'server' ? 'default' : 'accent'}
-                      className="items-center whitespace-nowrap text-xs font-sans"
+                  {instance.id !== '********' && (
+                    <div
+                      className="text-xs text-muted-foreground mt-0.5 cursor-pointer hover:text-primary truncate"
+                      onClick={() => handleOpenEditAliasDialog(instance.id, currentAlias)}
+                      title={isLoadingAliases ? "加载中..." : (currentAlias ? `别名: ${currentAlias} (点击编辑)` : "点击设置别名")}
                     >
-                      {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
-                      {instance.type === 'server' ? '服务端' : '客户端'}
-                    </Badge>
-                  )}
-                  {instance.id === '********' ? (
-                      <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
-                        <CheckCircle className="mr-1 h-3.5 w-3.5" />
-                        可用
-                      </Badge>
-                    ) : (
-                      <InstanceStatusBadge status={instance.status} />
+                      {isLoadingAliases ? <Skeleton className="h-3 w-16 mt-1"/> : currentAlias || <span className="italic">设置别名...</span>}
+                    </div>
                   )}
                 </div>
               </div>
+              <div className="flex items-center space-x-0.5 flex-shrink-0">
+                {instance.id !== '********' && (
+                  <InstanceControls
+                    instance={instance}
+                    onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
+                    isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
+                  />
+                )}
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
+                  <Eye className="h-4 w-4" />
+                </Button>
+                {instance.id !== '********' && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} title="删除实例" disabled={isBulkDeleting || (deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-3 text-xs space-y-1.5 border-t">
-              <div title={`URL: ${instance.url} (点击复制)`}>
-                <strong className="font-medium text-muted-foreground">URL:</strong>
-                <span className="font-mono ml-1 break-all cursor-pointer hover:text-primary" onClick={() => handleCopyToClipboard(instance.url, "URL")}>
-                  {instance.url}
-                </span>
+              <div className="flex items-center space-x-2 mb-2">
+                {instance.id === '********' ? (
+                  <Badge variant="outline" className="border-yellow-500 text-yellow-600 items-center whitespace-nowrap text-xs py-0.5 px-1.5 font-sans">
+                    <KeyRound className="h-3 w-3 mr-1" />API 密钥
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant={instance.type === 'server' ? 'default' : 'accent'}
+                    className="items-center whitespace-nowrap text-xs font-sans"
+                  >
+                    {instance.type === 'server' ? <ServerIcon size={12} className="mr-1" /> : <SmartphoneIcon size={12} className="mr-1" />}
+                    {instance.type === 'server' ? '服务端' : '客户端'}
+                  </Badge>
+                )}
+                {instance.id === '********' ? (
+                    <Badge variant="outline" className="border-green-500 text-green-600 whitespace-nowrap font-sans text-xs py-0.5 px-1.5">
+                      <CheckCircle className="mr-1 h-3.5 w-3.5" />
+                      可用
+                    </Badge>
+                  ) : (
+                    <InstanceStatusBadge status={instance.status} />
+                )}
               </div>
               {instance.id !== '********' && (
                 <>
@@ -483,23 +495,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 </>
               )}
             </CardContent>
-            <CardFooter className="p-3 pt-2 flex justify-end space-x-1 border-t">
-              {instance.id !== '********' && (
-                <InstanceControls
-                  instance={instance}
-                  onAction={(id, action) => updateInstanceMutation.mutate({ instanceId: id, action })}
-                  isLoading={updateInstanceMutation.isPending && updateInstanceMutation.variables?.instanceId === instance.id}
-                />
-              )}
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
-                <Eye className="h-4 w-4" />
-              </Button>
-              {instance.id !== '********' && (
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setSelectedInstanceForDelete(instance)} title="删除实例" disabled={isBulkDeleting || (deleteInstanceMutation.isPending && deleteInstanceMutation.variables === instance.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </CardFooter>
           </Card>
         );
       } else {
@@ -773,3 +768,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
