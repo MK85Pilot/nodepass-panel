@@ -75,7 +75,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [isEditAliasDialogOpen, setIsEditAliasDialogOpen] = useState(false);
   const [editingAliasContext, setEditingAliasContext] = useState<{ id: string; alias?: string } | null>(null);
 
-  // Desktop-only selection state
   const [desktopSelectedInstanceIds, setDesktopSelectedInstanceIds] = useState(new Set<string>());
 
 
@@ -100,9 +99,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: `实例操作: ${actionText}`,
-        description: `实例 ${data.id.substring(0,8)}... 状态已改为 ${data.status}。`,
+        description: `实例 ${data.id} 状态已改为 ${data.status}。`,
       });
-      onLog?.(`实例 ${data.id.substring(0,8)}... ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
+      onLog?.(`实例 ${data.id} ${actionText}成功，状态: ${data.status}`, 'SUCCESS');
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
     },
     onError: (error: any, variables) => {
@@ -110,10 +109,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       const actionText = actionTextMap[variables.action] || variables.action;
       toast({
         title: '实例操作失败',
-        description: `实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误。'}`,
+        description: `实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-      onLog?.(`实例 ${variables.instanceId.substring(0,8)}... ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
+      onLog?.(`实例 ${variables.instanceId} ${actionText}失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -125,9 +124,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onSuccess: (_, instanceId) => {
       toast({
         title: '实例已删除',
-        description: `实例 ${instanceId.substring(0,8)}... 已删除。`,
+        description: `实例 ${instanceId} 已删除。`,
       });
-      onLog?.(`实例 ${instanceId.substring(0,8)}... 已删除。`, 'SUCCESS');
+      onLog?.(`实例 ${instanceId} 已删除。`, 'SUCCESS');
       removeAlias(instanceId);
       queryClient.invalidateQueries({ queryKey: ['instances', apiId] });
       queryClient.invalidateQueries({ queryKey: ['allInstancesForTraffic']});
@@ -141,10 +140,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     onError: (error: any, instanceId) => {
       toast({
         title: '删除实例出错',
-        description: `删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误。'}`,
+        description: `删除实例 ${instanceId} 失败: ${error.message || '未知错误。'}`,
         variant: 'destructive',
       });
-       onLog?.(`删除实例 ${instanceId.substring(0,8)}... 失败: ${error.message || '未知错误'}`, 'ERROR');
+       onLog?.(`删除实例 ${instanceId} 失败: ${error.message || '未知错误'}`, 'ERROR');
     },
   });
 
@@ -231,9 +230,9 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     setAlias(instanceId, newAlias);
     toast({
       title: '别名已更新',
-      description: newAlias ? `实例 ${instanceId.substring(0,8)}... 的别名已设为 "${newAlias}"。` : `实例 ${instanceId.substring(0,8)}... 的别名已清除。`,
+      description: newAlias ? `实例 ${instanceId} 的别名已设为 "${newAlias}"。` : `实例 ${instanceId} 的别名已清除。`,
     });
-    onLog?.(newAlias ? `为实例 ${instanceId.substring(0,8)}... 设置别名: "${newAlias}"` : `已清除实例 ${instanceId.substring(0,8)}... 的别名`, 'INFO');
+    onLog?.(newAlias ? `为实例 ${instanceId} 设置别名: "${newAlias}"` : `已清除实例 ${instanceId} 的别名`, 'INFO');
     setIsEditAliasDialogOpen(false);
     setEditingAliasContext(null);
   };
@@ -340,7 +339,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const renderMobileSkeletons = () => {
     return Array.from({ length: 2 }).map((_, i) => (
         <Card key={`skeleton-card-${i}`} className="relative mb-4 overflow-hidden">
-          <InstanceStatusBadge status="running" compact={true} /> {/* Placeholder for badge position */}
+          <InstanceStatusBadge status="running" compact={true} />
           <CardHeader className="p-3">
             <div className="flex justify-between items-start">
                 <div className="flex-grow min-w-0 pr-2">
@@ -353,6 +352,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 </div>
             </div>
           </CardHeader>
+          <Separator/>
           <CardContent className="p-3 space-y-2">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
@@ -363,7 +363,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   };
 
   const handleSelectInstance = (instanceId: string) => {
-    setDesktopSelectedInstanceIds(prev => { // Only for desktop
+    setDesktopSelectedInstanceIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(instanceId)) {
         newSet.delete(instanceId);
@@ -388,7 +388,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
         } else if (!apiId) {
             message = "请选择活动主控以查看实例。";
         } else if (instancesError) {
-            return null; // Error is handled above the content area
+            return null;
         }
         return isMobile ? (
             <div className="text-center py-10 text-muted-foreground font-sans">{message}</div>
@@ -414,12 +414,11 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
       if (isMobile) {
         return (
           <Card key={instance.id} className="relative mb-3 shadow-md card-hover-shadow overflow-hidden">
-            {!isApiKeyInstance && (
+             {!isApiKeyInstance && (
               <InstanceStatusBadge status={instance.status} compact={true} />
             )}
             <CardHeader className="p-3 pb-2">
               <div className="flex justify-between items-start space-x-2">
-                {/* Left: Alias & ID */}
                 <div className="flex-grow min-w-0">
                   <div
                     className="text-sm font-semibold cursor-pointer hover:text-primary truncate"
@@ -442,7 +441,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                   )}
                 </div>
 
-                {/* Right: Type Badge & Manage Button */}
                 {!isApiKeyInstance && (
                    <div className="flex items-center space-x-2 flex-shrink-0">
                      <Badge
@@ -524,7 +522,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           </Card>
         );
       } else {
-        // Desktop Table Row Rendering
         return (
             <TableRow
                 key={instance.id}
@@ -606,7 +603,6 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                 </TableCell>
                 <TableCell className="text-right">
                 <div className="flex justify-end items-center space-x-1">
-                     {/* Desktop Instance Controls - using DropdownMenu as well for consistency */}
                     {!isApiKeyInstance && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -649,7 +645,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
-                    {isApiKeyInstance && ( // For API Key instance on desktop, only show details
+                    {isApiKeyInstance && (
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedInstanceForDetails(instance)} title="查看详情">
                             <Eye className="h-4 w-4" />
                         </Button>
@@ -799,3 +795,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
