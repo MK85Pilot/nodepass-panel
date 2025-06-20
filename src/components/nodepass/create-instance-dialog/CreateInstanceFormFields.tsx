@@ -92,27 +92,29 @@ export function CreateInstanceFormFields({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="tunnelKey"
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="font-sans text-xs flex items-center">
-                <KeyRound size={14} className="mr-1 text-muted-foreground" />
-                隧道密钥 (可选)
-              </FormLabel>
-              <FormControl>
-                <Input
-                  className="text-xs font-sans h-9"
-                  placeholder="留空则使用端口派生密钥"
-                  {...field}
-                  value={field.value || ""}
-                />
-              </FormControl>
-              <FormMessage className="text-xs" />
-            </FormItem>
-          )}
-        />
+        {!(instanceType === '客户端' && isSingleEndedForward) && (
+            <FormField
+            control={form.control}
+            name="tunnelKey"
+            render={({ field }) => (
+                <FormItem className="space-y-1">
+                <FormLabel className="font-sans text-xs flex items-center">
+                    <KeyRound size={14} className="mr-1 text-muted-foreground" />
+                    隧道密钥 (可选)
+                </FormLabel>
+                <FormControl>
+                    <Input
+                    className="text-xs font-sans h-9"
+                    placeholder="留空则使用端口派生密钥"
+                    {...field}
+                    value={field.value || ""}
+                    />
+                </FormControl>
+                <FormMessage className="text-xs" />
+                </FormItem>
+            )}
+            />
+        )}
 
 
         {instanceType === '客户端' && (
@@ -354,3 +356,4 @@ export function CreateInstanceFormFields({
     </Form>
   );
 }
+

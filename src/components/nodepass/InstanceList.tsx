@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag } from 'lucide-react';
+import { AlertTriangle, Eye, Trash2, ServerIcon, SmartphoneIcon, Search, KeyRound, PlusCircle, CheckCircle, ArrowDown, ArrowUp, Tag, Pencil } from 'lucide-react';
 import type { Instance, UpdateInstanceRequest } from '@/types/nodepass';
 import { InstanceStatusBadge } from './InstanceStatusBadge';
 import { InstanceControls } from './InstanceControls';
@@ -54,7 +54,7 @@ interface InstanceListProps {
 export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfig, apiConfigsList, onLog, onOpenCreateInstanceDialog }: InstanceListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
+  const { getAlias, setAlias, isLoadingAliases, removeAlias, aliases: allAliasesObject } = useInstanceAliases();
 
   const [selectedInstanceForDetails, setSelectedInstanceForDetails] = useState<Instance | null>(null);
   const [selectedInstanceForDelete, setSelectedInstanceForDelete] = useState<Instance | null>(null);
@@ -62,6 +62,10 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
   const [selectedInstanceIds, setSelectedInstanceIds] = useState(new Set<string>());
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
+  const [editingAliasValue, setEditingAliasValue] = useState<string>("");
+  const aliasInputRef = useRef<HTMLInputElement>(null);
 
 
   const { data: instances, isLoading: isLoadingInstances, error: instancesError } = useQuery<Instance[], Error>({
@@ -218,6 +222,42 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     setIsBulkDeleteDialogOpen(false);
   };
 
+  const handleStartEditAlias = (instanceId: string, currentAlias: string | undefined) => {
+    if (instanceId === '********') return;
+    setEditingAliasId(instanceId);
+    setEditingAliasValue(currentAlias || "");
+    setTimeout(() => aliasInputRef.current?.focus(), 0);
+  };
+
+  const handleSaveAlias = () => {
+    if (editingAliasId) {
+      const trimmedAlias = editingAliasValue.trim();
+      setAlias(editingAliasId, trimmedAlias);
+      toast({
+        title: '别名已更新',
+        description: trimmedAlias ? `实例 ${editingAliasId.substring(0,8)}... 的别名已设为 "${trimmedAlias}"。` : `实例 ${editingAliasId.substring(0,8)}... 的别名已清除。`,
+      });
+      onLog?.(trimmedAlias ? `为实例 ${editingAliasId.substring(0,8)}... 设置别名: "${trimmedAlias}"` : `已清除实例 ${editingAliasId.substring(0,8)}... 的别名`, 'INFO');
+    }
+    setEditingAliasId(null);
+  };
+
+  const handleCancelEditAlias = () => {
+    setEditingAliasId(null);
+  };
+
+  const handleAliasInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditingAliasValue(e.target.value);
+  };
+
+  const handleAliasInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveAlias();
+    } else if (e.key === 'Escape') {
+      handleCancelEditAlias();
+    }
+  };
+
 
   const renderSkeletons = () => {
     return Array.from({ length: 3 }).map((_, i) => (
@@ -242,7 +282,7 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
 
   const renderInstanceRow = (instance: Instance) => {
     const parsedUrl = instance.id !== '********' ? parseNodePassUrl(instance.url) : null;
-    const alias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : undefined;
+    const currentAlias = (instance.id !== '********' && !isLoadingAliases) ? allAliasesObject[instance.id] : undefined;
 
 
     let displayTargetAddress: React.ReactNode = "N/A";
@@ -382,13 +422,32 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
           ) : null}
         </TableCell>
         <TableCell className="font-medium font-mono text-xs break-all" title={instance.id}>{instance.id}</TableCell>
-        <TableCell className="text-xs font-sans truncate max-w-[150px]" title={alias}>
-          <>
-            {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
-            alias ? <span className="flex items-center"><Tag size={12} className="mr-1 text-muted-foreground" />{alias}</span> :
-            (instance.id !== '********' ? <span className="text-muted-foreground">-</span> : null)
-            }
-          </>
+        <TableCell 
+            className="text-xs font-sans truncate max-w-[150px]"
+            title={currentAlias || "双击编辑别名"}
+            onDoubleClick={() => handleStartEditAlias(instance.id, currentAlias)}
+        >
+          {editingAliasId === instance.id ? (
+            <div className="flex items-center">
+                <Input
+                    ref={aliasInputRef}
+                    type="text"
+                    value={editingAliasValue}
+                    onChange={handleAliasInputChange}
+                    onKeyDown={handleAliasInputKeyDown}
+                    onBlur={handleSaveAlias}
+                    className="h-7 text-xs p-1"
+                    maxLength={50}
+                />
+            </div>
+          ) : (
+            <>
+              {isLoadingAliases && instance.id !== '********' ? <Skeleton className="h-4 w-20" /> :
+              currentAlias ? <span className="flex items-center cursor-pointer"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />{currentAlias}</span> :
+              (instance.id !== '********' ? <span className="text-muted-foreground cursor-pointer hover:text-primary"><Pencil size={10} className="mr-1 text-muted-foreground opacity-50 group-hover:opacity-100" />编辑别名</span> : null)
+              }
+            </>
+          )}
         </TableCell>
         <TableCell>
           {instance.id === '********' ? (
@@ -654,3 +713,4 @@ export function InstanceList({ apiId, apiName, apiRoot, apiToken, activeApiConfi
     </Card>
   );
 }
+
