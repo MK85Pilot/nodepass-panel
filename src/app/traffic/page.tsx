@@ -2,17 +2,17 @@
 "use client";
 
 import type { NextPage } from 'next';
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApiConfig } from '@/hooks/use-api-key';
 import { nodePassApi } from '@/lib/api';
 import type { Instance } from '@/types/nodepass';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Loader2, RefreshCw, AlertTriangle, BarChartHorizontalBig, List } from 'lucide-react';
+import { PieChart, Pie, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ChartContainer, ChartTooltipContent, type ChartConfig, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { Loader2, RefreshCw, AlertTriangle, List, ArrowDown, ArrowUp, PieChart as PieChartIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Server, Smartphone } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -34,9 +34,6 @@ function formatBytes(bytes: number, decimals = 2) {
 }
 
 const chartConfig = {
-  bytes: {
-    label: "字节",
-  },
   tcpRx: {
     label: "TCP 接收",
     color: "hsl(var(--chart-1))",
@@ -118,8 +115,9 @@ const TrafficPage: NextPage = () => {
 
   const allInstances = allInstancesData || [];
 
-  const overallTrafficData = useMemo(() => {
-    if (allInstances.length === 0) return [];
+  const { chartData, totalTraffic } = useMemo(() => {
+    if (allInstances.length === 0) return { chartData: [], totalTraffic: 0 };
+    
     const totals = allInstances.reduce((acc, inst) => {
       acc.tcpRx += inst.tcprx;
       acc.tcpTx += inst.tcptx;
@@ -128,12 +126,16 @@ const TrafficPage: NextPage = () => {
       return acc;
     }, { tcpRx: 0, tcpTx: 0, udpRx: 0, udpTx: 0 });
 
-    return [
-      { name: chartConfig.tcpRx.label, total: totals.tcpRx, fill: "var(--color-tcpRx)" },
-      { name: chartConfig.tcpTx.label, total: totals.tcpTx, fill: "var(--color-tcpTx)" },
-      { name: chartConfig.udpRx.label, total: totals.udpRx, fill: "var(--color-udpRx)" },
-      { name: chartConfig.udpTx.label, total: totals.udpTx, fill: "var(--color-udpTx)" },
-    ];
+    const data = [
+      { type: 'tcpRx', value: totals.tcpRx, label: chartConfig.tcpRx.label },
+      { type: 'tcpTx', value: totals.tcpTx, label: chartConfig.tcpTx.label },
+      { type: 'udpRx', value: totals.udpRx, label: chartConfig.udpRx.label },
+      { type: 'udpTx', value: totals.udpTx, label: chartConfig.udpTx.label },
+    ].filter(d => d.value > 0);
+
+    const total = data.reduce((acc, curr) => acc + curr.value, 0);
+
+    return { chartData: data, totalTraffic: total };
   }, [allInstances]);
 
   const handleRefresh = () => {
@@ -194,33 +196,45 @@ const TrafficPage: NextPage = () => {
         <div className="space-y-8">
           <Card className="shadow-lg card-hover-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center font-title"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-primary" />整体流量用量</CardTitle>
-              <CardDescription className="font-sans mt-1">所有实例的总流量统计。</CardDescription>
+              <CardTitle className="flex items-center font-title"><PieChartIcon className="mr-2 h-5 w-5 text-primary" />整体流量分布</CardTitle>
+              <CardDescription className="font-sans mt-1">所有实例的总流量按类型分布。</CardDescription>
             </CardHeader>
-            <CardContent className="pl-2">
-              {overallTrafficData.length > 0 ? (
-                <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={overallTrafficData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} className="font-sans" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatBytes(value)} className="font-sans"/>
-                      <RechartsTooltip
-                        cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
-                        content={<ChartTooltipContent formatter={(value) => formatBytes(value as number)} className="font-sans"/>}
-                      />
-                      <Bar dataKey="total" radius={4}>
-                        {overallTrafficData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+             <CardContent className="flex-1 pb-0">
+                <ChartContainer
+                  config={chartConfig}
+                  className="mx-auto aspect-square h-[250px]"
+                >
+                  <PieChart>
+                    <RechartsTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent 
+                        hideLabel 
+                        formatter={(value, name) => `${chartConfig[name as keyof typeof chartConfig].label}: ${formatBytes(value as number)}`} 
+                        className="font-sans"
+                      />}
+                    />
+                    <Pie
+                      data={chartData}
+                      dataKey="value"
+                      nameKey="type"
+                      innerRadius={60}
+                      strokeWidth={5}
+                      stroke="hsl(var(--background))"
+                    >
+                       {chartData.map((entry) => (
+                        <Cell key={`cell-${entry.type}`} fill={`var(--color-${entry.type})`} />
+                       ))}
+                    </Pie>
+                  </PieChart>
                 </ChartContainer>
-              ) : (
-                <p className="text-muted-foreground text-center py-4 font-sans">无流量数据可用于图表。</p>
-              )}
             </CardContent>
+            <CardFooter className="flex-col gap-2 text-sm pt-4">
+               <div className="flex items-center justify-center -mt-[150px] mb-[110px] flex-col pointer-events-none">
+                 <span className="text-muted-foreground font-sans text-xs">总用量</span>
+                 <span className="font-bold text-2xl font-title">{formatBytes(totalTraffic)}</span>
+              </div>
+              <ChartLegend content={<ChartLegendContent nameKey="type" className="font-sans" />} />
+            </CardFooter>
           </Card>
 
           <Card className="shadow-lg card-hover-shadow">
@@ -233,13 +247,12 @@ const TrafficPage: NextPage = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="font-sans">来源主控</TableHead>
-                      <TableHead className="font-sans">实例 ID</TableHead>
+                      <TableHead className="font-sans min-w-[120px]">来源主控</TableHead>
+                      <TableHead className="font-sans min-w-[120px]">实例 ID</TableHead>
                       <TableHead className="font-sans">类型</TableHead>
-                      <TableHead className="text-right font-sans">TCP 接收</TableHead>
-                      <TableHead className="text-right font-sans">TCP 发送</TableHead>
-                      <TableHead className="text-right font-sans">UDP 接收</TableHead>
-                      <TableHead className="text-right font-sans">UDP 发送</TableHead>
+                      <TableHead className="font-sans min-w-[140px]">TCP (↓/↑)</TableHead>
+                      <TableHead className="font-sans min-w-[140px]">UDP (↓/↑)</TableHead>
+                      <TableHead className="text-right font-sans min-w-[140px]">总计 (↓/↑)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -256,10 +269,33 @@ const TrafficPage: NextPage = () => {
                             {instance.type === 'server' ? '服务端' : '客户端'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatBytes(instance.tcprx)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatBytes(instance.tcptx)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatBytes(instance.udprx)}</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{formatBytes(instance.udptx)}</TableCell>
+                         <TableCell className="font-mono text-xs">
+                          <span className="flex items-center space-x-1 whitespace-nowrap">
+                            <ArrowDown className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.tcprx)}</span>
+                            <span className="text-muted-foreground">/</span>
+                            <ArrowUp className="h-3 w-3 text-green-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.tcptx)}</span>
+                          </span>
+                        </TableCell>
+                         <TableCell className="font-mono text-xs">
+                          <span className="flex items-center space-x-1 whitespace-nowrap">
+                            <ArrowDown className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.udprx)}</span>
+                            <span className="text-muted-foreground">/</span>
+                            <ArrowUp className="h-3 w-3 text-green-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.udptx)}</span>
+                          </span>
+                        </TableCell>
+                         <TableCell className="text-right font-mono text-xs">
+                           <span className="flex items-center justify-end space-x-1 whitespace-nowrap">
+                            <ArrowDown className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.tcprx + instance.udprx)}</span>
+                            <span className="text-muted-foreground">/</span>
+                            <ArrowUp className="h-3 w-3 text-green-500 flex-shrink-0" />
+                            <span>{formatBytes(instance.tcptx + instance.udptx)}</span>
+                           </span>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
