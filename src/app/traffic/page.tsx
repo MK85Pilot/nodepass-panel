@@ -10,7 +10,7 @@ import type { Instance } from '@/types/nodepass';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PieChart, Pie, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
+import { PieChart, Pie, Tooltip as RechartsTooltip, Cell, Label } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Loader2, RefreshCw, AlertTriangle, List, ArrowDown, ArrowUp, PieChart as PieChartIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -202,7 +202,7 @@ const TrafficPage: NextPage = () => {
              <CardContent className="flex-1 pb-0">
                 <ChartContainer
                   config={chartConfig}
-                  className="mx-auto aspect-square h-[250px]"
+                  className="mx-auto aspect-square max-h-[300px]"
                 >
                   <PieChart>
                     <RechartsTooltip
@@ -218,22 +218,49 @@ const TrafficPage: NextPage = () => {
                       dataKey="value"
                       nameKey="type"
                       innerRadius={60}
+                      outerRadius={80}
                       strokeWidth={5}
                       stroke="hsl(var(--background))"
                     >
                        {chartData.map((entry) => (
                         <Cell key={`cell-${entry.type}`} fill={`var(--color-${entry.type})`} />
                        ))}
+                       <Label
+                          content={({ viewBox }) => {
+                            if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                              return (
+                                <text
+                                  x={viewBox.cx}
+                                  y={viewBox.cy}
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                >
+                                  <tspan
+                                    x={viewBox.cx}
+                                    y={viewBox.cy}
+                                    className="fill-foreground text-2xl font-bold font-title"
+                                  >
+                                    {formatBytes(totalTraffic)}
+                                  </tspan>
+                                  <tspan
+                                    x={(viewBox.cx || 0)}
+                                    y={(viewBox.cy || 0) + 20}
+                                    className="fill-muted-foreground font-sans text-xs"
+                                  >
+                                    总用量
+                                  </tspan>
+                                </text>
+                              )
+                            }
+                          }}
+                        />
                     </Pie>
+                    <ChartLegend content={<ChartLegendContent nameKey="type" className="font-sans" />} />
                   </PieChart>
                 </ChartContainer>
             </CardContent>
             <CardFooter className="flex-col gap-2 text-sm pt-4">
-               <div className="flex items-center justify-center -mt-[150px] mb-[110px] flex-col pointer-events-none">
-                 <span className="text-muted-foreground font-sans text-xs">总用量</span>
-                 <span className="font-bold text-2xl font-title">{formatBytes(totalTraffic)}</span>
-              </div>
-              <ChartLegend content={<ChartLegendContent nameKey="type" className="font-sans" />} />
+              {/* Footer is intentionally empty as legend is now in the chart */}
             </CardFooter>
           </Card>
 
