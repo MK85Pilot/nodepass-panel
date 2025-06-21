@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef } from 'react';
@@ -123,6 +122,9 @@ const CompactMasterInfo: React.FC<{ config: NamedApiConfig, isActive: boolean }>
   );
 };
 
+interface ConnectionsManagerProps {
+  onLog?: (message: string, type: AppLogEntry['type']) => void;
+}
 
 export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
   const router = useRouter();
@@ -347,18 +349,6 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
           <CardContent className="space-y-4">
             <p className="text-muted-foreground font-sans">未添加任何主控连接。</p>
             <p className="text-muted-foreground font-sans">点击上面的“添加新主控”或“导入配置”开始。</p>
-            
-              <div className="flex flex-col sm:flex-row gap-3 mt-4 justify-center">
-                  <Button onClick={() => handleOpenApiConfigDialog(null)} size="lg" className="font-sans w-full sm:w-auto">
-                      <PlusCircle className="mr-2 h-5 w-5" />
-                      添加主控
-                  </Button>
-                  <Button onClick={() => fileInputRef.current?.click()} size="lg" variant="outline" className="font-sans w-full sm:w-auto">
-                      <Upload className="mr-2 h-5 w-5" />
-                      导入配置
-                  </Button>
-              </div>
-            
           </CardContent>
         </Card>
       ) : isMobile ? (
@@ -544,4 +534,3 @@ export function ConnectionsManager({ onLog }: ConnectionsManagerProps) {
     </div>
   );
 }
-

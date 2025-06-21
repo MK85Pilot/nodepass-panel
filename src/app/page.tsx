@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -205,7 +204,7 @@ export default function HomePage() {
             />
           </div>
         ) : (
-           <div className="flex flex-col items-center justify-center text-center h-[calc(100vh-var(--header-height)-var(--footer-height)-8rem-20rem)]">
+           <div className="flex flex-col items-center justify-center text-center flex-grow">
             <h2 className="text-2xl font-semibold mb-4 font-title">
               {apiConfigsList.length > 0 ? '未选择主控' : '需要主控连接'}
             </h2>
@@ -215,7 +214,7 @@ export default function HomePage() {
                 : '请先通过头部菜单添加主控连接或导入配置以开始使用。'}
             </p>
             {apiConfigsList.length === 0 && (
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-row gap-4">
                 <Button onClick={handleOpenApiConfigDialogForSetup} size="lg" className="font-sans">
                   <PlusCircle className="mr-2 h-5 w-5" />
                   添加主控
@@ -276,4 +275,3 @@ export default function HomePage() {
     </AppLayout>
   );
 }
-
